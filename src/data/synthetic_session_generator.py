@@ -26,7 +26,7 @@ TELECOM_WORKFLOW = [
 
 
 # ============================================================
-# ONBOARDING SESSION SCENARIOS
+# ONBOARDING SCENARIOS
 # ============================================================
 
 SCENARIOS = [
@@ -36,10 +36,6 @@ SCENARIOS = [
     "long_completion_times",
     "incomplete_sessions"
 ]
-
-# Controlled probabilities.
-# These are generation probabilities, not claims about the
-# true real-world distribution.
 
 SCENARIO_WEIGHTS = {
     "normal_completion": 0.50,
@@ -51,7 +47,7 @@ SCENARIO_WEIGHTS = {
 
 
 # ============================================================
-# GENERATE IDENTIFIERS
+# IDENTIFIERS
 # ============================================================
 
 def generate_customer_id():
@@ -67,7 +63,7 @@ def generate_session_id():
 
 
 # ============================================================
-# SELECT ONBOARDING SCENARIO
+# SCENARIO SELECTION
 # ============================================================
 
 def select_scenario():
@@ -79,21 +75,29 @@ def select_scenario():
 
 
 # ============================================================
-# GENERATE EVENT DURATION
+# EVENT DURATION
 # ============================================================
 
 def generate_event_duration(scenario):
+
     if scenario == "long_completion_times":
         return round(random.uniform(15, 60), 2)
+
+    if scenario == "validation_errors":
+        return round(random.uniform(5, 20), 2)
+
+    if scenario == "revisited_fields":
+        return round(random.uniform(4, 18), 2)
 
     return round(random.uniform(1, 12), 2)
 
 
 # ============================================================
-# GENERATE VALIDATION RESULT
+# VALIDATION
 # ============================================================
 
 def generate_validation_status(scenario):
+
     if scenario == "validation_errors":
         return random.choices(
             ["passed", "failed"],
@@ -105,6 +109,7 @@ def generate_validation_status(scenario):
 
 
 def generate_failure_reason(validation_status):
+
     if validation_status != "failed":
         return ""
 
@@ -116,7 +121,152 @@ def generate_failure_reason(validation_status):
 
 
 # ============================================================
-# GENERATE ONBOARDING RISK
+# AGENT BEHAVIOUR
+# ============================================================
+
+def generate_agent_behaviour(
+    scenario,
+    validation_status,
+    is_revisit,
+    progress,
+    event_duration
+):
+    """
+    Generate agent behaviour based on the onboarding situation.
+
+    Agent behaviour is intentionally scenario-dependent so that
+    the synthetic dataset contains meaningful relationships
+    between onboarding events and sales-agent actions.
+    """
+
+    # --------------------------------------------------------
+    # Validation errors
+    # --------------------------------------------------------
+
+    if validation_status == "failed":
+
+        action = random.choices(
+            [
+                "corrected_information",
+                "requested_missing_information",
+                "reviewed_information"
+            ],
+            weights=[50, 35, 15],
+            k=1
+        )[0]
+
+        return (
+            action,
+            True,
+            random.randint(1, 2),
+            random.choices(
+                ["none", "required"],
+                weights=[85, 15],
+                k=1
+            )[0]
+        )
+
+    # --------------------------------------------------------
+    # Revisited field
+    # --------------------------------------------------------
+
+    if is_revisit:
+
+        action = random.choices(
+            [
+                "revisited_information",
+                "reviewed_information",
+                "provided_guidance"
+            ],
+            weights=[50, 35, 15],
+            k=1
+        )[0]
+
+        return (
+            action,
+            True,
+            random.choice([0, 1]),
+            "none"
+        )
+
+    # --------------------------------------------------------
+    # Incomplete session
+    # --------------------------------------------------------
+
+    if scenario == "incomplete_sessions":
+
+        action = random.choices(
+            [
+                "provided_guidance",
+                "requested_missing_information",
+                "reviewed_information"
+            ],
+            weights=[45, 40, 15],
+            k=1
+        )[0]
+
+        return (
+            action,
+            True,
+            random.choice([0, 1]),
+            random.choices(
+                ["none", "required"],
+                weights=[90, 10],
+                k=1
+            )[0]
+        )
+
+    # --------------------------------------------------------
+    # Long completion time
+    # --------------------------------------------------------
+
+    if scenario == "long_completion_times":
+
+        action = random.choices(
+            [
+                "reviewed_information",
+                "provided_guidance",
+                "entered_information",
+                "completed_step"
+            ],
+            weights=[40, 35, 15, 10],
+            k=1
+        )[0]
+
+        return (
+            action,
+            True,
+            random.choice([0, 1]),
+            "none"
+        )
+
+    # --------------------------------------------------------
+    # Normal completion
+    # --------------------------------------------------------
+
+    action = random.choices(
+        [
+            "entered_information",
+            "completed_step",
+            "provided_guidance",
+            "reviewed_information"
+        ],
+        weights=[40, 35, 15, 10],
+        k=1
+    )[0]
+
+    guidance_given = action == "provided_guidance"
+
+    return (
+        action,
+        guidance_given,
+        0,
+        "none"
+    )
+
+
+# ============================================================
+# RISK CALCULATION
 # ============================================================
 
 def calculate_onboarding_risk(
@@ -125,6 +275,7 @@ def calculate_onboarding_risk(
     revisit_count,
     session_progress
 ):
+
     risk = 0.05
 
     if validation_status == "failed":
@@ -143,6 +294,7 @@ def calculate_onboarding_risk(
 
 
 def get_risk_level(risk_score):
+
     if risk_score < 0.30:
         return "Low"
 
@@ -153,7 +305,7 @@ def get_risk_level(risk_score):
 
 
 # ============================================================
-# GENERATE ONE ONBOARDING SESSION
+# GENERATE ONE SESSION
 # ============================================================
 
 def generate_session(industry, scenario=None):
@@ -181,7 +333,7 @@ def generate_session(industry, scenario=None):
     start_time = datetime.now()
 
     # --------------------------------------------------------
-    # Determine how many onboarding fields are completed
+    # Incomplete sessions stop before final step
     # --------------------------------------------------------
 
     if scenario == "incomplete_sessions":
@@ -197,7 +349,7 @@ def generate_session(industry, scenario=None):
         fields = workflow.copy()
 
     # --------------------------------------------------------
-    # Introduce realistic revisits
+    # Create field sequence with realistic revisits
     # --------------------------------------------------------
 
     field_sequence = []
@@ -211,6 +363,7 @@ def generate_session(industry, scenario=None):
             and len(field_sequence) > 1
             and random.random() < 0.30
         ):
+
             previous_field = random.choice(
                 field_sequence[:-1]
             )
@@ -218,7 +371,7 @@ def generate_session(industry, scenario=None):
             field_sequence.append(previous_field)
 
     # --------------------------------------------------------
-    # Generate Onboarding Events
+    # Generate events
     # --------------------------------------------------------
 
     events = []
@@ -233,7 +386,9 @@ def generate_session(industry, scenario=None):
         if is_revisit:
             revisit_count += 1
 
-        duration = generate_event_duration(scenario)
+        duration = generate_event_duration(
+            scenario
+        )
 
         validation_status = generate_validation_status(
             scenario
@@ -243,40 +398,47 @@ def generate_session(industry, scenario=None):
             validation_status
         )
 
+        # ----------------------------------------------------
+        # Event status
+        # ----------------------------------------------------
+
         if validation_status == "failed":
             event_status = "failed"
-
         else:
             event_status = "completed"
 
         # ----------------------------------------------------
-        # Determine Next Onboarding Field
+        # Previous / next field
         # ----------------------------------------------------
+
+        if index > 0:
+            previous_field = field_sequence[index - 1]
+        else:
+            previous_field = ""
 
         if index + 1 < len(field_sequence):
-
-            next_onboarding_field = field_sequence[
-                index + 1
-            ]
-
+            next_field = field_sequence[index + 1]
         else:
-
-            next_onboarding_field = ""
+            next_field = ""
 
         # ----------------------------------------------------
-        # Calculate progress
+        # Progress
         # ----------------------------------------------------
 
         progress = round(
             (
-                len(set(field_sequence[:index + 1]))
+                len(
+                    set(
+                        field_sequence[:index + 1]
+                    )
+                )
                 / len(workflow)
             ) * 100,
             2
         )
 
         # ----------------------------------------------------
-        # Calculate onboarding risk
+        # Risk
         # ----------------------------------------------------
 
         risk_score = calculate_onboarding_risk(
@@ -291,22 +453,75 @@ def generate_session(industry, scenario=None):
         )
 
         # ----------------------------------------------------
-        # Generate Real-Time Guidance
+        # AGENT BEHAVIOUR
         # ----------------------------------------------------
 
-        if next_onboarding_field:
+        (
+            agent_action,
+            agent_guidance_given,
+            agent_correction_count,
+            agent_escalation
+        ) = generate_agent_behaviour(
+            scenario=scenario,
+            validation_status=validation_status,
+            is_revisit=is_revisit,
+            progress=progress,
+            event_duration=duration
+        )
 
-            guidance = (
-                f"Review the current information "
-                f"and proceed to {next_onboarding_field}."
+        # ----------------------------------------------------
+        # Agent response time
+        # ----------------------------------------------------
+
+        if agent_action in [
+            "corrected_information",
+            "requested_missing_information",
+            "reviewed_information",
+            "revisited_information"
+        ]:
+
+            agent_response_time = round(
+                random.uniform(1, 8),
+                2
+            )
+
+        elif agent_action == "provided_guidance":
+
+            agent_response_time = round(
+                random.uniform(0.5, 5),
+                2
             )
 
         else:
 
-            guidance = (
-                "Review the completed information "
-                "and complete Customer Onboarding."
+            agent_response_time = round(
+                random.uniform(0.2, 3),
+                2
             )
+
+        # ----------------------------------------------------
+        # Guidance message
+        # ----------------------------------------------------
+
+        if agent_guidance_given:
+
+            if next_field:
+
+                guidance = (
+                    f"Review the current information "
+                    f"and proceed to {next_field}."
+                )
+
+            else:
+
+                guidance = (
+                    "Review the completed information "
+                    "and complete Customer Onboarding."
+                )
+
+        else:
+
+            guidance = ""
 
         # ----------------------------------------------------
         # Session status
@@ -328,7 +543,7 @@ def generate_session(industry, scenario=None):
             session_status = "in_progress"
 
         # ----------------------------------------------------
-        # Create Onboarding Event
+        # Create event
         # ----------------------------------------------------
 
         event = {
@@ -336,22 +551,30 @@ def generate_session(industry, scenario=None):
             "customer_id": customer_id,
             "sales_agent_id": sales_agent_id,
             "industry": industry,
+            "onboarding_scenario": scenario,
             "onboarding_field": field,
             "event_timestamp": current_time.isoformat(),
             "event_status": event_status,
             "event_duration_minutes": duration,
             "is_revisit": is_revisit,
-            "previous_onboarding_field": (
-                field_sequence[index - 1]
-                if index > 0
-                else ""
-            ),
-            "next_onboarding_field": next_onboarding_field,
+            "previous_onboarding_field": previous_field,
+            "next_onboarding_field": next_field,
             "validation_status": validation_status,
             "failure_reason": failure_reason,
             "onboarding_progress": progress,
             "onboarding_risk_score": risk_score,
             "onboarding_risk_level": risk_level,
+
+            # ------------------------------------------------
+            # Sales-agent behaviour
+            # ------------------------------------------------
+
+            "agent_action": agent_action,
+            "agent_response_time_minutes": agent_response_time,
+            "agent_guidance_given": agent_guidance_given,
+            "agent_correction_count": agent_correction_count,
+            "agent_escalation": agent_escalation,
+
             "real_time_guidance": guidance,
             "session_status": session_status
         }
@@ -366,7 +589,7 @@ def generate_session(industry, scenario=None):
 
 
 # ============================================================
-# GENERATE MANY ONBOARDING SESSIONS
+# GENERATE DATASET
 # ============================================================
 
 def generate_dataset(
@@ -420,10 +643,6 @@ def save_to_csv(events, filename):
 
 if __name__ == "__main__":
 
-    # --------------------------------------------------------
-    # Generate Banking Synthetic Onboarding Sessions
-    # --------------------------------------------------------
-
     banking_events = generate_dataset(
         number_of_sessions=1000,
         industry="banking"
@@ -433,10 +652,6 @@ if __name__ == "__main__":
         banking_events,
         "banking_synthetic_sessions.csv"
     )
-
-    # --------------------------------------------------------
-    # Generate Telecom Synthetic Onboarding Sessions
-    # --------------------------------------------------------
 
     telecom_events = generate_dataset(
         number_of_sessions=1000,
