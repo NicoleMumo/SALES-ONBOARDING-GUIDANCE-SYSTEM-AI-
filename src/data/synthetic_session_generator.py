@@ -648,14 +648,15 @@ if __name__ == "__main__":
         industry="banking"
     )
 
-    save_to_csv(
-        banking_events,
-        "banking_synthetic_sessions.csv"
-    )
-
     telecom_events = generate_dataset(
         number_of_sessions=1000,
         industry="telecom"
+    )
+
+    # Save industry-specific datasets
+    save_to_csv(
+        banking_events,
+        "banking_synthetic_sessions.csv"
     )
 
     save_to_csv(
@@ -663,16 +664,29 @@ if __name__ == "__main__":
         "telecom_synthetic_sessions.csv"
     )
 
-    print(
-        "Synthetic Onboarding Session generation completed."
+    # Combine all industries into one training dataset
+    multi_industry_events = (
+        banking_events + telecom_events
+    )
+
+    save_to_csv(
+        multi_industry_events,
+        "multi_industry_onboarding_dataset.csv"
     )
 
     print(
-        f"Banking Onboarding Events: "
-        f"{len(banking_events)}"
+        "Synthetic Multi-Industry Dataset generation completed."
     )
 
     print(
-        f"Telecom Onboarding Events: "
-        f"{len(telecom_events)}"
+        f"Banking Onboarding Events: {len(banking_events)}"
+    )
+
+    print(
+        f"Telecom Onboarding Events: {len(telecom_events)}"
+    )
+
+    print(
+        f"Total Multi-Industry Events: "
+        f"{len(multi_industry_events)}"
     )
