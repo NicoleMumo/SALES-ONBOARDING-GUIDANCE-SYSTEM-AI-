@@ -12,7 +12,9 @@ EXPECTED_COLUMNS = [
     "sales_agent_id",
     "industry",
     "onboarding_scenario",
+    "onboarding_stage",
     "onboarding_field",
+    "event_name",
     "event_timestamp",
     "event_status",
     "event_duration_minutes",
@@ -214,12 +216,20 @@ def clean_dataset(df):
     # ------------------------------------------------------------
     # Validate correction counts
     # ------------------------------------------------------------
+    # FIX: corrections are NOT exclusive to validation failures in
+    # this generator — generate_agent_behaviour() also produces a
+    # non-zero agent_correction_count for revisits, incomplete
+    # sessions, and long-completion scenarios, none of which imply
+    # validation_status == "failed". The original check here
+    # ("correction_count > 0 and validation_status != failed" ->
+    # drop) was silently removing ~9.5% of otherwise valid rows,
+    # concentrated in exactly the scenario types meant to add
+    # variety. The only genuinely impossible state is a correction
+    # being logged with no agent action recorded at all.
     df = df[
         ~(
             (df["agent_correction_count"] > 0)
-            & (
-                df["validation_status"] != "failed"
-            )
+            & (df["agent_action"].isna())
         )
     ]
 
@@ -342,6 +352,11 @@ def main():
         cleaned_df[
             "onboarding_scenario"
         ].value_counts()
+    )
+
+    print("\nOnboarding fields (should be individual fields, NOT broad stages):")
+    print(
+        cleaned_df["onboarding_field"].value_counts().to_string()
     )
 
     print("\nMissing values:")
