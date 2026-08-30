@@ -5,24 +5,106 @@ from datetime import datetime, timedelta
 
 
 # ============================================================
-# INDUSTRY-SPECIFIC ONBOARDING WORKFLOWS
+# INDIVIDUAL ONBOARDING FIELDS (replaces broad workflow stages)
+#
+# Each field is tagged with the broad "onboarding_stage" it
+# belongs to (kept because it's genuinely evidenced — e.g. the
+# telecom source data only records KYC/installation/activation
+# at that granularity) and an optional "condition" that decides
+# whether the field applies to a given session's context
+# (customer_type for banking, service_type for telecom).
+#
+# See prior analysis message for the evidence behind each field.
 # ============================================================
 
-BANKING_WORKFLOW = [
-    "Customer Information",
-    "Identity Verification",
-    "Document Verification",
-    "Account Information",
-    "Onboarding Confirmation"
+BANKING_FIELDS = [
+    {"field": "full_name",                          "stage": "customer_information"},
+    {"field": "email_address",                       "stage": "customer_information"},
+    {"field": "mobile_phone_number",                 "stage": "customer_information"},
+    {"field": "date_of_birth",                        "stage": "customer_information"},
+    {"field": "home_address",                         "stage": "customer_information"},
+    # geolocation removed: GeolocationInsertion exists in the event log,
+    # but capturing device/location during onboarding is a fraud/device-risk
+    # signal in these flows, and the project explicitly excludes
+    # concept:fraud as out of scope. Flagging rather than keeping it.
+    {"field": "identification_document_type",         "stage": "identity_verification"},
+    {"field": "identification_document_number",       "stage": "identity_verification"},
+    {"field": "selfie_liveness_check",                "stage": "identity_verification"},
+    {"field": "face_match_verification",              "stage": "identity_verification"},
+    {"field": "profession",                           "stage": "financial_profile"},
+    {"field": "income",                               "stage": "financial_profile"},
+    {"field": "assets",                               "stage": "financial_profile", "probability": 0.5},
+    {"field": "us_person_status",                     "stage": "regulatory_declarations"},
+    {"field": "politically_exposed_person_status",    "stage": "regulatory_declarations"},
+    {"field": "terms_and_conditions_acceptance",      "stage": "account_setup"},
+    {"field": "commercial_address",                   "stage": "account_setup",
+     "condition": lambda ctx: ctx["customer_type"] == "business"},
+    {"field": "beneficial_owner_information",         "stage": "account_setup",
+     "condition": lambda ctx: ctx["customer_type"] == "business"},
+    {"field": "business_relationship_purpose",        "stage": "account_setup",
+     "condition": lambda ctx: ctx["customer_type"] == "business"},
+    {"field": "business_relationship_nature",         "stage": "account_setup",
+     "condition": lambda ctx: ctx["customer_type"] == "business"},
+    {"field": "ownership_and_control_information",    "stage": "account_setup",
+     "condition": lambda ctx: ctx["customer_type"] == "business"},
 ]
 
-TELECOM_WORKFLOW = [
-    "Customer Information",
-    "Service Selection",
-    "Document Verification",
-    "Installation",
-    "Activation"
+BANKING_STAGE_ORDER = [
+    "customer_information",
+    "identity_verification",
+    "financial_profile",
+    "regulatory_declarations",
+    "account_setup",
 ]
+
+TELECOM_FIELDS = [
+    {"field": "full_name",                    "stage": "kyc"},
+    {"field": "email_address",                 "stage": "kyc"},
+    {"field": "contact_phone_number",          "stage": "kyc"},
+    {"field": "date_of_birth",                  "stage": "kyc"},
+    {"field": "gender",                         "stage": "kyc"},
+    {"field": "physical_address",               "stage": "kyc"},
+    {"field": "identification_document",        "stage": "kyc"},
+    {"field": "subscriber_type",                "stage": "kyc"},
+    {"field": "service_type",                   "stage": "service_selection"},
+    {"field": "contract_type",                  "stage": "service_selection"},
+    {"field": "payment_method",                 "stage": "service_selection"},
+    {"field": "paperless_billing_preference",   "stage": "service_selection"},
+    {"field": "phone_service_selection",        "stage": "service_selection",
+     "condition": lambda ctx: ctx["service_type"] in ("mobile", "landline")},
+    {"field": "internet_service_selection",     "stage": "service_selection",
+     "condition": lambda ctx: ctx["service_type"] in ("broadband", "tv")},
+    {"field": "streaming_addons_selection",     "stage": "service_selection",
+     "condition": lambda ctx: ctx["service_type"] in ("tv", "broadband")},
+    # installation_confirmation / activation_confirmation removed:
+    # these were invented pseudo-fields standing in for the
+    # installation/activation stages themselves (the timeline source
+    # only records those as stage-level status+duration+failure_reason,
+    # never an individual field being entered). subscriber_number is
+    # the one genuinely evidenced activation-time field (see step_failure_reason
+    # text referencing IMEI/ICCID validation).
+    {"field": "subscriber_number",              "stage": "activation"},
+]
+
+# "installation" is intentionally absent: per current source evidence it
+# does not decompose into an individual field distinct from the stage
+# itself, so it contributes no onboarding_field rows. It can still be
+# tracked as a session-level scenario/timing concept elsewhere if needed.
+TELECOM_STAGE_ORDER = [
+    "kyc",
+    "service_selection",
+    "activation",
+]
+
+FIELD_DEFINITIONS = {
+    "banking": BANKING_FIELDS,
+    "telecom": TELECOM_FIELDS,
+}
+
+STAGE_ORDER = {
+    "banking": BANKING_STAGE_ORDER,
+    "telecom": TELECOM_STAGE_ORDER,
+}
 
 
 # ============================================================
@@ -60,6 +142,79 @@ def generate_sales_agent_id():
 
 def generate_session_id():
     return f"SESSION-{uuid.uuid4().hex[:8].upper()}"
+
+
+# ============================================================
+# SESSION CONTEXT (drives which conditional fields apply)
+# ============================================================
+
+def generate_session_context(industry):
+
+    if industry == "banking":
+        customer_type = random.choices(
+            ["individual", "business"],
+            weights=[80, 20],
+            k=1
+        )[0]
+        return {"customer_type": customer_type}
+
+    if industry == "telecom":
+        service_type = random.choices(
+            ["mobile", "broadband", "tv", "iot", "landline"],
+            weights=[35, 25, 20, 10, 10],
+            k=1
+        )[0]
+        return {"service_type": service_type}
+
+    raise ValueError("Industry must be 'banking' or 'telecom'")
+
+
+def select_applicable_fields(industry, context):
+    """
+    Build this session's target field list: every field whose
+    condition (if any) passes, and whose probability (if any)
+    is met, ordered by the industry's stage order with the
+    fields within each stage shuffled for realistic variation.
+    """
+
+    definitions = FIELD_DEFINITIONS[industry]
+    stage_order = STAGE_ORDER[industry]
+
+    selected = []
+
+    for definition in definitions:
+
+        condition = definition.get("condition")
+        if condition is not None and not condition(context):
+            continue
+
+        probability = definition.get("probability", 1.0)
+        if random.random() > probability:
+            continue
+
+        selected.append(definition["field"])
+
+    # Group by stage, preserving each field's definition order
+    # within its stage, then shuffle within each stage only.
+    by_stage = {stage: [] for stage in stage_order}
+    field_to_stage = {
+        d["field"]: d["stage"] for d in definitions
+    }
+
+    for field in selected:
+        by_stage[field_to_stage[field]].append(field)
+
+    ordered_fields = []
+    stage_of_field = {}
+
+    for stage in stage_order:
+        stage_fields = by_stage[stage]
+        random.shuffle(stage_fields)
+        for field in stage_fields:
+            stage_of_field[field] = stage
+        ordered_fields.extend(stage_fields)
+
+    return ordered_fields, stage_of_field
 
 
 # ============================================================
@@ -139,10 +294,6 @@ def generate_agent_behaviour(
     between onboarding events and sales-agent actions.
     """
 
-    # --------------------------------------------------------
-    # Validation errors
-    # --------------------------------------------------------
-
     if validation_status == "failed":
 
         action = random.choices(
@@ -166,10 +317,6 @@ def generate_agent_behaviour(
             )[0]
         )
 
-    # --------------------------------------------------------
-    # Revisited field
-    # --------------------------------------------------------
-
     if is_revisit:
 
         action = random.choices(
@@ -188,10 +335,6 @@ def generate_agent_behaviour(
             random.choice([0, 1]),
             "none"
         )
-
-    # --------------------------------------------------------
-    # Incomplete session
-    # --------------------------------------------------------
 
     if scenario == "incomplete_sessions":
 
@@ -216,10 +359,6 @@ def generate_agent_behaviour(
             )[0]
         )
 
-    # --------------------------------------------------------
-    # Long completion time
-    # --------------------------------------------------------
-
     if scenario == "long_completion_times":
 
         action = random.choices(
@@ -239,10 +378,6 @@ def generate_agent_behaviour(
             random.choice([0, 1]),
             "none"
         )
-
-    # --------------------------------------------------------
-    # Normal completion
-    # --------------------------------------------------------
 
     action = random.choices(
         [
@@ -312,16 +447,8 @@ def generate_session(industry, scenario=None):
 
     industry = industry.lower()
 
-    if industry == "banking":
-        workflow = BANKING_WORKFLOW.copy()
-
-    elif industry == "telecom":
-        workflow = TELECOM_WORKFLOW.copy()
-
-    else:
-        raise ValueError(
-            "Industry must be 'banking' or 'telecom'"
-        )
+    if industry not in ("banking", "telecom"):
+        raise ValueError("Industry must be 'banking' or 'telecom'")
 
     if scenario is None:
         scenario = select_scenario()
@@ -330,23 +457,28 @@ def generate_session(industry, scenario=None):
     customer_id = generate_customer_id()
     sales_agent_id = generate_sales_agent_id()
 
+    context = generate_session_context(industry)
+    target_fields, stage_of_field = select_applicable_fields(
+        industry, context
+    )
+
     start_time = datetime.now()
 
     # --------------------------------------------------------
-    # Incomplete sessions stop before final step
+    # Incomplete sessions stop before the final target field
     # --------------------------------------------------------
 
-    if scenario == "incomplete_sessions":
+    if scenario == "incomplete_sessions" and len(target_fields) > 1:
 
         number_of_fields = random.randint(
             1,
-            len(workflow) - 1
+            len(target_fields) - 1
         )
 
-        fields = workflow[:number_of_fields]
+        fields = target_fields[:number_of_fields]
 
     else:
-        fields = workflow.copy()
+        fields = target_fields.copy()
 
     # --------------------------------------------------------
     # Create field sequence with realistic revisits
@@ -379,6 +511,11 @@ def generate_session(industry, scenario=None):
     current_time = start_time
     revisit_count = 0
 
+    # Denominator for progress: the full target set for this
+    # session's context, not the truncated "fields" list, so
+    # incomplete sessions correctly show partial progress.
+    target_field_count = max(len(target_fields), 1)
+
     for index, field in enumerate(field_sequence):
 
         is_revisit = field in field_sequence[:index]
@@ -386,75 +523,31 @@ def generate_session(industry, scenario=None):
         if is_revisit:
             revisit_count += 1
 
-        duration = generate_event_duration(
-            scenario
+        duration = generate_event_duration(scenario)
+        validation_status = generate_validation_status(scenario)
+        failure_reason = generate_failure_reason(validation_status)
+
+        event_status = "failed" if validation_status == "failed" else "completed"
+
+        previous_field = field_sequence[index - 1] if index > 0 else ""
+        next_field = (
+            field_sequence[index + 1]
+            if index + 1 < len(field_sequence)
+            else ""
         )
-
-        validation_status = generate_validation_status(
-            scenario
-        )
-
-        failure_reason = generate_failure_reason(
-            validation_status
-        )
-
-        # ----------------------------------------------------
-        # Event status
-        # ----------------------------------------------------
-
-        if validation_status == "failed":
-            event_status = "failed"
-        else:
-            event_status = "completed"
-
-        # ----------------------------------------------------
-        # Previous / next field
-        # ----------------------------------------------------
-
-        if index > 0:
-            previous_field = field_sequence[index - 1]
-        else:
-            previous_field = ""
-
-        if index + 1 < len(field_sequence):
-            next_field = field_sequence[index + 1]
-        else:
-            next_field = ""
-
-        # ----------------------------------------------------
-        # Progress
-        # ----------------------------------------------------
 
         progress = round(
             (
-                len(
-                    set(
-                        field_sequence[:index + 1]
-                    )
-                )
-                / len(workflow)
+                len(set(field_sequence[:index + 1]))
+                / target_field_count
             ) * 100,
             2
         )
 
-        # ----------------------------------------------------
-        # Risk
-        # ----------------------------------------------------
-
         risk_score = calculate_onboarding_risk(
-            validation_status,
-            duration,
-            revisit_count,
-            progress
+            validation_status, duration, revisit_count, progress
         )
-
-        risk_level = get_risk_level(
-            risk_score
-        )
-
-        # ----------------------------------------------------
-        # AGENT BEHAVIOUR
-        # ----------------------------------------------------
+        risk_level = get_risk_level(risk_score)
 
         (
             agent_action,
@@ -469,82 +562,45 @@ def generate_session(industry, scenario=None):
             event_duration=duration
         )
 
-        # ----------------------------------------------------
-        # Agent response time
-        # ----------------------------------------------------
-
         if agent_action in [
             "corrected_information",
             "requested_missing_information",
             "reviewed_information",
             "revisited_information"
         ]:
-
-            agent_response_time = round(
-                random.uniform(1, 8),
-                2
-            )
+            agent_response_time = round(random.uniform(1, 8), 2)
 
         elif agent_action == "provided_guidance":
-
-            agent_response_time = round(
-                random.uniform(0.5, 5),
-                2
-            )
+            agent_response_time = round(random.uniform(0.5, 5), 2)
 
         else:
-
-            agent_response_time = round(
-                random.uniform(0.2, 3),
-                2
-            )
-
-        # ----------------------------------------------------
-        # Guidance message
-        # ----------------------------------------------------
+            agent_response_time = round(random.uniform(0.2, 3), 2)
 
         if agent_guidance_given:
-
             if next_field:
-
                 guidance = (
                     f"Review the current information "
                     f"and proceed to {next_field}."
                 )
-
             else:
-
                 guidance = (
                     "Review the completed information "
                     "and complete Customer Onboarding."
                 )
-
         else:
-
             guidance = ""
 
-        # ----------------------------------------------------
-        # Session status
-        # ----------------------------------------------------
-
         if scenario == "incomplete_sessions":
-
             session_status = "in_progress"
-
         elif (
             index == len(field_sequence) - 1
             and event_status == "completed"
         ):
-
             session_status = "completed"
-
         else:
-
             session_status = "in_progress"
 
-        # ----------------------------------------------------
-        # Create event
-        # ----------------------------------------------------
+        event_name = "revisited" if is_revisit else "entered"
 
         event = {
             "session_id": session_id,
@@ -552,7 +608,9 @@ def generate_session(industry, scenario=None):
             "sales_agent_id": sales_agent_id,
             "industry": industry,
             "onboarding_scenario": scenario,
+            "onboarding_stage": stage_of_field[field],
             "onboarding_field": field,
+            "event_name": event_name,
             "event_timestamp": current_time.isoformat(),
             "event_status": event_status,
             "event_duration_minutes": duration,
@@ -564,10 +622,6 @@ def generate_session(industry, scenario=None):
             "onboarding_progress": progress,
             "onboarding_risk_score": risk_score,
             "onboarding_risk_level": risk_level,
-
-            # ------------------------------------------------
-            # Sales-agent behaviour
-            # ------------------------------------------------
 
             "agent_action": agent_action,
             "agent_response_time_minutes": agent_response_time,
@@ -581,9 +635,7 @@ def generate_session(industry, scenario=None):
 
         events.append(event)
 
-        current_time += timedelta(
-            minutes=duration
-        )
+        current_time += timedelta(minutes=duration)
 
     return events
 
@@ -592,19 +644,12 @@ def generate_session(industry, scenario=None):
 # GENERATE DATASET
 # ============================================================
 
-def generate_dataset(
-    number_of_sessions=1000,
-    industry="banking"
-):
+def generate_dataset(number_of_sessions=1000, industry="banking"):
 
     all_events = []
 
     for _ in range(number_of_sessions):
-
-        session = generate_session(
-            industry=industry
-        )
-
+        session = generate_session(industry=industry)
         all_events.extend(session)
 
     return all_events
@@ -621,18 +666,8 @@ def save_to_csv(events, filename):
 
     fieldnames = list(events[0].keys())
 
-    with open(
-        filename,
-        "w",
-        newline="",
-        encoding="utf-8"
-    ) as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=fieldnames
-        )
-
+    with open(filename, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(events)
 
@@ -653,40 +688,22 @@ if __name__ == "__main__":
         industry="telecom"
     )
 
-    # Save industry-specific datasets
-    save_to_csv(
-        banking_events,
-        "banking_synthetic_sessions.csv"
-    )
+    # Save industry-specific datasets (kept separate, per spec)
+    save_to_csv(banking_events, "banking_synthetic_sessions.csv")
+    save_to_csv(telecom_events, "telecom_synthetic_sessions.csv")
 
-    save_to_csv(
-        telecom_events,
-        "telecom_synthetic_sessions.csv"
-    )
-
-    # Combine all industries into one training dataset
-    multi_industry_events = (
-        banking_events + telecom_events
-    )
+    # Combine both into one multi-industry dataset (3rd file).
+    # "industry" and "onboarding_stage" columns preserve which
+    # industry/stage each row's onboarding_field belongs to,
+    # since banking and telecom field vocabularies don't overlap.
+    multi_industry_events = banking_events + telecom_events
 
     save_to_csv(
         multi_industry_events,
         "multi_industry_onboarding_dataset.csv"
     )
 
-    print(
-        "Synthetic Multi-Industry Dataset generation completed."
-    )
-
-    print(
-        f"Banking Onboarding Events: {len(banking_events)}"
-    )
-
-    print(
-        f"Telecom Onboarding Events: {len(telecom_events)}"
-    )
-
-    print(
-        f"Total Multi-Industry Events: "
-        f"{len(multi_industry_events)}"
-    )
+    print("Synthetic Multi-Industry Dataset generation completed.")
+    print(f"Banking Onboarding Events: {len(banking_events)}")
+    print(f"Telecom Onboarding Events: {len(telecom_events)}")
+    print(f"Total Multi-Industry Events: {len(multi_industry_events)}")
