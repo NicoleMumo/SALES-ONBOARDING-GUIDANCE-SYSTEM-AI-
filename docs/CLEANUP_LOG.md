@@ -74,3 +74,16 @@ arrays themselves aren't needed in version control.
 *This cleanup was done as its own commit, separate from the Milestone 3
 feature branches, so the diff for each Milestone 3 PR stays focused on that
 issue's actual work rather than being mixed with file deletions.*
+
+## Round 2: large regeneratable dataset files + duplicate config
+
+**Deleted (regeneratable from scripts still in the repo):**
+- multi_industry_onboarding_dataset.csv - raw synthetic dataset, from synthetic_session_generator.py
+- clean_multi_industry_onboarding_dataset.csv - cleaned dataset, from clean_and_validate_dataset.py
+- data/sequences/train_sequences.csv, validation_sequences.csv, test_sequences.csv - from prepare_sequence_data.py
+- data/encoded_sequences/train_sequences_encoded.csv, validation_sequences_encoded.csv, test_sequences_encoded.csv - from encode_onboarding_fields.py
+
+None of these are read by the Milestone 3 Transformer notebook.
+
+**Deleted - duplicate/conflicting config:**
+- data/transformer_inputs/preprocessing_config.json - an older preprocessing config with a different field-ID numbering scheme (0-indexed with a separate offset) than preprocessing_meta.json (1-indexed field IDs), which is the one actually used by the current model and demo.py. Having both risked someone loading the wrong one. preprocessing_meta.json is the single source of truth going forward.
