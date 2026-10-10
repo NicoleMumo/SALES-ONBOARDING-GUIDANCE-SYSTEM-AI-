@@ -35,8 +35,8 @@ import tensorflow as tf
 from model_def import GatherLastToken, PositionalEmbedding, ExpandAttentionMask, TransformerBlock
 from field_similarity_head import FieldSimilarityHead
 
-MODEL_PATH = "onboarding_model_flexible.keras"
-META_PATH = "preprocessing_meta.json"
+MODEL_PATH = "models/onboarding_model_flexible.keras"
+META_PATH = "models/preprocessing_meta.json"
 
 
 class UnknownFieldError(ValueError):
