@@ -57,11 +57,6 @@ data class FormField(
             "Entry field '${entry.fieldId}' does not match '$fieldId'"
         }
 
-        if (isRequired && validationRule.none { it is Required }) {
-            val requiredResult = Required.validate(entry.value, context)
-            if (requiredResult != null) return ValidationResult.invalid(requiredResult)
-        }
-
         for (rule in validationRule) {
             val error = rule.validate(entry.value, context)
             if (error != null) return ValidationResult.invalid(error)

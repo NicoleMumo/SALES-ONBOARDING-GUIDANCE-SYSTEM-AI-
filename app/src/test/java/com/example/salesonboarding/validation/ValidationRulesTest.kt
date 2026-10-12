@@ -110,4 +110,29 @@ class ValidationRulesTest {
         assertTrue(field.validate(entry).isValid)
         assertFalse(field.validate(entry.copy(value = "bad")).isValid)
     }
+
+    @Test fun adminCanAddAndRemoveRulesFromAnExistingField() {
+        val defaultField = KnownFields.get("profession")
+        val configuredField = KnownFields.get(
+            "profession",
+            FieldRuleConfiguration(
+                mapOf(
+                    "profession" to FieldRuleOverride(
+                        addRules = listOf(RegexPattern("^[A-Z].*")),
+                        removeRules = listOf(NotBlank)
+                    )
+                )
+            )
+        )
+
+        assertFalse(configuredField.validate(
+            FieldEntry("entry", "session", "profession", "nurse")
+        ).isValid)
+        assertTrue(configuredField.validate(
+            FieldEntry("entry", "session", "profession", "Nurse")
+        ).isValid)
+        assertTrue(defaultField.validate(
+            FieldEntry("entry", "session", "profession", "nurse")
+        ).isValid)
+    }
 }
