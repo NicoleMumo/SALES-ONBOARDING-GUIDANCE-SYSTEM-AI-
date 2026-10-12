@@ -24,18 +24,43 @@ class MainActivity : ComponentActivity() {
         setContent {
             SalesOnboardingTheme {
                 var signedIn by remember { mutableStateOf(false) }
+                var selectedRole by remember { mutableStateOf<UserRole?>(null) }
+                var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (signedIn) {
+                    if (!signedIn) {
+                        UnifiedLoginScreen(
+                            onLogin = { _, _, role ->
+                                selectedRole = role
+                                signedIn = true
+                            },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (selectedRole == UserRole.ADMIN) {
+                        AdminDashboardScreen(
+                            onSignOut = {
+                                signedIn = false
+                                selectedRole = null
+                                selectedIndustry = null
+                            },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (selectedIndustry == null) {
+                        IndustrySelectionScreen(
+                            onIndustrySelected = { industry -> selectedIndustry = industry },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else {
                         val scope = rememberCoroutineScope()
                         val store = remember { InMemoryFieldEntryStore() }
                         val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
-                        val controller = rememberOnboardingController("session-1", scope, store, predictor)
-                        OnboardingScreen(controller, Modifier.padding(innerPadding))
-                    } else {
-                        SalesAgentLoginScreen(
-                            onLogin = { _, _ -> signedIn = true },
-                            modifier = Modifier.padding(innerPadding)
+                        val controller = rememberOnboardingController(
+                            "session-1",
+                            scope,
+                            store,
+                            predictor,
+                            industry = selectedIndustry!!
                         )
+                        OnboardingScreen(controller, Modifier.padding(innerPadding))
                     }
                 }
             }
