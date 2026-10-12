@@ -29,6 +29,7 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier
 ) {
     val state by controller.stateFlow.collectAsState()
+    val guidance by controller.guidanceFlow.collectAsState()
     val errors = remember(state) {
         ValidationErrorDisplayMapper.forState(state).associateBy { it.fieldId }
     }
@@ -43,6 +44,14 @@ fun OnboardingScreen(
                 text = "Customer onboarding",
                 style = MaterialTheme.typography.headlineSmall
             )
+        }
+        item {
+            guidance.prediction?.let { prediction ->
+                Text(
+                    text = "Recommended next step: ${controller.fields.firstOrNull { it.fieldId == prediction.fieldId }?.fieldName ?: prediction.fieldId}",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
         }
         items(controller.fields, key = { it.fieldId }) { field ->
             val error = errors[field.fieldId]
@@ -79,7 +88,8 @@ fun OnboardingScreen(
 fun rememberOnboardingController(
     sessionId: String,
     scope: CoroutineScope,
-    entryStore: InMemoryFieldEntryStore
-): OnboardingFormController = remember(sessionId, scope, entryStore) {
-    OnboardingFormController(sessionId, scope = scope, entryStore = entryStore)
+    entryStore: InMemoryFieldEntryStore,
+    predictor: NextFieldPredictor? = null
+): OnboardingFormController = remember(sessionId, scope, entryStore, predictor) {
+    OnboardingFormController(sessionId, scope = scope, entryStore = entryStore, predictor = predictor)
 }

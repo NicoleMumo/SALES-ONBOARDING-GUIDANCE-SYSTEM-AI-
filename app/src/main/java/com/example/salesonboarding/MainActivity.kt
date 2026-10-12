@@ -23,7 +23,8 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val scope = rememberCoroutineScope()
                     val store = remember { InMemoryFieldEntryStore() }
-                    val controller = rememberOnboardingController("session-1", scope, store)
+                    val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
+                    val controller = rememberOnboardingController("session-1", scope, store, predictor)
                     OnboardingScreen(controller, Modifier.padding(innerPadding))
                 }
             }
