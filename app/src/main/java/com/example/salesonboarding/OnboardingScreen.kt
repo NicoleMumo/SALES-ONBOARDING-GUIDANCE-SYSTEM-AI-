@@ -169,9 +169,18 @@ fun rememberOnboardingController(
     sessionId: String,
     scope: CoroutineScope,
     entryStore: InMemoryFieldEntryStore,
-    predictor: NextFieldPredictor? = null
-): OnboardingFormController = remember(sessionId, scope, entryStore, predictor) {
-    OnboardingFormController(sessionId, scope = scope, entryStore = entryStore, predictor = predictor)
+    predictor: NextFieldPredictor? = null,
+    industry: String = "telecom",
+    context: String = "individual"
+): OnboardingFormController = remember(sessionId, scope, entryStore, predictor, industry, context) {
+    OnboardingFormController(
+        sessionId,
+        scope = scope,
+        entryStore = entryStore,
+        predictor = predictor,
+        industry = industry,
+        context = context
+    )
 }
 
 @Preview(showBackground = true, showSystemUi = true)

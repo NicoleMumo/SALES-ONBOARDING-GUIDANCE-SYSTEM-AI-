@@ -23,9 +23,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
+enum class UserRole(val label: String) {
+    SALES_AGENT("Sales agent"),
+    ADMIN("Admin")
+}
+
 data class LoginFormState(
     val email: String = "",
     val password: String = "",
+    val role: UserRole = UserRole.SALES_AGENT,
     val errorMessage: String? = null,
     val isSubmitting: Boolean = false
 )
@@ -45,8 +51,8 @@ object LoginFormValidator {
 }
 
 @Composable
-fun SalesAgentLoginScreen(
-    onLogin: (email: String, password: String) -> Unit,
+fun UnifiedLoginScreen(
+    onLogin: (email: String, password: String, role: UserRole) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var state by remember { mutableStateOf(LoginFormState()) }
@@ -65,15 +71,35 @@ fun SalesAgentLoginScreen(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Sales-agent sign in",
+                text = "Sign in",
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Sign in to start a customer onboarding session.",
+                text = "Access the onboarding system as a sales agent or admin.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        androidx.compose.material3.OutlinedButton(
+            onClick = { state = state.copy(role = UserRole.SALES_AGENT) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Continue as sales agent")
+        }
+
+        androidx.compose.material3.OutlinedButton(
+            onClick = { state = state.copy(role = UserRole.ADMIN) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Continue as admin")
+        }
+
+        Text(
+            text = "Selected role: ${state.role.label}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         OutlinedTextField(
             value = state.email,
@@ -117,7 +143,7 @@ fun SalesAgentLoginScreen(
                 val error = LoginFormValidator.validate(state.email, state.password)
                 if (error == null) {
                     state = state.copy(isSubmitting = true)
-                    onLogin(state.email.trim(), state.password)
+                    onLogin(state.email.trim(), state.password, state.role)
                 } else {
                     state = state.copy(errorMessage = error)
                 }
@@ -136,11 +162,13 @@ fun SalesAgentLoginScreen(
                 Text("Sign in")
             }
         }
-
-        Text(
-            text = "Admin access is managed separately.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
+}
+
+@Composable
+fun SalesAgentLoginScreen(
+    onLogin: (email: String, password: String, role: UserRole) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    UnifiedLoginScreen(onLogin = onLogin, modifier = modifier)
 }
