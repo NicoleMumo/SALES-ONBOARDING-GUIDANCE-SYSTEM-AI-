@@ -44,12 +44,9 @@ class FirebaseFieldEntryStore(
             .child("entries")
             .child(entry.fieldId)
             .setValue(entryData)
-            .addOnFailureListener { error ->
-                throw IllegalStateException(
-                    "Could not save field '${entry.fieldId}' for session '${entry.sessionId}'.",
-                    error
-                )
-            }
+            .reportFailure(
+                "Could not save field '${entry.fieldId}' for session '${entry.sessionId}'."
+            )
     }
 
     override fun startSession(sessionId: String, agentId: String, industry: String, context: String) {
