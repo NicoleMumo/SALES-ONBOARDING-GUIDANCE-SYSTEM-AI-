@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.google.firebase.database.FirebaseDatabase
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
                 var agentId by remember { mutableStateOf("") }
                 var showAgentHome by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
+                var onboardingSessionId by remember { mutableStateOf<String?>(null) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     if (!signedIn) {
                         UnifiedLoginScreen(
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
                                 signedIn = false
                                 selectedRole = null
                                 selectedIndustry = null
+                                onboardingSessionId = null
                             },
                             modifier = Modifier.padding(innerPadding)
                         )
@@ -57,22 +60,26 @@ class MainActivity : ComponentActivity() {
                                 selectedRole = null
                                 showAgentHome = false
                                 selectedIndustry = null
+                                onboardingSessionId = null
                             },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (selectedIndustry == null) {
                         IndustrySelectionScreen(
-                            onIndustrySelected = { industry -> selectedIndustry = industry },
+                            onIndustrySelected = { industry ->
+                                selectedIndustry = industry
+                                onboardingSessionId = UUID.randomUUID().toString()
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
-                    } else {
+                    } else if (onboardingSessionId != null) {
                         val scope = rememberCoroutineScope()
                         val store = remember {
                             FirebaseFieldEntryStore(FirebaseDatabase.getInstance().reference)
                         }
                         val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
                         val controller = rememberOnboardingController(
-                            "session-1",
+                            onboardingSessionId!!,
                             scope,
                             store,
                             predictor,
