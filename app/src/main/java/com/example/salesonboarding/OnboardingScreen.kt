@@ -19,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 import kotlinx.coroutines.CoroutineScope
@@ -92,4 +93,19 @@ fun rememberOnboardingController(
     predictor: NextFieldPredictor? = null
 ): OnboardingFormController = remember(sessionId, scope, entryStore, predictor) {
     OnboardingFormController(sessionId, scope = scope, entryStore = entryStore, predictor = predictor)
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun OnboardingScreenPreview() {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val store = InMemoryFieldEntryStore()
+    val controller = rememberOnboardingController(
+        sessionId = "preview-session",
+        scope = scope,
+        entryStore = store
+    )
+    com.example.salesonboarding.ui.theme.SalesOnboardingTheme {
+        OnboardingScreen(controller)
+    }
 }
