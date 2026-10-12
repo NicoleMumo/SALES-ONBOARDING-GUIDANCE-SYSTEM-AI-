@@ -44,3 +44,10 @@ pause and updates only the changed field and fields whose rules depend on it.
 For example, changing `service_type` re-checks the service-dependent fields.
 The session accepts a `FieldRuleConfiguration`, so admin overrides are applied
 to live checks as well.
+
+`LiveValidationState.touchedFieldIds` records fields that the agent has
+changed. `ValidationErrorDisplayMapper` only returns failed results for those
+fields, so an untouched required field does not show an error before the agent
+reaches it. If the agent enters a value and then clears it, the field remains
+touched and its required-field message is returned. The mapper returns plain
+Kotlin data and does not depend on Compose or another UI framework.
