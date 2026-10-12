@@ -19,7 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -62,6 +64,11 @@ fun OnboardingScreenContent(
     val errors = remember(state) {
         ValidationErrorDisplayMapper.forState(state).associateBy { it.fieldId }
     }
+    var submitted by remember { mutableStateOf(false) }
+    val completedCount = fields.count { field ->
+        state.values[field.fieldId].isNullOrBlank().not() &&
+            state.results[field.fieldId]?.isValid == true
+    }
 
     LazyColumn(
         modifier = modifier
@@ -81,6 +88,11 @@ fun OnboardingScreenContent(
                     text = "Enter the customer details to get started.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "$completedCount of ${fields.size} fields completed",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -130,7 +142,10 @@ fun OnboardingScreenContent(
             val error = errors[field.fieldId]
             OutlinedTextField(
                 value = state.values[field.fieldId].orEmpty(),
-                onValueChange = { onValueChange(field.fieldId, it) },
+                onValueChange = {
+                    submitted = false
+                    onValueChange(field.fieldId, it)
+                },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(field.fieldName) },
                 placeholder = { Text("Enter ${field.fieldName.lowercase()}") },
@@ -147,8 +162,35 @@ fun OnboardingScreenContent(
             )
         }
         item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Review before continuing",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = if (completedCount == fields.size) {
+                            "All fields are valid. Review the information above and continue."
+                        } else {
+                            "Complete and review all required fields before continuing."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        item {
             Button(
-                onClick = onSubmit,
+                onClick = {
+                    submitted = true
+                    onSubmit()
+                },
                 enabled = canContinue,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -156,7 +198,7 @@ fun OnboardingScreenContent(
                 contentPadding = PaddingValues(vertical = 14.dp)
             ) {
                 Text(
-                    text = "Continue",
+                    text = if (submitted) "Submitted" else "Continue",
                     style = MaterialTheme.typography.labelLarge
                 )
             }
