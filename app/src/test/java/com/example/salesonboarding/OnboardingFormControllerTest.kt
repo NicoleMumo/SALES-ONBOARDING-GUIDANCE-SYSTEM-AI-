@@ -8,6 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.example.salesonboarding.validation.FieldEntry
 import com.example.salesonboarding.validation.KnownFields
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 
@@ -62,6 +63,46 @@ class OnboardingFormControllerTest {
     }
 
     @Test
+    fun successfulOnboardingRecordsTheCompleteSessionLifecycle() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val fields = listOf(
+            KnownFields.get("full_name"),
+            KnownFields.get("email_address")
+        )
+        val controller = OnboardingFormController(
+            sessionId = "successful-session",
+            fields = fields,
+            scope = backgroundScope,
+            entryStore = store,
+            industry = "telecom",
+            context = "individual",
+            agentId = "agent@example.com"
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        controller.updateField("email_address", "jane@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(controller.canContinue())
+        assertTrue(controller.submit())
+        assertEquals(
+            SessionStart(
+                "successful-session",
+                "agent@example.com",
+                "telecom",
+                "individual"
+            ),
+            store.startedSession
+        )
+        assertEquals(setOf("full_name", "email_address"), store.validatedFields)
+        assertEquals(setOf("full_name", "email_address"), store.savedEntries.map { it.fieldId }.toSet())
+        assertTrue(store.events.any { it.type == "field_updated" && it.fieldId == "full_name" })
+        assertTrue(store.events.any { it.type == "field_updated" && it.fieldId == "email_address" })
+        assertEquals("successful-session", store.completedSessionId)
+    }
+
+    @Test
     fun guidanceTellsAgentToCorrectAnInvalidField() = runTest {
         val controller = OnboardingFormController(
             "session",
@@ -79,6 +120,56 @@ class OnboardingFormControllerTest {
             "Correct Email address: Enter a valid email address.",
             controller.guidanceFlow.value.message
         )
+    }
+
+    private data class SessionStart(
+        val sessionId: String,
+        val agentId: String,
+        val industry: String,
+        val context: String
+    )
+
+    private data class SessionEvent(
+        val type: String,
+        val fieldId: String?,
+        val value: String?
+    )
+
+    private class RecordingOnboardingSessionStore : OnboardingSessionStore {
+        var startedSession: SessionStart? = null
+        var completedSessionId: String? = null
+        val validatedFields = mutableSetOf<String>()
+        val events = mutableListOf<SessionEvent>()
+        private val entries = mutableListOf<FieldEntry>()
+
+        val savedEntries: List<FieldEntry>
+            get() = entries.toList()
+
+        override fun save(entry: FieldEntry) {
+            entries.removeAll { it.fieldId == entry.fieldId }
+            entries += entry
+        }
+
+        override fun startSession(sessionId: String, agentId: String, industry: String, context: String) {
+            startedSession = SessionStart(sessionId, agentId, industry, context)
+        }
+
+        override fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?) {
+            if (isValid) validatedFields += fieldId
+        }
+
+        override fun appendEvent(sessionId: String, type: String, fieldId: String?, value: String?) {
+            events += SessionEvent(type, fieldId, value)
+        }
+
+        override fun markCompleted(sessionId: String) {
+            completedSessionId = sessionId
+        }
+
+        override fun getSession(
+            sessionId: String,
+            onResult: (Result<StoredOnboardingSession?>) -> Unit
+        ) = error("Retrieval is not part of this controller test")
     }
 
     @Test
