@@ -9,6 +9,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.example.salesonboarding.validation.FieldEntry
+import com.example.salesonboarding.risk.CompletionRiskEvent
+import com.example.salesonboarding.risk.CompletionRiskLevel
 import com.example.salesonboarding.validation.KnownFields
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 
@@ -238,6 +240,30 @@ class OnboardingFormControllerTest {
         assertEquals(
             "Correct Phone service selection: Enter a value because the selected option requires it.",
             controller.guidanceFlow.value.message
+        )
+    }
+
+    @Test
+    fun difficultSessionPublishesHighRiskGuidanceAfterRepeatedErrors() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.recordRiskEvent(
+            CompletionRiskEvent(16.0, validationPassed = false, isRevisit = true, progressPercent = 25.0)
+        )
+        controller.recordRiskEvent(
+            CompletionRiskEvent(2.0, validationPassed = false, isRevisit = true, progressPercent = 25.0)
+        )
+        runCurrent()
+
+        assertEquals(CompletionRiskLevel.HIGH, controller.riskFlow.value?.level)
+        assertEquals(
+            "Pause and help the customer complete the remaining information.",
+            controller.guidanceFlow.value.riskGuidance?.message
         )
     }
 
