@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -69,6 +70,14 @@ fun OnboardingScreenContent(
         state.values[field.fieldId].isNullOrBlank().not() &&
             state.results[field.fieldId]?.isValid == true
     }
+    val currentFieldId = guidance.correction?.fieldId ?: guidance.nextFieldId
+    val currentField = fields.firstOrNull { it.fieldId == currentFieldId }
+        ?: fields.firstOrNull { field ->
+            state.values[field.fieldId].isNullOrBlank() ||
+                state.results[field.fieldId]?.isValid != true
+        }
+    val currentStep = currentField?.let { fields.indexOf(it) + 1 } ?: fields.size
+    val progress = if (fields.isEmpty()) 1f else completedCount.toFloat() / fields.size
 
     LazyColumn(
         modifier = modifier
@@ -94,6 +103,32 @@ fun OnboardingScreenContent(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = if (currentField == null) {
+                                "Onboarding complete"
+                            } else {
+                                "Step $currentStep of ${fields.size}: ${currentField.fieldName}"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
+                    }
+                }
             }
         }
         item {
