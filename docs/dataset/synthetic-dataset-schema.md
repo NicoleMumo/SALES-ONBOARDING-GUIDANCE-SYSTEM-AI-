@@ -173,6 +173,23 @@ The risk is represented using:
 
 The risk information can be displayed to the Sales Agent together with the Real-Time Guidance.
 
+## Completion-risk feature rules
+
+The Android completion-risk calculator uses the same four explainable signals
+as the synthetic-session generator:
+
+- Start with a baseline score of `0.05`.
+- Add `0.25` when one or more validation errors occur.
+- Add `0.15` when elapsed session time is greater than 15 minutes.
+- Add `0.10` for each field revisit.
+- Add `0.10` when progress is below 50 percent.
+
+The score is capped at `1.00`. Scores below `0.30` are `Low`, scores from
+`0.30` up to (but not including) `0.70` are `Medium`, and scores of `0.70`
+or higher are `High`. Each triggered signal is returned as an explanation so
+future guidance screens can tell the Sales Agent why a session is considered
+difficult or at risk of being incomplete.
+
 ---
 
 # Industry Separation
