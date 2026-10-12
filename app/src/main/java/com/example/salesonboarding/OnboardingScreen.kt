@@ -6,21 +6,27 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
+import com.example.salesonboarding.validation.FormField
+import com.example.salesonboarding.validation.LiveValidationState
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 import kotlinx.coroutines.CoroutineScope
 
@@ -31,36 +37,90 @@ fun OnboardingScreen(
 ) {
     val state by controller.stateFlow.collectAsState()
     val guidance by controller.guidanceFlow.collectAsState()
+
+    OnboardingScreenContent(
+        fields = controller.fields,
+        state = state,
+        guidance = guidance,
+        onValueChange = { fieldId, value -> controller.updateField(fieldId, value) },
+        onSubmit = { controller.submit(state) },
+        canContinue = controller.canContinue(state),
+        modifier = modifier
+    )
+}
+
+@Composable
+fun OnboardingScreenContent(
+    fields: List<FormField>,
+    state: LiveValidationState,
+    guidance: NextFieldGuidance,
+    onValueChange: (fieldId: String, value: String) -> Unit,
+    onSubmit: () -> Unit,
+    canContinue: Boolean,
+    modifier: Modifier = Modifier
+) {
     val errors = remember(state) {
         ValidationErrorDisplayMapper.forState(state).associateBy { it.fieldId }
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text(
-                text = "Customer onboarding",
-                style = MaterialTheme.typography.headlineSmall
-            )
-        }
-        item {
-            guidance.prediction?.let { prediction ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Recommended next step: ${controller.fields.firstOrNull { it.fieldId == prediction.fieldId }?.fieldName ?: prediction.fieldId}",
-                    style = MaterialTheme.typography.bodyLarge
+                    text = "Customer onboarding",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Enter the customer details to get started.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-        items(controller.fields, key = { it.fieldId }) { field ->
+        item {
+            guidance.prediction?.let { prediction ->
+                val fieldName = fields.firstOrNull { it.fieldId == prediction.fieldId }?.fieldName ?: prediction.fieldId
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Next recommended step",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = fieldName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "${(prediction.confidence * 100).toInt()}% confidence",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        }
+        items(fields, key = { it.fieldId }) { field ->
             val error = errors[field.fieldId]
             OutlinedTextField(
                 value = state.values[field.fieldId].orEmpty(),
-                onValueChange = { controller.updateField(field.fieldId, it) },
+                onValueChange = { onValueChange(field.fieldId, it) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(field.fieldName) },
+                placeholder = { Text("Enter ${field.fieldName.lowercase()}") },
                 singleLine = true,
                 isError = error != null,
                 supportingText = error?.let { display ->
@@ -75,11 +135,17 @@ fun OnboardingScreen(
         }
         item {
             Button(
-                onClick = { controller.submit(state) },
-                enabled = controller.canContinue(state),
-                modifier = Modifier.fillMaxWidth()
+                onClick = onSubmit,
+                enabled = canContinue,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                contentPadding = PaddingValues(vertical = 14.dp)
             ) {
-                Text("Continue")
+                Text(
+                    text = "Continue",
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     }
@@ -98,14 +164,25 @@ fun rememberOnboardingController(
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun OnboardingScreenPreview() {
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val store = InMemoryFieldEntryStore()
-    val controller = rememberOnboardingController(
-        sessionId = "preview-session",
-        scope = scope,
-        entryStore = store
+    val sampleFields = OnboardingFormController.DEFAULT_FIELDS
+    val sampleState = LiveValidationState(
+        values = mapOf(
+            "full_name" to "Jane Doe",
+            "email_address" to "jane.doe@example.com"
+        ),
+        touchedFieldIds = setOf("full_name", "email_address")
     )
-    com.example.salesonboarding.ui.theme.SalesOnboardingTheme {
-        OnboardingScreen(controller)
+
+    SalesOnboardingTheme {
+        OnboardingScreenContent(
+            fields = sampleFields,
+            state = sampleState,
+            guidance = NextFieldGuidance(
+                prediction = FieldPrediction("mobile_phone_number", 0.95f)
+            ),
+            onValueChange = { _, _ -> },
+            onSubmit = {},
+            canContinue = true
+        )
     }
 }
