@@ -7,11 +7,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,28 +21,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             SalesOnboardingTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Sales Onboarding User",
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    val scope = rememberCoroutineScope()
+                    val store = remember { InMemoryFieldEntryStore() }
+                    val controller = rememberOnboardingController("session-1", scope, store)
+                    OnboardingScreen(controller, Modifier.padding(innerPadding))
                 }
             }
         }
     }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     SalesOnboardingTheme {
-        Greeting("Sales Onboarding User")
+        val scope = rememberCoroutineScope()
+        val store = remember { InMemoryFieldEntryStore() }
+        val controller = rememberOnboardingController("preview-session", scope, store)
+        OnboardingScreen(controller)
     }
 }
