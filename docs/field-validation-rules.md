@@ -64,5 +64,9 @@ The controller can also receive a `NextFieldPredictor`. The Android app uses
 `preprocessing_meta.json` from app assets and publishes the top recommendation
 through `guidanceFlow`. The model receives the valid field history, the
 current industry and context, and the last validation status. The screen shows
-the recommended field above the form. The form keeps its fixed order when no
-predictor is supplied.
+the recommended field above the form. `NextFieldGuidance` also turns the same
+state into an actionable instruction: it asks the agent to correct the first
+touched invalid field, names the next required field to collect, or confirms
+that all required information is complete. A prediction is used when it points
+to an incomplete displayed field; otherwise the form order provides a safe
+fallback. The form keeps its fixed order when no predictor is supplied.

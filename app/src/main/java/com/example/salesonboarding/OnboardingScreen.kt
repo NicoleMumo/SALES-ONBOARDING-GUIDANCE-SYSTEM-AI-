@@ -85,8 +85,7 @@ fun OnboardingScreenContent(
             }
         }
         item {
-            guidance.prediction?.let { prediction ->
-                val fieldName = fields.firstOrNull { it.fieldId == prediction.fieldId }?.fieldName ?: prediction.fieldId
+            if (guidance.message.isNotBlank()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -95,20 +94,27 @@ fun OnboardingScreenContent(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Next recommended step",
+                            text = when {
+                                guidance.correction != null -> "Action needed"
+                                guidance.isComplete -> "Onboarding ready"
+                                else -> "Next step"
+                            },
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
-                            text = fieldName,
+                            text = guidance.message,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        Text(
-                            text = "${(prediction.confidence * 100).toInt()}% confidence",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        guidance.prediction?.takeIf { guidance.correction == null && !guidance.isComplete }
+                            ?.let { prediction ->
+                                Text(
+                                    text = "${(prediction.confidence * 100).toInt()}% confidence",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                     }
                 }
             }
@@ -178,7 +184,9 @@ fun OnboardingScreenPreview() {
             fields = sampleFields,
             state = sampleState,
             guidance = NextFieldGuidance(
-                prediction = FieldPrediction("mobile_phone_number", 0.95f)
+                prediction = FieldPrediction("mobile_phone_number", 0.95f),
+                nextFieldId = "mobile_phone_number",
+                message = "Collect Mobile phone number next."
             ),
             onValueChange = { _, _ -> },
             onSubmit = {},

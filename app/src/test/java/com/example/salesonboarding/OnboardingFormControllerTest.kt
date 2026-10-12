@@ -60,4 +60,64 @@ class OnboardingFormControllerTest {
         assertTrue(controller.submit())
         assertEquals(setOf("email_address", "full_name"), store.savedEntries.map { it.fieldId }.toSet())
     }
+
+    @Test
+    fun guidanceTellsAgentToCorrectAnInvalidField() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("email_address", "bad")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals("email_address", controller.guidanceFlow.value.correction?.fieldId)
+        assertEquals(
+            "Correct Email address: Enter a valid email address.",
+            controller.guidanceFlow.value.message
+        )
+    }
+
+    @Test
+    fun guidanceTellsAgentWhichRequiredFieldToCollectNext() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals("email_address", controller.guidanceFlow.value.nextFieldId)
+        assertEquals("Collect Email address next.", controller.guidanceFlow.value.message)
+    }
+
+    @Test
+    fun guidanceConfirmsWhenAllRequiredFieldsAreComplete() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("email_address", "agent@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(controller.guidanceFlow.value.isComplete)
+        assertEquals(
+            "All required information is complete. You can continue.",
+            controller.guidanceFlow.value.message
+        )
+    }
 }

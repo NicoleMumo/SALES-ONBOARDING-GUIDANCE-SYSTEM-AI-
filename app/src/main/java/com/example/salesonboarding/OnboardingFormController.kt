@@ -7,6 +7,8 @@ import com.example.salesonboarding.validation.KnownFields
 import com.example.salesonboarding.validation.LiveValidationSession
 import com.example.salesonboarding.validation.LiveValidationState
 import com.example.salesonboarding.validation.RequiredIf
+import com.example.salesonboarding.validation.ValidationErrorDisplay
+import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class NextFieldGuidance(
-    val prediction: FieldPrediction? = null
+    val prediction: FieldPrediction? = null,
+    val correction: ValidationErrorDisplay? = null,
+    val nextFieldId: String? = null,
+    val message: String = "",
+    val isComplete: Boolean = false
 )
 
 class OnboardingFormController(
@@ -43,11 +49,16 @@ class OnboardingFormController(
                 val history = fields
                     .filter { state.values[it.fieldId].isNullOrBlank().not() && state.results[it.fieldId]?.isValid == true }
                     .map { it.fieldId }
-                if (history != lastGuidanceKey && predictor != null) {
+                if (history != lastGuidanceKey) {
                     lastGuidanceKey = history
-                    guidance.value = NextFieldGuidance(
+                    val prediction = if (predictor == null) {
+                        guidance.value.prediction
+                    } else {
                         predictor.predict(history, industry, context, "passed")
-                    )
+                    }
+                    guidance.value = buildGuidance(state, prediction)
+                } else {
+                    guidance.value = buildGuidance(state, guidance.value.prediction)
                 }
             }
         }
@@ -59,10 +70,7 @@ class OnboardingFormController(
 
     fun canContinue(state: LiveValidationState = stateFlow.value): Boolean =
         fields.all { field ->
-            val required = field.isRequired || field.validationRule.any { rule ->
-                rule is RequiredIf && state.values[rule.dependsOnFieldId]
-                    ?.equals(rule.expectedValue, ignoreCase = true) == true
-            }
+            val required = isRequired(field, state)
             if (!required && state.values[field.fieldId].isNullOrBlank()) {
                 true
             } else {
@@ -89,6 +97,53 @@ class OnboardingFormController(
         }
         return true
     }
+
+    private fun buildGuidance(
+        state: LiveValidationState,
+        prediction: FieldPrediction?
+    ): NextFieldGuidance {
+        val correction = ValidationErrorDisplayMapper.forState(state).firstOrNull()
+        if (correction != null) {
+            val fieldName = fields.firstOrNull { it.fieldId == correction.fieldId }?.fieldName
+                ?: correction.fieldId
+            return NextFieldGuidance(
+                prediction = prediction,
+                correction = correction,
+                message = "Correct $fieldName: ${correction.message}"
+            )
+        }
+
+        val nextField = fields.firstOrNull { field ->
+            isRequired(field, state) && !isValid(field, state)
+        }
+        if (nextField == null) {
+            return NextFieldGuidance(
+                prediction = prediction,
+                message = "All required information is complete. You can continue.",
+                isComplete = true
+            )
+        }
+
+        val predictedField = prediction?.let { predicted ->
+            fields.firstOrNull { it.fieldId == predicted.fieldId && !isValid(it, state) }
+        }
+        val recommendedField = predictedField ?: nextField
+        return NextFieldGuidance(
+            prediction = prediction,
+            nextFieldId = recommendedField.fieldId,
+            message = "Collect ${recommendedField.fieldName} next."
+        )
+    }
+
+    private fun isRequired(field: FormField, state: LiveValidationState): Boolean =
+        field.isRequired || field.validationRule.any { rule ->
+            rule is RequiredIf && state.values[rule.dependsOnFieldId]
+                ?.equals(rule.expectedValue, ignoreCase = true) == true
+        }
+
+    private fun isValid(field: FormField, state: LiveValidationState): Boolean =
+        !state.values[field.fieldId].isNullOrBlank() &&
+            state.results[field.fieldId]?.isValid == true
 
     companion object {
         val DEFAULT_FIELDS: List<FormField> = listOf(
