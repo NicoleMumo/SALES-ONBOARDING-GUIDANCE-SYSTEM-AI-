@@ -1,13 +1,11 @@
 package com.example.salesonboarding
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -32,11 +30,14 @@ private data class IndustryOption(
 )
 
 object IndustrySelectionValidator {
+    val supportedIndustries: Set<String> = setOf("telecom", "banking")
+
     fun validate(industry: String?): String? {
         if (industry.isNullOrBlank()) return "Select an onboarding industry."
-        return when (industry) {
-            "telecom", "banking" -> null
-            else -> "Select a valid onboarding industry."
+        return if (industry in supportedIndustries) {
+            null
+        } else {
+            "Select a valid onboarding industry."
         }
     }
 }
