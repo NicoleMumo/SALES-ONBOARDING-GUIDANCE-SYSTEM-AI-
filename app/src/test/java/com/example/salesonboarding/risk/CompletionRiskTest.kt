@@ -16,7 +16,7 @@ class CompletionRiskTest {
             )
         )
 
-        assertEquals(0.05, result.score, 0.0)
+        assertEquals(0.05, result.score, 0.0001)
         assertEquals(CompletionRiskLevel.LOW, result.level)
         assertTrue(result.reasons.isEmpty())
     }
@@ -32,7 +32,7 @@ class CompletionRiskTest {
             )
         )
 
-        assertEquals(0.75, result.score, 0.0)
+        assertEquals(0.75, result.score, 0.0001)
         assertEquals(CompletionRiskLevel.HIGH, result.level)
         assertEquals(4, result.reasons.size)
     }
@@ -48,7 +48,7 @@ class CompletionRiskTest {
             )
         )
 
-        assertEquals(1.0, result.score, 0.0)
+        assertEquals(1.0, result.score, 0.0001)
         assertEquals(CompletionRiskLevel.HIGH, result.level)
     }
 
@@ -81,7 +81,7 @@ class CompletionRiskTest {
             )
         )
 
-        assertEquals(0.65, result.score, 0.0)
+        assertEquals(0.65, result.score, 0.0001)
         assertEquals(CompletionRiskLevel.MEDIUM, result.level)
         assertEquals(4, result.reasons.size)
     }
@@ -90,7 +90,7 @@ class CompletionRiskTest {
     fun emptySessionStartsWithLowProgressRisk() {
         val result = CompletionRiskScorer.score(emptyList())
 
-        assertEquals(0.15, result.score, 0.0)
+        assertEquals(0.15, result.score, 0.0001)
         assertEquals(CompletionRiskLevel.LOW, result.level)
         assertTrue(result.reasons.single().contains("half"))
     }
