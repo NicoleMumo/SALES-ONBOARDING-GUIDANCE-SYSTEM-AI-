@@ -58,3 +58,11 @@ and renders mapper messages under the matching input. Continue is enabled only
 when every displayed required field has a valid result. Valid displayed values
 are saved through `FieldEntryStore`; the current app uses an in-memory store
 until a database-backed store is connected.
+
+The controller can also receive a `NextFieldPredictor`. The Android app uses
+`TfliteNextFieldPredictor`, which loads `onboarding_model.tflite` and
+`preprocessing_meta.json` from app assets and publishes the top recommendation
+through `guidanceFlow`. The model receives the valid field history, the
+current industry and context, and the last validation status. The screen shows
+the recommended field above the form. The form keeps its fixed order when no
+predictor is supplied.
