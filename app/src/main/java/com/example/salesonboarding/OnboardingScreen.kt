@@ -65,6 +65,7 @@ fun OnboardingScreenContent(
     val errors = remember(state) {
         ValidationErrorDisplayMapper.forState(state).associateBy { it.fieldId }
     }
+    val invalidFieldCount = errors.size
     var submitted by remember { mutableStateOf(false) }
     val completedCount = fields.count { field ->
         state.values[field.fieldId].isNullOrBlank().not() &&
@@ -102,6 +103,19 @@ fun OnboardingScreenContent(
                     text = "$completedCount of ${fields.size} fields completed",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = if (invalidFieldCount == 0) {
+                        "Validation is up to date"
+                    } else {
+                        "$invalidFieldCount field${if (invalidFieldCount == 1) "" else "s"} need attention"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (invalidFieldCount == 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
                 )
                 Card(
                     modifier = Modifier
@@ -175,6 +189,8 @@ fun OnboardingScreenContent(
         }
         items(fields, key = { it.fieldId }) { field ->
             val error = errors[field.fieldId]
+            val isValid = field.fieldId in state.touchedFieldIds &&
+                state.results[field.fieldId]?.isValid == true
             OutlinedTextField(
                 value = state.values[field.fieldId].orEmpty(),
                 onValueChange = {
@@ -186,8 +202,14 @@ fun OnboardingScreenContent(
                 placeholder = { Text("Enter ${field.fieldName.lowercase()}") },
                 singleLine = true,
                 isError = error != null,
-                supportingText = error?.let { display ->
-                    { Text(display.message) }
+                supportingText = when {
+                    error != null -> {
+                        { Text(error.message) }
+                    }
+                    isValid -> {
+                        { Text("Looks good") }
+                    }
+                    else -> null
                 },
                 keyboardOptions = if (field.fieldType == "number") {
                     KeyboardOptions(keyboardType = KeyboardType.Decimal)
