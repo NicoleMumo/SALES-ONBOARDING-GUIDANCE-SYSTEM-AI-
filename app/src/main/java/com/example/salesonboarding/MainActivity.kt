@@ -12,6 +12,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
 class MainActivity : ComponentActivity() {
@@ -20,12 +23,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SalesOnboardingTheme {
+                var signedIn by remember { mutableStateOf(false) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    val scope = rememberCoroutineScope()
-                    val store = remember { InMemoryFieldEntryStore() }
-                    val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
-                    val controller = rememberOnboardingController("session-1", scope, store, predictor)
-                    OnboardingScreen(controller, Modifier.padding(innerPadding))
+                    if (signedIn) {
+                        val scope = rememberCoroutineScope()
+                        val store = remember { InMemoryFieldEntryStore() }
+                        val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
+                        val controller = rememberOnboardingController("session-1", scope, store, predictor)
+                        OnboardingScreen(controller, Modifier.padding(innerPadding))
+                    } else {
+                        SalesAgentLoginScreen(
+                            onLogin = { _, _ -> signedIn = true },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    }
                 }
             }
         }
