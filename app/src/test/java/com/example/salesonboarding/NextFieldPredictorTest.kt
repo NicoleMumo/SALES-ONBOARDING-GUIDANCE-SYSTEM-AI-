@@ -42,4 +42,37 @@ class NextFieldPredictorTest {
         assertEquals("mobile_phone_number", controller.guidanceFlow.value.prediction?.fieldId)
         assertTrue(controller.guidanceFlow.value.prediction?.confidence == 0.8f)
     }
+
+    @Test
+    fun telecomAndBankingWorkflowsPassTheirSelectedIndustryToGuidance() = runTest {
+        val receivedIndustries = mutableListOf<String>()
+        val predictor = NextFieldPredictor { _, industry, context, validation ->
+            receivedIndustries += industry
+            assertEquals("individual", context)
+            assertEquals("passed", validation)
+            FieldPrediction("email_address", 0.7f)
+        }
+
+        listOf("telecom", "banking").forEachIndexed { index, industry ->
+            val controller = OnboardingFormController(
+                sessionId = "session-$industry",
+                fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
+                scope = backgroundScope,
+                entryStore = InMemoryFieldEntryStore(),
+                predictor = predictor,
+                industry = industry,
+                context = "individual"
+            )
+
+            controller.updateField("full_name", "Jane Wanjiku")
+            advanceTimeBy(300)
+            runCurrent()
+
+            assertEquals("email_address", controller.guidanceFlow.value.prediction?.fieldId)
+            assertEquals(0.7f, controller.guidanceFlow.value.prediction?.confidence)
+            assertEquals(index + 1, receivedIndustries.size)
+        }
+
+        assertEquals(listOf("telecom", "banking"), receivedIndustries)
+    }
 }
