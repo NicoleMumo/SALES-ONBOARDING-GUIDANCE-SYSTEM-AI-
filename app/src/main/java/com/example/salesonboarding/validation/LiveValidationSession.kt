@@ -10,7 +10,8 @@ import kotlinx.coroutines.launch
 
 data class LiveValidationState(
     val values: Map<String, String?> = emptyMap(),
-    val results: Map<String, ValidationResult> = emptyMap()
+    val results: Map<String, ValidationResult> = emptyMap(),
+    val touchedFieldIds: Set<String> = emptySet()
 )
 
 class LiveValidationSession(
@@ -32,7 +33,10 @@ class LiveValidationSession(
      */
     fun updateField(fieldId: String, value: String?): Job {
         require(fieldsById.containsKey(fieldId)) { "Unknown field: $fieldId" }
-        state.value = state.value.copy(values = state.value.values + (fieldId to value))
+        state.value = state.value.copy(
+            values = state.value.values + (fieldId to value),
+            touchedFieldIds = state.value.touchedFieldIds + fieldId
+        )
 
         validationJobs[fieldId]?.cancel()
         val job = scope.launch {
