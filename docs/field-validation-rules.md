@@ -36,3 +36,11 @@ Rule configuration does not change field IDs, vocabulary indices, or model
 inputs, so administrators can change validation policy without retraining the
 model. If validation status is later included as a model feature, that should
 be treated as a separately versioned input contract.
+
+`LiveValidationSession` provides the screen-independent live layer for the
+form. Call `updateField(fieldId, value)` whenever an answer changes and observe
+`stateFlow`. Values are published immediately. Validation runs after a 300 ms
+pause and updates only the changed field and fields whose rules depend on it.
+For example, changing `service_type` re-checks the service-dependent fields.
+The session accepts a `FieldRuleConfiguration`, so admin overrides are applied
+to live checks as well.
