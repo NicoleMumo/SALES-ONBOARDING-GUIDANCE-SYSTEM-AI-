@@ -51,3 +51,10 @@ fields, so an untouched required field does not show an error before the agent
 reaches it. If the agent enters a value and then clears it, the field remains
 touched and its required-field message is returned. The mapper returns plain
 Kotlin data and does not depend on Compose or another UI framework.
+
+The onboarding flow uses `OnboardingFormController` and `OnboardingScreen`.
+The screen sends each text change to `updateField`, observes the live state,
+and renders mapper messages under the matching input. Continue is enabled only
+when every displayed required field has a valid result. Valid displayed values
+are saved through `FieldEntryStore`; the current app uses an in-memory store
+until a database-backed store is connected.
