@@ -9,12 +9,22 @@ import com.example.salesonboarding.validation.LiveValidationState
 import com.example.salesonboarding.validation.RequiredIf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+data class NextFieldGuidance(
+    val prediction: FieldPrediction? = null
+)
 
 class OnboardingFormController(
     private val sessionId: String,
     val fields: List<FormField> = DEFAULT_FIELDS,
     scope: CoroutineScope,
-    private val entryStore: FieldEntryStore
+    private val entryStore: FieldEntryStore,
+    private val predictor: NextFieldPredictor? = null,
+    private val industry: String = "telecom",
+    private val context: String = "individual"
 ) {
     private val session = LiveValidationSession(
         sessionId = sessionId,
@@ -23,6 +33,25 @@ class OnboardingFormController(
     )
 
     val stateFlow: StateFlow<LiveValidationState> = session.stateFlow
+    private val guidance = MutableStateFlow(NextFieldGuidance())
+    val guidanceFlow: StateFlow<NextFieldGuidance> = guidance.asStateFlow()
+    private var lastGuidanceKey: List<String> = emptyList()
+
+    init {
+        scope.launch {
+            stateFlow.collect { state ->
+                val history = fields
+                    .filter { state.values[it.fieldId].isNullOrBlank().not() && state.results[it.fieldId]?.isValid == true }
+                    .map { it.fieldId }
+                if (history != lastGuidanceKey && predictor != null) {
+                    lastGuidanceKey = history
+                    guidance.value = NextFieldGuidance(
+                        predictor.predict(history, industry, context, "passed")
+                    )
+                }
+            }
+        }
+    }
 
     fun updateField(fieldId: String, value: String) {
         session.updateField(fieldId, value)
