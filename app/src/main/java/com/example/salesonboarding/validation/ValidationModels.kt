@@ -76,17 +76,17 @@ sealed interface ValidationRule {
 
 data object Required : ValidationRule {
     override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank()) "This field is required." else null
+        if (value.isNullOrBlank()) "Enter a value for this field." else null
 }
 
 data object NotBlank : ValidationRule {
     override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank()) "This field cannot be blank." else null
+        if (value.isNullOrBlank()) "Enter a value; this field cannot be blank." else null
 }
 
 data class RegexPattern(
     val pattern: String,
-    val message: String = "The value has an invalid format."
+    val message: String = "Enter a value in the required format."
 ) : ValidationRule {
     private val compiled = Pattern.compile(pattern)
 
@@ -97,7 +97,7 @@ data class RegexPattern(
 data class PatternByFieldValue(
     val dependsOnFieldId: String,
     val patternsByValue: Map<String, String>,
-    val message: String = "The value has an invalid format."
+    val message: String = "Enter a value matching the selected option's format."
 ) : ValidationRule {
     override fun validate(value: String?, context: ValidationContext): String? {
         if (value.isNullOrBlank()) return null
@@ -170,13 +170,13 @@ data object PositiveNumber : ValidationRule {
 data object MustBeTrue : ValidationRule {
     override fun validate(value: String?, context: ValidationContext): String? =
         if (value?.trim()?.lowercase(Locale.ROOT) in setOf("true", "yes", "pass", "passed")) null
-        else "This field must be confirmed."
+        else "Confirm this field to continue."
 }
 
 data class RequiredIf(
     val dependsOnFieldId: String,
     val expectedValue: String,
-    val message: String = "This field is required for the selected option."
+    val message: String = "Enter a value because the selected option requires it."
 ) : ValidationRule {
     override fun validate(value: String?, context: ValidationContext): String? {
         val actual = context[dependsOnFieldId]?.trim()?.lowercase(Locale.ROOT)
