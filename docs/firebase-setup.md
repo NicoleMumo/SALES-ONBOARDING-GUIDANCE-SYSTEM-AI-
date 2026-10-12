@@ -3,6 +3,10 @@
 The Android app includes the Firebase Realtime Database dependency and uses
 `FirebaseFieldEntryStore` to persist valid onboarding entries.
 
+Each session stores its agent ID, industry, context, status, timestamps, field
+entries, validation results, and onboarding events under
+`onboardingSessions/{sessionId}`.
+
 To connect the app to a Firebase project:
 
 1. Create or select a Firebase project.
