@@ -61,4 +61,37 @@ class CompletionRiskTest {
             progressPercent = 10.0
         )
     }
+
+    @Test
+    fun scorerDerivesRiskFeaturesFromOnboardingEvents() {
+        val result = CompletionRiskScorer.score(
+            listOf(
+                CompletionRiskEvent(
+                    durationMinutes = 8.0,
+                    validationPassed = false,
+                    isRevisit = false,
+                    progressPercent = 25.0
+                ),
+                CompletionRiskEvent(
+                    durationMinutes = 8.0,
+                    validationPassed = true,
+                    isRevisit = true,
+                    progressPercent = 40.0
+                )
+            )
+        )
+
+        assertEquals(0.65, result.score, 0.0)
+        assertEquals(CompletionRiskLevel.MEDIUM, result.level)
+        assertEquals(4, result.reasons.size)
+    }
+
+    @Test
+    fun emptySessionStartsWithLowProgressRisk() {
+        val result = CompletionRiskScorer.score(emptyList())
+
+        assertEquals(0.15, result.score, 0.0)
+        assertEquals(CompletionRiskLevel.LOW, result.level)
+        assertTrue(result.reasons.single().contains("half"))
+    }
 }
