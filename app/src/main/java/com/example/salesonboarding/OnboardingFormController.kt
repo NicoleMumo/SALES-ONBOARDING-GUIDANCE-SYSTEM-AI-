@@ -36,7 +36,8 @@ class OnboardingFormController(
     private val entryStore: FieldEntryStore,
     private val predictor: NextFieldPredictor? = null,
     private val industry: String = "telecom",
-    private val context: String = "individual"
+    private val context: String = "individual",
+    private val agentId: String = "unknown-agent"
 ) {
     private val session = LiveValidationSession(
         sessionId = sessionId,
@@ -52,8 +53,13 @@ class OnboardingFormController(
     private var lastGuidanceKey: List<String> = emptyList()
 
     init {
+        (entryStore as? OnboardingSessionStore)?.startSession(sessionId, agentId, industry, context)
         scope.launch {
             stateFlow.collect { state ->
+                val sessionStore = entryStore as? OnboardingSessionStore
+                state.results.forEach { (fieldId, result) ->
+                    sessionStore?.recordValidation(sessionId, fieldId, result.isValid, result.errorMessage)
+                }
                 val history = fields
                     .filter { state.values[it.fieldId].isNullOrBlank().not() && state.results[it.fieldId]?.isValid == true }
                     .map { it.fieldId }
@@ -79,6 +85,12 @@ class OnboardingFormController(
 
     fun updateField(fieldId: String, value: String) {
         session.updateField(fieldId, value)
+        (entryStore as? OnboardingSessionStore)?.appendEvent(
+            sessionId,
+            "field_updated",
+            fieldId,
+            value
+        )
     }
 
     fun recordRiskEvent(event: CompletionRiskEvent) {
@@ -114,6 +126,7 @@ class OnboardingFormController(
                 )
             }
         }
+        (entryStore as? OnboardingSessionStore)?.markCompleted(sessionId)
         return true
     }
 
