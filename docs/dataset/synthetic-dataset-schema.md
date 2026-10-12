@@ -195,6 +195,11 @@ event durations, counting failed validations and revisits, and using the latest
 event's progress percentage. An empty event list starts at zero progress, so
 it receives the low-progress signal while the session has not started.
 
+`CompletionRiskGuidanceMapper` adds assistance when the score is `Medium` or
+`High`. Medium risk asks the agent to offer extra help and review the
+information. High risk asks the agent to pause and help complete the remaining
+information. Low-risk sessions keep the normal step-by-step guidance.
+
 ---
 
 # Industry Separation

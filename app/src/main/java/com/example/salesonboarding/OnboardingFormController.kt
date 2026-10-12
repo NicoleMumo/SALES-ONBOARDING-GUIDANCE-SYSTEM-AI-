@@ -9,6 +9,11 @@ import com.example.salesonboarding.validation.LiveValidationState
 import com.example.salesonboarding.validation.RequiredIf
 import com.example.salesonboarding.validation.ValidationErrorDisplay
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
+import com.example.salesonboarding.risk.CompletionRiskEvent
+import com.example.salesonboarding.risk.CompletionRiskGuidance
+import com.example.salesonboarding.risk.CompletionRiskGuidanceMapper
+import com.example.salesonboarding.risk.CompletionRiskResult
+import com.example.salesonboarding.risk.CompletionRiskScorer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +25,8 @@ data class NextFieldGuidance(
     val correction: ValidationErrorDisplay? = null,
     val nextFieldId: String? = null,
     val message: String = "",
-    val isComplete: Boolean = false
+    val isComplete: Boolean = false,
+    val riskGuidance: CompletionRiskGuidance? = null
 )
 
 class OnboardingFormController(
@@ -41,6 +47,8 @@ class OnboardingFormController(
     val stateFlow: StateFlow<LiveValidationState> = session.stateFlow
     private val guidance = MutableStateFlow(NextFieldGuidance())
     val guidanceFlow: StateFlow<NextFieldGuidance> = guidance.asStateFlow()
+    private val risk = MutableStateFlow<CompletionRiskResult?>(null)
+    val riskFlow: StateFlow<CompletionRiskResult?> = risk.asStateFlow()
     private var lastGuidanceKey: List<String> = emptyList()
 
     init {
@@ -62,10 +70,21 @@ class OnboardingFormController(
                 }
             }
         }
+        scope.launch {
+            risk.collect {
+                guidance.value = buildGuidance(stateFlow.value, guidance.value.prediction)
+            }
+        }
     }
 
     fun updateField(fieldId: String, value: String) {
         session.updateField(fieldId, value)
+    }
+
+    fun recordRiskEvent(event: CompletionRiskEvent) {
+        val events = currentRiskEvents + event
+        risk.value = CompletionRiskScorer.score(events)
+        currentRiskEvents = events
     }
 
     fun canContinue(state: LiveValidationState = stateFlow.value): Boolean =
@@ -109,7 +128,8 @@ class OnboardingFormController(
             return NextFieldGuidance(
                 prediction = prediction,
                 correction = correction,
-                message = "Correct $fieldName: ${correction.message}"
+                message = "Correct $fieldName: ${correction.message}",
+                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from)
             )
         }
 
@@ -120,7 +140,8 @@ class OnboardingFormController(
             return NextFieldGuidance(
                 prediction = prediction,
                 message = "All required information is complete. You can continue.",
-                isComplete = true
+                isComplete = true,
+                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from)
             )
         }
 
@@ -131,7 +152,8 @@ class OnboardingFormController(
         return NextFieldGuidance(
             prediction = prediction,
             nextFieldId = recommendedField.fieldId,
-            message = "Collect ${recommendedField.fieldName} next."
+            message = "Collect ${recommendedField.fieldName} next.",
+            riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from)
         )
     }
 
@@ -144,6 +166,8 @@ class OnboardingFormController(
     private fun isValid(field: FormField, state: LiveValidationState): Boolean =
         !state.values[field.fieldId].isNullOrBlank() &&
             state.results[field.fieldId]?.isValid == true
+
+    private var currentRiskEvents: List<CompletionRiskEvent> = emptyList()
 
     companion object {
         val DEFAULT_FIELDS: List<FormField> = listOf(

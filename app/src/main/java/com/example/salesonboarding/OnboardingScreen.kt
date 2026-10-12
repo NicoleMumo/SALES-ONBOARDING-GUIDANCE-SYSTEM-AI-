@@ -107,6 +107,13 @@ fun OnboardingScreenContent(
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+                        guidance.riskGuidance?.let { riskGuidance ->
+                            Text(
+                                text = riskGuidance.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                         guidance.prediction?.takeIf { guidance.correction == null && !guidance.isComplete }
                             ?.let { prediction ->
                                 Text(
