@@ -25,12 +25,14 @@ class MainActivity : ComponentActivity() {
             SalesOnboardingTheme {
                 var signedIn by remember { mutableStateOf(false) }
                 var selectedRole by remember { mutableStateOf<UserRole?>(null) }
+                var showAgentHome by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     if (!signedIn) {
                         UnifiedLoginScreen(
                             onLogin = { _, _, role ->
                                 selectedRole = role
+                                showAgentHome = role == UserRole.SALES_AGENT
                                 signedIn = true
                             },
                             modifier = Modifier.padding(innerPadding)
@@ -40,6 +42,17 @@ class MainActivity : ComponentActivity() {
                             onSignOut = {
                                 signedIn = false
                                 selectedRole = null
+                                selectedIndustry = null
+                            },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (showAgentHome && selectedIndustry == null) {
+                        AgentHomeScreen(
+                            onStartOnboarding = { showAgentHome = false },
+                            onSignOut = {
+                                signedIn = false
+                                selectedRole = null
+                                showAgentHome = false
                                 selectedIndustry = null
                             },
                             modifier = Modifier.padding(innerPadding)
