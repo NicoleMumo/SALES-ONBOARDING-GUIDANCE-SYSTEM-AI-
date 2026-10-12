@@ -173,6 +173,75 @@ class OnboardingFormControllerTest {
     }
 
     @Test
+    fun missingRequiredFieldProducesGuidance() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("email_address", "")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals("email_address", controller.guidanceFlow.value.correction?.fieldId)
+        assertEquals(
+            "Correct Email address: Enter a value for this field.",
+            controller.guidanceFlow.value.message
+        )
+    }
+
+    @Test
+    fun malformedPhoneNumberProducesFormatGuidance() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("mobile_phone_number")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("mobile_phone_number", "071234567")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals(
+            "Enter a valid Kenyan phone number (07XXXXXXXX or +2547XXXXXXXX).",
+            controller.guidanceFlow.value.correction?.message
+        )
+    }
+
+    @Test
+    fun dependentRequiredFieldProducesGuidanceWhenServiceTypeNeedsIt() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("service_type"),
+                KnownFields.get("phone_service_selection")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("service_type", "mobile")
+        controller.updateField("phone_service_selection", "")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals(
+            "phone_service_selection",
+            controller.guidanceFlow.value.correction?.fieldId
+        )
+        assertEquals(
+            "Correct Phone service selection: Enter a value because the selected option requires it.",
+            controller.guidanceFlow.value.message
+        )
+    }
+
+    @Test
     fun guidanceTellsAgentWhichRequiredFieldToCollectNext() = runTest {
         val controller = OnboardingFormController(
             "session",
