@@ -94,4 +94,22 @@ class CompletionRiskTest {
         assertEquals(CompletionRiskLevel.LOW, result.level)
         assertTrue(result.reasons.single().contains("half"))
     }
+
+    @Test
+    fun difficultSessionCombinesLongDurationErrorsAndRevisits() {
+        val result = CompletionRiskScorer.score(
+            listOf(
+                CompletionRiskEvent(8.0, validationPassed = false, isRevisit = false, progressPercent = 20.0),
+                CompletionRiskEvent(8.0, validationPassed = false, isRevisit = true, progressPercent = 25.0),
+                CompletionRiskEvent(8.0, validationPassed = true, isRevisit = true, progressPercent = 30.0),
+                CompletionRiskEvent(8.0, validationPassed = true, isRevisit = true, progressPercent = 35.0)
+            )
+        )
+
+        assertEquals(0.85, result.score, 0.0001)
+        assertEquals(CompletionRiskLevel.HIGH, result.level)
+        assertEquals(4, result.reasons.size)
+        assertTrue(result.reasons.any { it.contains("longer") })
+        assertTrue(result.reasons.any { it.contains("revisited") })
+    }
 }
