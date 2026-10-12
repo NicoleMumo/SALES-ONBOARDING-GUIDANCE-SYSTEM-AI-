@@ -147,6 +147,9 @@ fun OnboardingScreenContent(
         }
         item {
             if (guidance.message.isNotBlank()) {
+                val predictedField = guidance.prediction?.let { prediction ->
+                    fields.firstOrNull { it.fieldId == prediction.fieldId }
+                }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -158,7 +161,7 @@ fun OnboardingScreenContent(
                             text = when {
                                 guidance.correction != null -> "Action needed"
                                 guidance.isComplete -> "Onboarding ready"
-                                else -> "Next step"
+                                else -> "AI guidance"
                             },
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -168,6 +171,13 @@ fun OnboardingScreenContent(
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+                        predictedField?.let { field ->
+                            Text(
+                                text = "Predicted next field: ${field.fieldName}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                         guidance.riskGuidance?.let { riskGuidance ->
                             Text(
                                 text = riskGuidance.message,
@@ -178,7 +188,7 @@ fun OnboardingScreenContent(
                         guidance.prediction?.takeIf { guidance.correction == null && !guidance.isComplete }
                             ?.let { prediction ->
                                 Text(
-                                    text = "${(prediction.confidence * 100).toInt()}% confidence",
+                                    text = "${(prediction.confidence.coerceIn(0f, 1f) * 100).toInt()}% model confidence",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
