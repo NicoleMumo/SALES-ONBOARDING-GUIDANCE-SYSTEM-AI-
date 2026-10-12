@@ -66,6 +66,6 @@ object KnownFields {
 
     private val byId = all.associateBy { it.fieldId }
 
-    fun get(fieldId: String): FormField =
-        requireNotNull(byId[fieldId]) { "Unknown field: $fieldId" }
+    fun get(fieldId: String, configuration: FieldRuleConfiguration = FieldRuleConfiguration()): FormField =
+        requireNotNull(byId[fieldId]) { "Unknown field: $fieldId" }.let(configuration::fieldFor)
 }
