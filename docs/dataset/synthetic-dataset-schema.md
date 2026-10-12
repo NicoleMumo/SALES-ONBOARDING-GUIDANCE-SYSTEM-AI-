@@ -190,6 +190,11 @@ or higher are `High`. Each triggered signal is returned as an explanation so
 future guidance screens can tell the Sales Agent why a session is considered
 difficult or at risk of being incomplete.
 
+`CompletionRiskScorer` derives these features from onboarding events by summing
+event durations, counting failed validations and revisits, and using the latest
+event's progress percentage. An empty event list starts at zero progress, so
+it receives the low-progress signal while the session has not started.
+
 ---
 
 # Industry Separation
