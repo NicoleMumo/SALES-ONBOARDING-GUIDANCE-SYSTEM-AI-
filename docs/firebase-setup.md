@@ -7,6 +7,18 @@ Each session stores its agent ID, industry, context, status, timestamps, field
 entries, validation results, and onboarding events under
 `onboardingSessions/{sessionId}`.
 
+Stored sessions can be retrieved with:
+
+```kotlin
+store.getSession(sessionId) { result ->
+    result.onSuccess { session ->
+        // Use the stored session when it is not null.
+    }.onFailure { error ->
+        // Show a retrieval error to the user.
+    }
+}
+```
+
 To connect the app to a Firebase project:
 
 1. Create or select a Firebase project.
