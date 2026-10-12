@@ -281,15 +281,17 @@ fun rememberOnboardingController(
     entryStore: FieldEntryStore,
     predictor: NextFieldPredictor? = null,
     industry: String = "telecom",
-    context: String = "individual"
-): OnboardingFormController = remember(sessionId, scope, entryStore, predictor, industry, context) {
+    context: String = "individual",
+    agentId: String = "unknown-agent"
+): OnboardingFormController = remember(sessionId, scope, entryStore, predictor, industry, context, agentId) {
     OnboardingFormController(
         sessionId,
         scope = scope,
         entryStore = entryStore,
         predictor = predictor,
         industry = industry,
-        context = context
+        context = context,
+        agentId = agentId
     )
 }
 

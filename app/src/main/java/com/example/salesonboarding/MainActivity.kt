@@ -26,12 +26,14 @@ class MainActivity : ComponentActivity() {
             SalesOnboardingTheme {
                 var signedIn by remember { mutableStateOf(false) }
                 var selectedRole by remember { mutableStateOf<UserRole?>(null) }
+                var agentId by remember { mutableStateOf("") }
                 var showAgentHome by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     if (!signedIn) {
                         UnifiedLoginScreen(
-                            onLogin = { _, _, role ->
+                            onLogin = { email, _, role ->
+                                agentId = email
                                 selectedRole = role
                                 showAgentHome = role == UserRole.SALES_AGENT
                                 signedIn = true
@@ -74,7 +76,8 @@ class MainActivity : ComponentActivity() {
                             scope,
                             store,
                             predictor,
-                            industry = selectedIndustry!!
+                            industry = selectedIndustry!!,
+                            agentId = agentId
                         )
                         OnboardingScreen(controller, Modifier.padding(innerPadding))
                     }
