@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.google.firebase.database.FirebaseDatabase
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,7 +65,9 @@ class MainActivity : ComponentActivity() {
                         )
                     } else {
                         val scope = rememberCoroutineScope()
-                        val store = remember { InMemoryFieldEntryStore() }
+                        val store = remember {
+                            FirebaseFieldEntryStore(FirebaseDatabase.getInstance().reference)
+                        }
                         val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
                         val controller = rememberOnboardingController(
                             "session-1",

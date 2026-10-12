@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
 import com.example.salesonboarding.validation.FormField
+import com.example.salesonboarding.validation.FieldEntryStore
 import com.example.salesonboarding.validation.LiveValidationState
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 import kotlinx.coroutines.CoroutineScope
@@ -277,7 +278,7 @@ fun OnboardingScreenContent(
 fun rememberOnboardingController(
     sessionId: String,
     scope: CoroutineScope,
-    entryStore: InMemoryFieldEntryStore,
+    entryStore: FieldEntryStore,
     predictor: NextFieldPredictor? = null,
     industry: String = "telecom",
     context: String = "individual"
