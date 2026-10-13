@@ -18,7 +18,8 @@ separate, self-contained dataset and generator instead:
 - `encode_onboarding_fields.py` — builds the field vocabulary and encodes sequences
 - `prepare_transformer_inputs.py` — pads sequences and builds attention masks
 
-The large files these scripts produce were removed from the repo (see
-`docs/CLEANUP_LOG.md`) since they're regeneratable and unused by current
-work. `data/vocabulary/field_vocabulary.json`, which `encode_onboarding_fields.py`
-produces, was kept since it's small and still a useful reference.
+The large files these scripts produce were removed from the repo because they
+are regeneratable and unused by current work. See `docs/06-development.md` for
+the current project guidance. `data/vocabulary/field_vocabulary.json`, which
+`encode_onboarding_fields.py` produces, was kept since it is small and still a
+useful reference.
