@@ -282,10 +282,12 @@ fun rememberOnboardingController(
     predictor: NextFieldPredictor? = null,
     industry: String = "telecom",
     context: String = "individual",
-    agentId: String = "unknown-agent"
-): OnboardingFormController = remember(sessionId, scope, entryStore, predictor, industry, context, agentId) {
+    agentId: String = "unknown-agent",
+    fields: List<com.example.salesonboarding.validation.FormField> = OnboardingFormController.DEFAULT_FIELDS
+): OnboardingFormController = remember(sessionId, scope, entryStore, predictor, industry, context, agentId, fields) {
     OnboardingFormController(
         sessionId,
+        fields = fields,
         scope = scope,
         entryStore = entryStore,
         predictor = predictor,
