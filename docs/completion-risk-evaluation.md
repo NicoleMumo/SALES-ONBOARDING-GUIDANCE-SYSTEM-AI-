@@ -9,8 +9,7 @@ negative class.
 Run the reproducible evaluation with:
 
 ```powershell
-C:/Users/nicol/AppData/Local/Programs/Python/Python313/python.exe `
-  src/evaluate_completion_risk.py
+python src/evaluate_completion_risk.py
 ```
 
 ## Test-set result
