@@ -17,7 +17,10 @@ DIFFICULT_SCENARIOS = {
 
 
 def score_sessions(dataset: pd.DataFrame) -> pd.DataFrame:
-    grouped = dataset.groupby("session_id").agg(
+    ordered = dataset.assign(
+        event_timestamp=pd.to_datetime(dataset["event_timestamp"])
+    ).sort_values(["session_id", "event_timestamp"])
+    grouped = ordered.groupby("session_id").agg(
         scenario=("onboarding_scenario", "first"),
         elapsed_minutes=("event_duration_minutes", "sum"),
         validation_errors=(
@@ -43,6 +46,7 @@ def evaluate(dataset_path: Path, split: str) -> None:
     dataset = pd.read_csv(dataset_path)
     required = {
         "session_id",
+        "event_timestamp",
         "onboarding_scenario",
         "event_duration_minutes",
         "validation_status",
