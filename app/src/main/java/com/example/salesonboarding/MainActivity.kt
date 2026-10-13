@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.google.firebase.database.FirebaseDatabase
+import com.example.salesonboarding.validation.FieldRuleConfiguration
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +32,9 @@ class MainActivity : ComponentActivity() {
                 var showAgentHome by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var onboardingSessionId by remember { mutableStateOf<String?>(null) }
+                var fieldRuleConfiguration by remember { mutableStateOf(FieldRuleConfiguration()) }
+                val database = remember { FirebaseDatabase.getInstance().reference }
+                val adminStore = remember { FirebaseAdminDataStore(database) }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     if (!signedIn) {
                         UnifiedLoginScreen(
@@ -44,6 +48,8 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (selectedRole == UserRole.ADMIN) {
                         AdminDashboardScreen(
+                            store = adminStore,
+                            onConfigurationChanged = { fieldRuleConfiguration = it },
                             onSignOut = {
                                 signedIn = false
                                 selectedRole = null
@@ -75,7 +81,7 @@ class MainActivity : ComponentActivity() {
                     } else if (onboardingSessionId != null) {
                         val scope = rememberCoroutineScope()
                         val store = remember {
-                            FirebaseFieldEntryStore(FirebaseDatabase.getInstance().reference)
+                            FirebaseFieldEntryStore(database)
                         }
                         val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
                         val controller = rememberOnboardingController(
@@ -84,7 +90,10 @@ class MainActivity : ComponentActivity() {
                             store,
                             predictor,
                             industry = selectedIndustry!!,
-                            agentId = agentId
+                            agentId = agentId,
+                            fields = OnboardingFormController.DEFAULT_FIELDS.map {
+                                fieldRuleConfiguration.fieldFor(it)
+                            }
                         )
                         OnboardingScreen(controller, Modifier.padding(innerPadding))
                     }
