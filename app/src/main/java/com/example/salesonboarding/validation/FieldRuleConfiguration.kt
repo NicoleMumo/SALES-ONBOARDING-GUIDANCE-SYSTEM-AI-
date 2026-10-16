@@ -20,8 +20,13 @@ class FieldRuleConfiguration(
     fun rulesFor(field: FormField): List<ValidationRule> =
         overrides[field.fieldId]?.applyTo(field.validationRule) ?: field.validationRule
 
-    fun fieldFor(field: FormField): FormField =
-        field.copy(validationRule = rulesFor(field))
+    fun fieldFor(field: FormField): FormField {
+        val configuredRules = rulesFor(field)
+        return field.copy(
+            isRequired = configuredRules.any { it == Required },
+            validationRule = configuredRules
+        )
+    }
 
     fun allFields(fields: List<FormField>): List<FormField> =
         (fields.map(::fieldFor) + customFields).distinctBy(FormField::fieldId)

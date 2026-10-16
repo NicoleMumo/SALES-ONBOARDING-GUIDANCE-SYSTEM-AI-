@@ -8,6 +8,7 @@ import com.example.salesonboarding.validation.KenyanPhoneFormat
 import com.example.salesonboarding.validation.KnownFields
 import com.example.salesonboarding.validation.MustBeTrue
 import com.example.salesonboarding.validation.NotBlank
+import com.example.salesonboarding.validation.OneOf
 import com.example.salesonboarding.validation.PositiveNumber
 import com.example.salesonboarding.validation.Required
 import org.junit.Assert.assertEquals
@@ -59,6 +60,34 @@ class AdminDataStoreTest {
     }
 
     @Test
+    fun choiceOptionsBecomeControlledValidationRules() {
+        val field = FormField(
+            fieldId = "business_type",
+            fieldName = "Business type",
+            fieldType = "choice",
+            isRequired = true,
+            validationRule = listOf(Required, OneOf(setOf("Retail", "Wholesale")))
+        )
+
+        assertTrue(field.validationRule.any { it == OneOf(setOf("Retail", "Wholesale")) })
+    }
+
+    @Test
+    fun disablingRequirednessAlsoRemovesNotBlankFromCatalogueField() {
+        val field = KnownFields.get("full_name")
+        val configuredField = FieldRuleConfiguration(
+            overrides = mapOf(
+                field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                    removeRules = listOf(Required, NotBlank)
+                )
+            )
+        ).fieldFor(field)
+
+        assertTrue(!configuredField.isRequired)
+        assertTrue(configuredField.validationRule.none { it == Required || it == NotBlank })
+    }
+
+    @Test
     fun analyticsCountsSessionsAndUsesValidCompletedDurations() {
         val analytics = OnboardingAnalytics.fromSessions(
             listOf(
@@ -84,5 +113,46 @@ class AdminDataStoreTest {
         assertEquals(0.0, analytics.completionRate, 0.0)
         assertTrue(analytics.averageCompletionMinutes.isNaN().not())
         assertEquals(0.0, analytics.averageCompletionMinutes, 0.0)
+    }
+
+    @Test
+    fun analyticsReportsTeamProgressAndTheMostCommonUnfinishedStep() {
+        val analytics = OnboardingAnalytics.fromSessions(
+            listOf(
+                OnboardingSessionMetrics(
+                    status = "completed",
+                    startedAt = 0L,
+                    completedAt = 60_000L,
+                    agentId = "agent-a",
+                    validation = mapOf("name" to true, "email" to true),
+                    playbookFieldIds = listOf("name", "email"),
+                    fieldNames = mapOf("name" to "Name", "email" to "Email")
+                ),
+                OnboardingSessionMetrics(
+                    status = "in_progress",
+                    startedAt = 0L,
+                    completedAt = null,
+                    agentId = "agent-a",
+                    validation = mapOf("name" to true),
+                    playbookFieldIds = listOf("name", "email"),
+                    fieldNames = mapOf("name" to "Name", "email" to "Email")
+                ),
+                OnboardingSessionMetrics(
+                    status = "in_progress",
+                    startedAt = 0L,
+                    completedAt = null,
+                    agentId = "agent-b",
+                    validation = mapOf("name" to true),
+                    playbookFieldIds = listOf("name", "email"),
+                    fieldNames = mapOf("name" to "Name", "email" to "Email")
+                )
+            )
+        )
+
+        assertEquals(200.0 / 3, analytics.averageReadinessPercent, 0.01)
+        assertEquals("Email", analytics.commonPausePoint)
+        assertEquals(2, analytics.agentPerformance.size)
+        assertEquals("agent-a", analytics.agentPerformance.first().agentId)
+        assertEquals(0.5, analytics.agentPerformance.first().completionRate, 0.0)
     }
 }
