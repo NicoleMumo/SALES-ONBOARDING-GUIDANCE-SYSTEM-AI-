@@ -15,8 +15,18 @@ model. Admin changes to an existing field are represented by
 `FieldRuleConfiguration`: each `FieldRuleOverride` can add or remove
 individual rules while leaving the catalogue defaults available as a
 baseline. Removing `Required` intentionally makes a required-by-default field
-optional in that configured form. An admin-created field can use the same
-`FormField` constructor with its own rule list, for example:
+optional in that configured form.
+
+The admin dashboard can also add custom fields. Each has a generated ID based
+on its name, a description, an input type (`text`, `number`, `date`, `email`,
+`phone`, or `boolean`), and selected rules (`Required`, `NotBlank`,
+`EmailFormat`, `KenyanPhoneFormat`, `PositiveNumber`, `MustBeTrue`, or
+`DateFormatAndMinimumAge(18)`). A custom field is stored separately from
+`KnownFields` and appended to future onboarding forms. Its description is
+shown below its input. These field definitions are persisted under
+`fieldDefinitions/{fieldId}` in Firebase Realtime Database.
+
+For code-created fields, use the same `FormField` constructor:
 
 ```kotlin
 FormField(
@@ -53,20 +63,18 @@ touched and its required-field message is returned. The mapper returns plain
 Kotlin data and does not depend on Compose or another UI framework.
 
 The onboarding flow uses `OnboardingFormController` and `OnboardingScreen`.
-The screen sends each text change to `updateField`, observes the live state,
+The screen sends each answer change to `updateField`, observes the live state,
 and renders mapper messages under the matching input. Continue is enabled only
-when every displayed required field has a valid result. Valid displayed values
-are saved through `FieldEntryStore`; the current app uses an in-memory store
-until a database-backed store is connected.
+when every required field has a valid result. Valid nonblank values are saved
+through `FirebaseFieldEntryStore` under
+`onboardingSessions/{sessionId}/entries/{fieldId}`.
 
 The controller can also receive a `NextFieldPredictor`. The Android app uses
 `TfliteNextFieldPredictor`, which loads `onboarding_model.tflite` and
 `preprocessing_meta.json` from app assets and publishes the top recommendation
-through `guidanceFlow`. The model receives the valid field history, the
-current industry and context, and the last validation status. The screen shows
-the recommended field above the form. `NextFieldGuidance` also turns the same
-state into an actionable instruction: it asks the agent to correct the first
-touched invalid field, names the next required field to collect, or confirms
-that all required information is complete. A prediction is used when it points
-to an incomplete displayed field; otherwise the form order provides a safe
-fallback. The form keeps its fixed order when no predictor is supplied.
+through `guidanceFlow`. Only IDs from the fixed `KnownFields` catalogue are
+sent as model history; custom field IDs do not alter the model input
+vocabulary. `NextFieldGuidance` asks the agent to correct a touched invalid
+field, names the next required field, or confirms that required information is
+complete. A prediction is used when it points to an incomplete displayed
+field; otherwise the form order provides a safe fallback.

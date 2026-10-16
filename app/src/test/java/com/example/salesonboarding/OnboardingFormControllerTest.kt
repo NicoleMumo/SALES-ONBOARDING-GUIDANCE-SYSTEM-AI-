@@ -12,6 +12,9 @@ import com.example.salesonboarding.validation.FieldEntry
 import com.example.salesonboarding.risk.CompletionRiskEvent
 import com.example.salesonboarding.risk.CompletionRiskLevel
 import com.example.salesonboarding.validation.KnownFields
+import com.example.salesonboarding.validation.EmailFormat
+import com.example.salesonboarding.validation.FormField
+import com.example.salesonboarding.validation.Required
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -102,6 +105,39 @@ class OnboardingFormControllerTest {
         assertTrue(store.events.any { it.type == "field_updated" && it.fieldId == "full_name" })
         assertTrue(store.events.any { it.type == "field_updated" && it.fieldId == "email_address" })
         assertEquals("successful-session", store.completedSessionId)
+    }
+
+    @Test
+    fun customFieldValidationWorksWithoutPassingCustomIdsToTheModel() = runTest {
+        val customField = FormField(
+            fieldId = "loyalty_email",
+            fieldName = "Loyalty email",
+            fieldType = "email",
+            isRequired = true,
+            validationRule = listOf(Required, EmailFormat),
+            description = "Email used for loyalty updates."
+        )
+        val modelHistories = mutableListOf<List<String>>()
+        val controller = OnboardingFormController(
+            sessionId = "custom-field-session",
+            fields = listOf(customField, KnownFields.get("full_name")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = NextFieldPredictor { history, _, _, _ ->
+                modelHistories += history
+                null
+            }
+        )
+
+        controller.updateField("loyalty_email", "customer@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(controller.canContinue())
+        assertEquals(listOf(listOf("full_name")), modelHistories)
     }
 
     @Test

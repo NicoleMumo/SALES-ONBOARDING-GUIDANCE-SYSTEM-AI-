@@ -14,7 +14,8 @@ data class FieldRuleOverride(
 }
 
 class FieldRuleConfiguration(
-    private val overrides: Map<String, FieldRuleOverride> = emptyMap()
+    private val overrides: Map<String, FieldRuleOverride> = emptyMap(),
+    val customFields: List<FormField> = emptyList()
 ) {
     fun rulesFor(field: FormField): List<ValidationRule> =
         overrides[field.fieldId]?.applyTo(field.validationRule) ?: field.validationRule
@@ -23,5 +24,5 @@ class FieldRuleConfiguration(
         field.copy(validationRule = rulesFor(field))
 
     fun allFields(fields: List<FormField>): List<FormField> =
-        fields.map(::fieldFor)
+        (fields.map(::fieldFor) + customFields).distinctBy(FormField::fieldId)
 }
