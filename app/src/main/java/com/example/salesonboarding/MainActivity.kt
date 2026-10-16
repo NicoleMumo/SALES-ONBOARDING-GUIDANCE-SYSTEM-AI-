@@ -4,10 +4,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
 import androidx.compose.runtime.remember
@@ -33,8 +39,26 @@ class MainActivity : ComponentActivity() {
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var onboardingSessionId by remember { mutableStateOf<String?>(null) }
                 var fieldRuleConfiguration by remember { mutableStateOf(FieldRuleConfiguration()) }
+                var isLoadingFieldConfiguration by remember { mutableStateOf(true) }
+                var fieldConfigurationError by remember { mutableStateOf<String?>(null) }
                 val database = remember { FirebaseDatabase.getInstance().reference }
                 val adminStore = remember { FirebaseAdminDataStore(database) }
+                fun loadFieldConfiguration() {
+                    isLoadingFieldConfiguration = true
+                    fieldConfigurationError = null
+                    adminStore.loadRuleConfiguration { result ->
+                        result.onSuccess {
+                            fieldRuleConfiguration = it
+                            fieldConfigurationError = null
+                        }.onFailure {
+                            fieldConfigurationError = it.message ?: "Could not load onboarding fields."
+                        }
+                        isLoadingFieldConfiguration = false
+                    }
+                }
+                LaunchedEffect(adminStore) {
+                    loadFieldConfiguration()
+                }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     if (!signedIn) {
                         UnifiedLoginScreen(
@@ -79,23 +103,47 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (onboardingSessionId != null) {
-                        val scope = rememberCoroutineScope()
-                        val store = remember {
-                            FirebaseFieldEntryStore(database)
-                        }
-                        val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
-                        val controller = rememberOnboardingController(
-                            onboardingSessionId!!,
-                            scope,
-                            store,
-                            predictor,
-                            industry = selectedIndustry!!,
-                            agentId = agentId,
-                            fields = OnboardingFormController.DEFAULT_FIELDS.map {
-                                fieldRuleConfiguration.fieldFor(it)
+                        when {
+                            isLoadingFieldConfiguration -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator()
+                                Text("Loading onboarding fields...")
                             }
-                        )
-                        OnboardingScreen(controller, Modifier.padding(innerPadding))
+                            fieldConfigurationError != null -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(fieldConfigurationError.orEmpty())
+                                Button(onClick = ::loadFieldConfiguration) {
+                                    Text("Retry")
+                                }
+                            }
+                            else -> {
+                                val scope = rememberCoroutineScope()
+                                val store = remember {
+                                    FirebaseFieldEntryStore(database)
+                                }
+                                val predictor = remember { TfliteNextFieldPredictor(applicationContext.assets) }
+                                val controller = rememberOnboardingController(
+                                    onboardingSessionId!!,
+                                    scope,
+                                    store,
+                                    predictor,
+                                    industry = selectedIndustry!!,
+                                    agentId = agentId,
+                                    fields = fieldRuleConfiguration.allFields(
+                                        OnboardingFormController.DEFAULT_FIELDS
+                                    )
+                                )
+                                OnboardingScreen(controller, Modifier.padding(innerPadding))
+                            }
+                        }
                     }
                 }
             }
