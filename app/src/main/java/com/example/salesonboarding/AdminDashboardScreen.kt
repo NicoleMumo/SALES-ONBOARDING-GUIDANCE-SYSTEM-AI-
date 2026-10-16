@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -23,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.salesonboarding.validation.FieldRuleConfiguration
 import com.example.salesonboarding.validation.KnownFields
+import java.util.Locale
 
 @Composable
 fun AdminDashboardScreen(
@@ -36,9 +40,14 @@ fun AdminDashboardScreen(
     var analytics by remember { mutableStateOf<OnboardingAnalytics?>(null) }
     var configuration by remember { mutableStateOf(FieldRuleConfiguration()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoadingAnalytics by remember { mutableStateOf(false) }
+    var analyticsErrorMessage by remember { mutableStateOf<String?>(null) }
 
     fun <T> handle(result: Result<T>, onSuccess: (T) -> Unit = {}) {
-        result.onSuccess(onSuccess).onFailure {
+        result.onSuccess {
+            errorMessage = null
+            onSuccess(it)
+        }.onFailure {
             errorMessage = it.message ?: "Could not load admin data."
         }
     }
@@ -49,12 +58,20 @@ fun AdminDashboardScreen(
             configuration = it
             onConfigurationChanged(it)
         } }
-        store.loadAnalytics { handle(it) { analytics = it } }
+        isLoadingAnalytics = true
+        analyticsErrorMessage = null
+        store.loadAnalytics {
+            isLoadingAnalytics = false
+            it.onSuccess { analytics = it; analyticsErrorMessage = null }
+                .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
+            handle(it)
+        }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -100,6 +117,19 @@ fun AdminDashboardScreen(
             )
             AdminSection.RULES -> RuleConfigurationSection(
                 configuration = configuration,
+                onAddField = { fieldId, name, description, type, rules, onComplete ->
+                    store.addCustomField(fieldId, name, description, type, rules) {
+                        onComplete(it)
+                        handle(it) {
+                            store.loadRuleConfiguration { loaded ->
+                                handle(loaded) {
+                                    configuration = it
+                                    onConfigurationChanged(it)
+                                }
+                            }
+                        }
+                    }
+                },
                 onRequiredChanged = { fieldId, enabled ->
                     store.saveRequiredRule(fieldId, enabled) {
                         handle(it) {
@@ -113,7 +143,21 @@ fun AdminDashboardScreen(
                     }
                 }
             )
-            AdminSection.ANALYTICS -> AnalyticsSection(analytics)
+            AdminSection.ANALYTICS -> AnalyticsSection(
+                analytics = analytics,
+                isLoading = isLoadingAnalytics,
+                errorMessage = analyticsErrorMessage,
+                onRefresh = {
+                    isLoadingAnalytics = true
+                    analyticsErrorMessage = null
+                    store.loadAnalytics {
+                        isLoadingAnalytics = false
+                        it.onSuccess { analytics = it; analyticsErrorMessage = null }
+                            .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
+                        handle(it)
+                    }
+                }
+            )
         }
 
         errorMessage?.let {
@@ -186,8 +230,32 @@ private fun AgentAccountsSection(
 @Composable
 private fun RuleConfigurationSection(
     configuration: FieldRuleConfiguration,
+    onAddField: (
+        String,
+        String,
+        String,
+        String,
+        Set<AdminRule>,
+        (Result<Unit>) -> Unit
+    ) -> Unit,
     onRequiredChanged: (String, Boolean) -> Unit
 ) {
+        var fieldName by remember { mutableStateOf("") }
+        var description by remember { mutableStateOf("") }
+        var fieldType by remember { mutableStateOf("text") }
+        var selectedRules by remember { mutableStateOf(setOf(AdminRule.REQUIRED)) }
+        var isSavingField by remember { mutableStateOf(false) }
+        val fieldId = remember(fieldName) {
+            fieldName.trim().lowercase(Locale.ROOT)
+                .replace(Regex("[^a-z0-9]+"), "_")
+                .trim('_')
+        }
+        val formatRules = setOf(
+            AdminRule.EMAIL,
+            AdminRule.PHONE,
+            AdminRule.POSITIVE_NUMBER,
+            AdminRule.DATE
+        )
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -195,10 +263,87 @@ private fun RuleConfigurationSection(
             ) {
                 Text("Onboarding field rules", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Required changes are saved for future onboarding sessions.",
+                    "Changes affect future onboarding sessions. Custom fields are not added to the AI model vocabulary.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text("Add a custom field", style = MaterialTheme.typography.titleSmall)
+                OutlinedTextField(fieldName, { fieldName = it }, Modifier.fillMaxWidth(), label = { Text("Field name") }, singleLine = true)
+                OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("Description") })
+                Text("Field ID: ${fieldId.ifBlank { "enter a name to generate an ID" }}", style = MaterialTheme.typography.bodySmall)
+                Text("Input type", style = MaterialTheme.typography.labelLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    listOf("text", "number", "date", "email", "phone", "boolean")
+                        .chunked(3)
+                        .forEach { types ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                types.forEach { type ->
+                                    androidx.compose.material3.FilterChip(
+                                        selected = fieldType == type,
+                                        onClick = { fieldType = type },
+                                        label = { Text(type.replaceFirstChar(Char::uppercase)) }
+                                    )
+                                }
+                            }
+                        }
+                }
+                Text("Validation rules", style = MaterialTheme.typography.labelLarge)
+                AdminRule.values().forEach { rule ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(
+                            checked = rule in selectedRules,
+                            onCheckedChange = { checked ->
+                                selectedRules = if (checked && rule in formatRules) {
+                                    (selectedRules - formatRules) + rule
+                                } else if (checked) {
+                                    selectedRules + rule
+                                } else {
+                                    selectedRules - rule
+                                }
+                            }
+                        )
+                        Text(rule.label)
+                    }
+                }
+                Button(
+                    onClick = {
+                        onAddField(
+                            fieldId,
+                            fieldName.trim(),
+                            description.trim(),
+                            fieldType.trim().lowercase(Locale.ROOT),
+                            selectedRules,
+                        ) { result ->
+                            if (result.isSuccess) {
+                                fieldName = ""
+                                description = ""
+                                fieldType = "text"
+                                selectedRules = setOf(AdminRule.REQUIRED)
+                            }
+                            isSavingField = false
+                        }
+                        isSavingField = true
+                    },
+                    enabled = fieldId.isNotBlank() && fieldName.isNotBlank() &&
+                        description.isNotBlank() && !isSavingField &&
+                        fieldId !in KnownFields.all.map { it.fieldId } &&
+                        fieldId !in configuration.customFields.map { it.fieldId },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isSavingField) "Saving..." else "Add field")
+                }
+                HorizontalDivider()
+                configuration.customFields.forEach { field ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(field.fieldName, style = MaterialTheme.typography.titleSmall)
+                        Text(field.description, style = MaterialTheme.typography.bodySmall)
+                        Text("ID: ${field.fieldId} | Type: ${field.fieldType}")
+                        Text(
+                            "Rules: ${AdminRule.values().filter { it in field.validationRule.toAdminRules(field.isRequired) }.joinToString { it.label }.ifBlank { "None" }}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
                 KnownFields.all.forEach { field ->
                     val required = configuration.rulesFor(field).any { it is com.example.salesonboarding.validation.Required }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -214,20 +359,44 @@ private fun RuleConfigurationSection(
     }
 
 @Composable
-private fun AnalyticsSection(analytics: OnboardingAnalytics?) {
+private fun AnalyticsSection(
+    analytics: OnboardingAnalytics?,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onRefresh: () -> Unit
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text("Onboarding analytics", style = MaterialTheme.typography.titleMedium)
-            if (analytics == null) {
+            Button(onClick = onRefresh, enabled = !isLoading) {
+                Text(if (isLoading) "Refreshing..." else "Refresh analytics")
+            }
+            if (errorMessage != null) {
+                Text(errorMessage, color = MaterialTheme.colorScheme.error)
+            } else if (analytics == null && !isLoading) {
+                Text("No session data is available.")
+            } else if (isLoading && analytics == null) {
                 Text("Loading analytics...")
-            } else {
+            } else if (analytics != null) {
                 Text("Sessions: ${analytics.sessionCount}")
                 Text("Completion rate: ${"%.1f".format(analytics.completionRate * 100)}%")
                 Text("Average completion time: ${"%.1f".format(analytics.averageCompletionMinutes)} minutes")
             }
         }
     }
+}
+
+private fun List<com.example.salesonboarding.validation.ValidationRule>.toAdminRules(
+    required: Boolean
+): Set<AdminRule> = buildSet {
+    if (required) add(AdminRule.REQUIRED)
+    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.NotBlank }) add(AdminRule.NOT_BLANK)
+    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.EmailFormat }) add(AdminRule.EMAIL)
+    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.KenyanPhoneFormat }) add(AdminRule.PHONE)
+    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.PositiveNumber }) add(AdminRule.POSITIVE_NUMBER)
+    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.MustBeTrue }) add(AdminRule.MUST_BE_TRUE)
+    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.DateFormatAndMinimumAge }) add(AdminRule.DATE)
 }
