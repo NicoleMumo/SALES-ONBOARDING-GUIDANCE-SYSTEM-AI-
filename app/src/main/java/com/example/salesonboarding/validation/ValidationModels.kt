@@ -50,7 +50,8 @@ data class FormField(
     val fieldName: String,
     val fieldType: String,
     val isRequired: Boolean,
-    val validationRule: List<ValidationRule>
+    val validationRule: List<ValidationRule>,
+    val description: String = ""
 ) {
     fun validate(entry: FieldEntry, context: ValidationContext = ValidationContext()): ValidationResult {
         require(entry.fieldId == fieldId) {

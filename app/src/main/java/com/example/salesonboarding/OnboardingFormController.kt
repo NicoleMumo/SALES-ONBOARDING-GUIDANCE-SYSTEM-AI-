@@ -61,7 +61,11 @@ class OnboardingFormController(
                     sessionStore?.recordValidation(sessionId, fieldId, result.isValid, result.errorMessage)
                 }
                 val history = fields
-                    .filter { state.values[it.fieldId].isNullOrBlank().not() && state.results[it.fieldId]?.isValid == true }
+                    .filter {
+                        it.fieldId in MODEL_FIELD_IDS &&
+                            state.values[it.fieldId].isNullOrBlank().not() &&
+                            state.results[it.fieldId]?.isValid == true
+                    }
                     .map { it.fieldId }
                 if (history != lastGuidanceKey) {
                     lastGuidanceKey = history
@@ -183,6 +187,8 @@ class OnboardingFormController(
     private var currentRiskEvents: List<CompletionRiskEvent> = emptyList()
 
     companion object {
+        private val MODEL_FIELD_IDS = KnownFields.all.mapTo(mutableSetOf()) { it.fieldId }
+
         val DEFAULT_FIELDS: List<FormField> = listOf(
             KnownFields.get("full_name"),
             KnownFields.get("email_address"),

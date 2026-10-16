@@ -3,6 +3,7 @@ package com.example.salesonboarding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
@@ -32,6 +35,7 @@ import com.example.salesonboarding.validation.FormField
 import com.example.salesonboarding.validation.FieldEntryStore
 import com.example.salesonboarding.validation.LiveValidationState
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
+import com.example.salesonboarding.validation.RequiredIf
 import kotlinx.coroutines.CoroutineScope
 
 @Composable
@@ -69,14 +73,28 @@ fun OnboardingScreenContent(
     val invalidFieldCount = errors.size
     var submitted by remember { mutableStateOf(false) }
     val completedCount = fields.count { field ->
-        state.values[field.fieldId].isNullOrBlank().not() &&
-            state.results[field.fieldId]?.isValid == true
+        val value = state.values[field.fieldId]
+        val required = field.isRequired || field.validationRule.any {
+            it is RequiredIf && state.values[it.dependsOnFieldId]
+                ?.equals(it.expectedValue, ignoreCase = true) == true
+        }
+        if (!required && value.isNullOrBlank()) {
+            true
+        } else {
+            value.isNullOrBlank().not() && state.results[field.fieldId]?.isValid == true
+        }
     }
     val currentFieldId = guidance.correction?.fieldId ?: guidance.nextFieldId
     val currentField = fields.firstOrNull { it.fieldId == currentFieldId }
         ?: fields.firstOrNull { field ->
-            state.values[field.fieldId].isNullOrBlank() ||
-                state.results[field.fieldId]?.isValid != true
+            val required = field.isRequired || field.validationRule.any {
+                it is RequiredIf && state.values[it.dependsOnFieldId]
+                    ?.equals(it.expectedValue, ignoreCase = true) == true
+            }
+            required && (
+                state.values[field.fieldId].isNullOrBlank() ||
+                    state.results[field.fieldId]?.isValid != true
+                )
         }
     val currentStep = currentField?.let { fields.indexOf(it) + 1 } ?: fields.size
     val progress = if (fields.isEmpty()) 1f else completedCount.toFloat() / fields.size
@@ -202,32 +220,58 @@ fun OnboardingScreenContent(
             val error = errors[field.fieldId]
             val isValid = field.fieldId in state.touchedFieldIds &&
                 state.results[field.fieldId]?.isValid == true
-            OutlinedTextField(
-                value = state.values[field.fieldId].orEmpty(),
-                onValueChange = {
-                    submitted = false
-                    onValueChange(field.fieldId, it)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(field.fieldName) },
-                placeholder = { Text("Enter ${field.fieldName.lowercase()}") },
-                singleLine = true,
-                isError = error != null,
-                supportingText = when {
-                    error != null -> {
-                        { Text(error.message) }
+            if (field.fieldType.equals("boolean", ignoreCase = true)) {
+                Column {
+                    Row {
+                        Checkbox(
+                            checked = state.values[field.fieldId].equals("true", ignoreCase = true),
+                            onCheckedChange = {
+                                submitted = false
+                                onValueChange(field.fieldId, it.toString())
+                            }
+                        )
+                        Text(field.fieldName)
                     }
-                    isValid -> {
-                        { Text("Looks good") }
+                    error?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
+                    if (field.description.isNotBlank()) {
+                        Text(field.description, style = MaterialTheme.typography.bodySmall)
                     }
-                    else -> null
-                },
-                keyboardOptions = if (field.fieldType == "number") {
-                    KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                } else {
-                    KeyboardOptions.Default
+                    if (error == null && isValid) Text("Looks good")
                 }
-            )
+            } else {
+                OutlinedTextField(
+                    value = state.values[field.fieldId].orEmpty(),
+                    onValueChange = {
+                        submitted = false
+                        onValueChange(field.fieldId, it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(field.fieldName) },
+                    placeholder = { Text("Enter ${field.fieldName.lowercase()}") },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = if (
+                        error != null || isValid || field.description.isNotBlank()
+                    ) {
+                        {
+                            Column {
+                                error?.let { Text(it.message) }
+                                if (field.description.isNotBlank()) Text(field.description)
+                                if (error == null && isValid) Text("Looks good")
+                            }
+                        }
+                    } else null,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = when (field.fieldType.lowercase()) {
+                            "number" -> KeyboardType.Decimal
+                            "email" -> KeyboardType.Email
+                            "phone" -> KeyboardType.Phone
+                            else -> KeyboardType.Text
+                        },
+                        imeAction = ImeAction.Next
+                    )
+                )
+            }
         }
         item {
             Card(
