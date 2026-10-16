@@ -17,7 +17,13 @@ data class StoredOnboardingSession(
 )
 
 interface OnboardingSessionStore : FieldEntryStore {
-    fun startSession(sessionId: String, agentId: String, industry: String, context: String)
+    fun startSession(
+        sessionId: String,
+        agentId: String,
+        industry: String,
+        context: String,
+        playbook: OnboardingPlaybook
+    )
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
     fun appendEvent(sessionId: String, type: String, fieldId: String?, value: String?)
     fun markCompleted(sessionId: String)
@@ -49,7 +55,13 @@ class FirebaseFieldEntryStore(
             )
     }
 
-    override fun startSession(sessionId: String, agentId: String, industry: String, context: String) {
+    override fun startSession(
+        sessionId: String,
+        agentId: String,
+        industry: String,
+        context: String,
+        playbook: OnboardingPlaybook
+    ) {
         sessions.child(sessionId).updateChildren(
             mapOf(
                 "sessionId" to sessionId,
@@ -57,7 +69,20 @@ class FirebaseFieldEntryStore(
                 "industry" to industry,
                 "context" to context,
                 "status" to "in_progress",
-                "startedAt" to System.currentTimeMillis()
+                "startedAt" to System.currentTimeMillis(),
+                "playbookId" to playbook.id,
+                "playbookTitle" to playbook.title,
+                "playbookVersion" to playbook.version,
+                "playbookSnapshot" to playbook.fields.map { field ->
+                    mapOf(
+                        "fieldId" to field.fieldId,
+                        "fieldName" to field.fieldName,
+                        "fieldType" to field.fieldType,
+                        "description" to field.description,
+                        "isRequired" to field.isRequired,
+                        "rules" to field.validationRule.map { it.toString() }
+                    )
+                }
             )
         ).reportFailure("Could not start onboarding session '$sessionId'.")
     }
@@ -83,7 +108,7 @@ class FirebaseFieldEntryStore(
             mapOf(
                 "type" to type,
                 "fieldId" to fieldId,
-                "value" to value,
+                "valueProvided" to !value.isNullOrBlank(),
                 "timestamp" to System.currentTimeMillis()
             )
         ).reportFailure("Could not save onboarding event '$type'.")
