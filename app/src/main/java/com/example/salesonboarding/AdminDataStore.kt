@@ -7,6 +7,7 @@ import com.example.salesonboarding.validation.FormField
 import com.example.salesonboarding.validation.KenyanPhoneFormat
 import com.example.salesonboarding.validation.MustBeTrue
 import com.example.salesonboarding.validation.NotBlank
+import com.example.salesonboarding.validation.OneOf
 import com.example.salesonboarding.validation.PositiveNumber
 import com.example.salesonboarding.validation.Required
 import com.example.salesonboarding.validation.DateFormatAndMinimumAge
@@ -27,7 +28,10 @@ data class SalesAgentAccount(
 data class OnboardingAnalytics(
     val sessionCount: Int = 0,
     val completedCount: Int = 0,
-    val averageCompletionMinutes: Double = 0.0
+    val averageCompletionMinutes: Double = 0.0,
+    val averageReadinessPercent: Double = 0.0,
+    val commonPausePoint: String? = null,
+    val agentPerformance: List<AgentPerformance> = emptyList()
 ) {
     val completionRate: Double
         get() = if (sessionCount == 0) 0.0 else completedCount.toDouble() / sessionCount
@@ -46,19 +50,61 @@ data class OnboardingAnalytics(
                     null
                 }
             }
+            val readiness = sessions.mapNotNull { session ->
+                val requiredFields = session.requiredFieldIds.ifEmpty { session.playbookFieldIds }
+                if (requiredFields.isEmpty()) return@mapNotNull null
+                requiredFields.count { session.validation[it] == true }.toDouble() /
+                    requiredFields.size
+            }
+            val pausePoints = sessions.filterNot {
+                it.status.equals("completed", ignoreCase = true)
+            }.mapNotNull { session ->
+                val requiredFields = session.requiredFieldIds.ifEmpty { session.playbookFieldIds }
+                requiredFields.firstOrNull { session.validation[it] != true }
+                    ?.let { fieldId -> session.fieldNames[fieldId] ?: fieldId }
+            }
             return OnboardingAnalytics(
                 sessionCount = sessions.size,
                 completedCount = completed.size,
-                averageCompletionMinutes = durations.averageOrZero()
+                averageCompletionMinutes = durations.averageOrZero(),
+                averageReadinessPercent = readiness.averageOrZero() * 100,
+                commonPausePoint = pausePoints.groupingBy { it }.eachCount()
+                    .maxByOrNull { it.value }?.key,
+                agentPerformance = sessions.groupBy { it.agentId.ifBlank { "Unknown agent" } }
+                    .map { (agentId, agentSessions) ->
+                        val agentCompleted = agentSessions.count {
+                            it.status.equals("completed", ignoreCase = true)
+                        }
+                        AgentPerformance(
+                            agentId = agentId,
+                            sessionCount = agentSessions.size,
+                            completedCount = agentCompleted
+                        )
+                    }
+                    .sortedByDescending(AgentPerformance::sessionCount)
             )
         }
     }
 }
 
+data class AgentPerformance(
+    val agentId: String,
+    val sessionCount: Int,
+    val completedCount: Int
+) {
+    val completionRate: Double
+        get() = if (sessionCount == 0) 0.0 else completedCount.toDouble() / sessionCount
+}
+
 data class OnboardingSessionMetrics(
     val status: String,
     val startedAt: Long?,
-    val completedAt: Long?
+    val completedAt: Long?,
+    val agentId: String = "",
+    val validation: Map<String, Boolean> = emptyMap(),
+    val playbookFieldIds: List<String> = emptyList(),
+    val requiredFieldIds: List<String> = emptyList(),
+    val fieldNames: Map<String, String> = emptyMap()
 )
 
 enum class AdminRule(val label: String) {
@@ -83,6 +129,7 @@ interface AdminDataStore {
         description: String,
         fieldType: String,
         rules: Set<AdminRule>,
+        choices: Set<String>,
         onResult: (Result<Unit>) -> Unit
     )
     fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit)
@@ -137,14 +184,14 @@ class FirebaseAdminDataStore(
                     val required = field.child("required").getValue(Boolean::class.java) == true
                     field.key.orEmpty() to FieldRuleOverride(
                         addRules = if (required) {
-                            listOf(Required)
+                            listOf(Required, NotBlank)
                         } else {
                             emptyList()
                         },
                         removeRules = if (required) {
                             emptyList()
                         } else {
-                            listOf(Required)
+                            listOf(Required, NotBlank)
                         }
                     )
                 }
@@ -180,6 +227,7 @@ class FirebaseAdminDataStore(
         description: String,
         fieldType: String,
         rules: Set<AdminRule>,
+        choices: Set<String>,
         onResult: (Result<Unit>) -> Unit
     ) {
         val ruleNames = rules.map(AdminRule::name)
@@ -194,7 +242,8 @@ class FirebaseAdminDataStore(
                         "fieldName" to name,
                         "description" to description,
                         "fieldType" to fieldType,
-                        "rules" to ruleNames
+                        "rules" to ruleNames,
+                        "choices" to choices.toList()
                     )
                     return Transaction.success(currentData)
                 }
@@ -220,10 +269,33 @@ class FirebaseAdminDataStore(
         sessions.get()
             .addOnSuccessListener { snapshot ->
                 val metrics = snapshot.children.map { session ->
+                    val playbookFields = session.child("playbookSnapshot").children
+                    val validation = session.child("validation").children.mapNotNull { field ->
+                        field.child("isValid").getValue(Boolean::class.java)?.let { valid ->
+                            field.key?.let { it to valid }
+                        }
+                    }.toMap()
                     OnboardingSessionMetrics(
                         status = session.child("status").getValue(String::class.java).orEmpty(),
                         startedAt = session.child("startedAt").value.asLongTimestamp(),
-                        completedAt = session.child("completedAt").value.asLongTimestamp()
+                        completedAt = session.child("completedAt").value.asLongTimestamp(),
+                        agentId = session.child("agentId").getValue(String::class.java).orEmpty(),
+                        validation = validation,
+                        playbookFieldIds = playbookFields.mapNotNull {
+                            it.child("fieldId").getValue(String::class.java)
+                        },
+                        requiredFieldIds = playbookFields.mapNotNull { field ->
+                            if (field.child("isRequired").getValue(Boolean::class.java) == true) {
+                                field.child("fieldId").getValue(String::class.java)
+                            } else {
+                                null
+                            }
+                        },
+                        fieldNames = playbookFields.mapNotNull { field ->
+                            val fieldId = field.child("fieldId").getValue(String::class.java)
+                            val fieldName = field.child("fieldName").getValue(String::class.java)
+                            if (fieldId != null && fieldName != null) fieldId to fieldName else null
+                        }.toMap()
                     )
                 }
                 onResult(Result.success(OnboardingAnalytics.fromSessions(metrics)))
@@ -248,6 +320,9 @@ class FirebaseAdminDataStore(
                 ?: throw IllegalArgumentException("A saved custom-field rule is not a string.")
             AdminRule.valueOf(ruleName)
         }.toSet()
+        val choices = child("choices").children.mapNotNull {
+            it.getValue(String::class.java)?.takeIf(String::isNotBlank)
+        }.toSet()
         return FormField(
             fieldId = fieldId,
             fieldName = child("fieldName").getValue(String::class.java).orEmpty(),
@@ -257,7 +332,8 @@ class FirebaseAdminDataStore(
                     it == AdminRule.NOT_BLANK ||
                     it == AdminRule.MUST_BE_TRUE
             },
-            validationRule = rules.toValidationRules(),
+            validationRule = rules.toValidationRules() +
+                if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
             description = child("description").getValue(String::class.java).orEmpty()
         )
     }

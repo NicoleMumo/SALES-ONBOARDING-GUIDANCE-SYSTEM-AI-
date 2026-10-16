@@ -9,10 +9,14 @@ app/
     AndroidManifest.xml
     assets/                 TensorFlow Lite model and preprocessing metadata
     java/com/example/salesonboarding/
+      SalesMeshApplication.kt Enables Firebase's persistent offline cache
       MainActivity.kt       Application entry point
-      OnboardingScreen.kt   Compose onboarding UI
+      OnboardingPlaybook.kt Industry flows and versioned field sequence
+      OnboardingScreen.kt   Playbook, readiness and onboarding UI
       OnboardingFormController.kt
                              Form state, saving, validation and guidance
+      FirebaseFieldEntryStore.kt Session, playbook and audit persistence
+      AdminDashboardScreen.kt Agent, field-rule and team insights UI
       NextFieldPredictor.kt Transformer prediction adapter
       validation/           Reusable field rules and live validation
       risk/                 Completion-risk scoring and assistance

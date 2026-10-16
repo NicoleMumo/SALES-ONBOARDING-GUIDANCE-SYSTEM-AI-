@@ -125,6 +125,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             else -> {
+                                val playbook = remember(selectedIndustry, fieldRuleConfiguration) {
+                                    OnboardingPlaybooks.forIndustry(
+                                        selectedIndustry!!,
+                                        fieldRuleConfiguration
+                                    )
+                                }
                                 val scope = rememberCoroutineScope()
                                 val store = remember {
                                     FirebaseFieldEntryStore(database)
@@ -137,9 +143,8 @@ class MainActivity : ComponentActivity() {
                                     predictor,
                                     industry = selectedIndustry!!,
                                     agentId = agentId,
-                                    fields = fieldRuleConfiguration.allFields(
-                                        OnboardingFormController.DEFAULT_FIELDS
-                                    )
+                                    fields = playbook.fields,
+                                    playbook = playbook
                                 )
                                 OnboardingScreen(controller, Modifier.padding(innerPadding))
                             }

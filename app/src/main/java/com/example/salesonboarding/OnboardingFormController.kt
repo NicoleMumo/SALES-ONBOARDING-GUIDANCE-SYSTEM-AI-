@@ -29,6 +29,20 @@ data class NextFieldGuidance(
     val riskGuidance: CompletionRiskGuidance? = null
 )
 
+data class OnboardingReadiness(
+    val requiredFieldCount: Int,
+    val completedRequiredFieldCount: Int,
+    val incompleteRequiredFields: List<String>,
+    val invalidOptionalFields: List<String>
+) {
+    val scorePercent: Int
+        get() = if (requiredFieldCount == 0) 100
+        else completedRequiredFieldCount * 100 / requiredFieldCount
+
+    val isReady: Boolean
+        get() = incompleteRequiredFields.isEmpty() && invalidOptionalFields.isEmpty()
+}
+
 class OnboardingFormController(
     private val sessionId: String,
     val fields: List<FormField> = DEFAULT_FIELDS,
@@ -37,8 +51,16 @@ class OnboardingFormController(
     private val predictor: NextFieldPredictor? = null,
     private val industry: String = "telecom",
     private val context: String = "individual",
-    private val agentId: String = "unknown-agent"
+    private val agentId: String = "unknown-agent",
+    playbook: OnboardingPlaybook? = null
 ) {
+    val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
+        id = "$industry-standard-onboarding",
+        title = "$industry onboarding",
+        industry = industry,
+        fields = fields
+    )
+
     private val session = LiveValidationSession(
         sessionId = sessionId,
         fields = fields,
@@ -53,7 +75,13 @@ class OnboardingFormController(
     private var lastGuidanceKey: List<String> = emptyList()
 
     init {
-        (entryStore as? OnboardingSessionStore)?.startSession(sessionId, agentId, industry, context)
+        (entryStore as? OnboardingSessionStore)?.startSession(
+            sessionId,
+            agentId,
+            industry,
+            context,
+            this.playbook
+        )
         scope.launch {
             stateFlow.collect { state ->
                 val sessionStore = entryStore as? OnboardingSessionStore
@@ -113,6 +141,23 @@ class OnboardingFormController(
                     state.results[field.fieldId]?.isValid == true
             }
         }
+
+    fun readiness(state: LiveValidationState = stateFlow.value): OnboardingReadiness {
+        val requiredFields = fields.filter { isRequired(it, state) }
+        val incompleteRequired = requiredFields.filterNot { isValid(it, state) }
+        val invalidOptional = fields.filter { field ->
+            !isRequired(field, state) &&
+                field.fieldId in state.touchedFieldIds &&
+                !state.values[field.fieldId].isNullOrBlank() &&
+                state.results[field.fieldId]?.isValid != true
+        }
+        return OnboardingReadiness(
+            requiredFieldCount = requiredFields.size,
+            completedRequiredFieldCount = requiredFields.size - incompleteRequired.size,
+            incompleteRequiredFields = incompleteRequired.map(FormField::fieldName),
+            invalidOptionalFields = invalidOptional.map(FormField::fieldName)
+        )
+    }
 
     fun submit(state: LiveValidationState = stateFlow.value): Boolean {
         if (!canContinue(state)) return false
