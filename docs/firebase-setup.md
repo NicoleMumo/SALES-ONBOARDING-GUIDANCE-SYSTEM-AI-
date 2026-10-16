@@ -7,10 +7,15 @@ field definitions.
 
 Each session stores its agent ID, industry, context, status, timestamps, field
 entries, validation results, and onboarding events under
-`onboardingSessions/{sessionId}`. The admin analytics screen reads this path:
+`onboardingSessions/{sessionId}`. Each new session includes a snapshot of its
+ordered playbook fields and revision. Field-update events record field IDs and
+whether a value is present; they do not duplicate the entered customer value.
+The admin analytics screen reads this path:
 it counts all sessions, calculates the completion rate from sessions whose
 status is `completed`, and averages durations for completed sessions that have
-valid start and completion timestamps.
+valid start and completion timestamps. It also shows team completion rates,
+average required-field progress and the most common unfinished step when
+sessions include a playbook snapshot.
 
 Admin data uses these Realtime Database paths:
 
@@ -18,7 +23,7 @@ Admin data uses these Realtime Database paths:
 - `fieldRuleOverrides/{fieldId}/required` for required-rule overrides on
   catalogue fields.
 - `fieldDefinitions/{fieldId}` for custom field names, descriptions, types,
-  and validation rule selections.
+  validation rule selections, and approved choices for choice fields.
 
 Stored sessions can be retrieved with:
 
@@ -44,6 +49,12 @@ To connect the app to a Firebase project:
 6. Build and run the app. `MainActivity` loads the field configuration before
    starting onboarding, and the admin dashboard uses the same Firebase
    Realtime Database reference for its management and analytics screens.
+
+Realtime Database persistence is enabled at application startup. The field
+definitions and rule overrides are kept in the local cache, and Firebase queues
+offline writes on-device to sync when connectivity returns. The onboarding
+screen shows the current network status. Offline submissions can be queued;
+the app does not yet provide a cross-restart draft-resume screen.
 
 `google-services.json` is intentionally not committed. It is project-specific
 configuration and must be supplied by the Firebase project owner.

@@ -96,7 +96,10 @@ class OnboardingFormControllerTest {
                 "successful-session",
                 "agent@example.com",
                 "telecom",
-                "individual"
+                "individual",
+                "telecom-standard-onboarding",
+                controller.playbook.version,
+                fields.map { it.fieldId }
             ),
             store.startedSession
         )
@@ -141,6 +144,31 @@ class OnboardingFormControllerTest {
     }
 
     @Test
+    fun readinessNamesMissingFieldsAndCalculatesRequiredCompletion() = runTest {
+        val fields = listOf(
+            KnownFields.get("full_name"),
+            KnownFields.get("email_address")
+        )
+        val controller = OnboardingFormController(
+            sessionId = "readiness-session",
+            fields = fields,
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        val readiness = controller.readiness()
+        assertEquals(2, readiness.requiredFieldCount)
+        assertEquals(1, readiness.completedRequiredFieldCount)
+        assertEquals(listOf("Email address"), readiness.incompleteRequiredFields)
+        assertEquals(50, readiness.scorePercent)
+        assertFalse(readiness.isReady)
+    }
+
+    @Test
     fun guidanceTellsAgentToCorrectAnInvalidField() = runTest {
         val controller = OnboardingFormController(
             "session",
@@ -164,7 +192,10 @@ class OnboardingFormControllerTest {
         val sessionId: String,
         val agentId: String,
         val industry: String,
-        val context: String
+        val context: String,
+        val playbookId: String,
+        val playbookVersion: String,
+        val fieldIds: List<String>
     )
 
     private data class SessionEvent(
@@ -188,8 +219,22 @@ class OnboardingFormControllerTest {
             entries += entry
         }
 
-        override fun startSession(sessionId: String, agentId: String, industry: String, context: String) {
-            startedSession = SessionStart(sessionId, agentId, industry, context)
+        override fun startSession(
+            sessionId: String,
+            agentId: String,
+            industry: String,
+            context: String,
+            playbook: OnboardingPlaybook
+        ) {
+            startedSession = SessionStart(
+                sessionId,
+                agentId,
+                industry,
+                context,
+                playbook.id,
+                playbook.version,
+                playbook.fields.map { it.fieldId }
+            )
         }
 
         override fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?) {

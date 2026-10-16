@@ -15,15 +15,18 @@ model. Admin changes to an existing field are represented by
 `FieldRuleConfiguration`: each `FieldRuleOverride` can add or remove
 individual rules while leaving the catalogue defaults available as a
 baseline. Removing `Required` intentionally makes a required-by-default field
-optional in that configured form.
+optional in that configured form. The admin required-field toggle removes both
+`Required` and `NotBlank`, so disabling requiredness does not leave a
+contradictory blank-value rule behind.
 
 The admin dashboard can also add custom fields. Each has a generated ID based
 on its name, a description, an input type (`text`, `number`, `date`, `email`,
-`phone`, or `boolean`), and selected rules (`Required`, `NotBlank`,
+`phone`, `boolean`, or `choice`), and selected rules (`Required`, `NotBlank`,
 `EmailFormat`, `KenyanPhoneFormat`, `PositiveNumber`, `MustBeTrue`, or
-`DateFormatAndMinimumAge(18)`). A custom field is stored separately from
-`KnownFields` and appended to future onboarding forms. Its description is
-shown below its input. These field definitions are persisted under
+`DateFormatAndMinimumAge(18)`). Choice fields also save their comma-separated
+approved options and validate/select from that list. A custom field is stored
+separately from `KnownFields` and appended to future onboarding forms. Its
+description is shown below its input. These field definitions are persisted under
 `fieldDefinitions/{fieldId}` in Firebase Realtime Database.
 
 For code-created fields, use the same `FormField` constructor:
@@ -68,6 +71,18 @@ and renders mapper messages under the matching input. Continue is enabled only
 when every required field has a valid result. Valid nonblank values are saved
 through `FirebaseFieldEntryStore` under
 `onboardingSessions/{sessionId}/entries/{fieldId}`.
+
+`OnboardingPlaybooks` defines the standard ordered telecom and banking steps.
+Each playbook revision is a SHA-256 fingerprint of its ordered field IDs,
+names, input types, descriptions and validation rules. A session stores its
+playbook ID, revision and field-definition snapshot, so later admin changes do
+not obscure which instructions the agent followed. Fields with `OneOf` rules
+are presented as controlled selections instead of free-text answers.
+
+The readiness summary reports how many required fields are valid, names
+unfinished required steps, and blocks completion when an entered optional
+value fails its rules. Team analytics uses saved validation state and the
+playbook snapshot to estimate progress and find common unfinished steps.
 
 The controller can also receive a `NextFieldPredictor`. The Android app uses
 `TfliteNextFieldPredictor`, which loads `onboarding_model.tflite` and

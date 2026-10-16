@@ -117,8 +117,8 @@ fun AdminDashboardScreen(
             )
             AdminSection.RULES -> RuleConfigurationSection(
                 configuration = configuration,
-                onAddField = { fieldId, name, description, type, rules, onComplete ->
-                    store.addCustomField(fieldId, name, description, type, rules) {
+                onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
+                    store.addCustomField(fieldId, name, description, type, rules, choices) {
                         onComplete(it)
                         handle(it) {
                             store.loadRuleConfiguration { loaded ->
@@ -145,6 +145,7 @@ fun AdminDashboardScreen(
             )
             AdminSection.ANALYTICS -> AnalyticsSection(
                 analytics = analytics,
+                agents = agents,
                 isLoading = isLoadingAnalytics,
                 errorMessage = analyticsErrorMessage,
                 onRefresh = {
@@ -236,6 +237,7 @@ private fun RuleConfigurationSection(
         String,
         String,
         Set<AdminRule>,
+        Set<String>,
         (Result<Unit>) -> Unit
     ) -> Unit,
     onRequiredChanged: (String, Boolean) -> Unit
@@ -243,6 +245,7 @@ private fun RuleConfigurationSection(
         var fieldName by remember { mutableStateOf("") }
         var description by remember { mutableStateOf("") }
         var fieldType by remember { mutableStateOf("text") }
+        var choiceOptions by remember { mutableStateOf("") }
         var selectedRules by remember { mutableStateOf(setOf(AdminRule.REQUIRED)) }
         var isSavingField by remember { mutableStateOf(false) }
         val fieldId = remember(fieldName) {
@@ -250,12 +253,6 @@ private fun RuleConfigurationSection(
                 .replace(Regex("[^a-z0-9]+"), "_")
                 .trim('_')
         }
-        val formatRules = setOf(
-            AdminRule.EMAIL,
-            AdminRule.PHONE,
-            AdminRule.POSITIVE_NUMBER,
-            AdminRule.DATE
-        )
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -273,7 +270,7 @@ private fun RuleConfigurationSection(
                 Text("Field ID: ${fieldId.ifBlank { "enter a name to generate an ID" }}", style = MaterialTheme.typography.bodySmall)
                 Text("Input type", style = MaterialTheme.typography.labelLarge)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    listOf("text", "number", "date", "email", "phone", "boolean")
+                    listOf("text", "number", "date", "email", "phone", "boolean", "choice")
                         .chunked(3)
                         .forEach { types ->
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -287,24 +284,35 @@ private fun RuleConfigurationSection(
                             }
                         }
                 }
+                if (fieldType == "choice") {
+                    OutlinedTextField(
+                        value = choiceOptions,
+                        onValueChange = { choiceOptions = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Approved choices (comma-separated)") },
+                        supportingText = { Text("Agents will select one of these values.") }
+                    )
+                }
                 Text("Validation rules", style = MaterialTheme.typography.labelLarge)
                 AdminRule.values().forEach { rule ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(
                             checked = rule in selectedRules,
                             onCheckedChange = { checked ->
-                                selectedRules = if (checked && rule in formatRules) {
-                                    (selectedRules - formatRules) + rule
-                                } else if (checked) {
-                                    selectedRules + rule
-                                } else {
-                                    selectedRules - rule
-                                }
+                                selectedRules = if (checked) selectedRules + rule
+                                else selectedRules - rule
                             }
                         )
                         Text(rule.label)
                     }
                 }
+                val parsedChoices = choiceOptions.split(',')
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .distinctBy { it.lowercase(Locale.ROOT) }
+                    .toSet()
+                    .takeIf { fieldType == "choice" }
+                    .orEmpty()
                 Button(
                     onClick = {
                         onAddField(
@@ -313,11 +321,13 @@ private fun RuleConfigurationSection(
                             description.trim(),
                             fieldType.trim().lowercase(Locale.ROOT),
                             selectedRules,
+                            parsedChoices,
                         ) { result ->
                             if (result.isSuccess) {
                                 fieldName = ""
                                 description = ""
                                 fieldType = "text"
+                                choiceOptions = ""
                                 selectedRules = setOf(AdminRule.REQUIRED)
                             }
                             isSavingField = false
@@ -326,6 +336,7 @@ private fun RuleConfigurationSection(
                     },
                     enabled = fieldId.isNotBlank() && fieldName.isNotBlank() &&
                         description.isNotBlank() && !isSavingField &&
+                        (fieldType != "choice" || parsedChoices.isNotEmpty()) &&
                         fieldId !in KnownFields.all.map { it.fieldId } &&
                         fieldId !in configuration.customFields.map { it.fieldId },
                     modifier = Modifier.fillMaxWidth()
@@ -334,14 +345,31 @@ private fun RuleConfigurationSection(
                 }
                 HorizontalDivider()
                 configuration.customFields.forEach { field ->
+                    val ruleLabels = AdminRule.values()
+                        .filter { it in field.validationRule.toAdminRules(field.isRequired) }
+                        .map(AdminRule::label)
+                        .let { labels ->
+                            if (field.validationRule.any {
+                                    it is com.example.salesonboarding.validation.OneOf
+                                }) labels + "Approved choices" else labels
+                        }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(field.fieldName, style = MaterialTheme.typography.titleSmall)
                         Text(field.description, style = MaterialTheme.typography.bodySmall)
                         Text("ID: ${field.fieldId} | Type: ${field.fieldType}")
                         Text(
-                            "Rules: ${AdminRule.values().filter { it in field.validationRule.toAdminRules(field.isRequired) }.joinToString { it.label }.ifBlank { "None" }}",
+                            "Rules: ${ruleLabels.joinToString().ifBlank { "None" }}",
                             style = MaterialTheme.typography.bodySmall
                         )
+                        field.validationRule.filterIsInstance<com.example.salesonboarding.validation.OneOf>()
+                            .flatMap { it.choices }
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { choices ->
+                                Text(
+                                    "Options: ${choices.joinToString()}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                     }
                 }
                 KnownFields.all.forEach { field ->
@@ -361,6 +389,7 @@ private fun RuleConfigurationSection(
 @Composable
 private fun AnalyticsSection(
     analytics: OnboardingAnalytics?,
+    agents: List<SalesAgentAccount>,
     isLoading: Boolean,
     errorMessage: String?,
     onRefresh: () -> Unit
@@ -384,6 +413,23 @@ private fun AnalyticsSection(
                 Text("Sessions: ${analytics.sessionCount}")
                 Text("Completion rate: ${"%.1f".format(analytics.completionRate * 100)}%")
                 Text("Average completion time: ${"%.1f".format(analytics.averageCompletionMinutes)} minutes")
+                Text("Average form progress: ${"%.0f".format(analytics.averageReadinessPercent)}%")
+                analytics.commonPausePoint?.let {
+                    Text("Most common unfinished step: $it")
+                }
+                if (analytics.agentPerformance.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text("Team consistency", style = MaterialTheme.typography.titleSmall)
+                    analytics.agentPerformance.forEach { performance ->
+                        val displayName = agents.firstOrNull {
+                            it.email.equals(performance.agentId, ignoreCase = true)
+                        }?.displayName ?: performance.agentId
+                        Text(
+                            "$displayName — ${performance.completedCount}/${performance.sessionCount} completed " +
+                                "(${ "%.0f".format(performance.completionRate * 100) }%)"
+                        )
+                    }
+                }
             }
         }
     }
