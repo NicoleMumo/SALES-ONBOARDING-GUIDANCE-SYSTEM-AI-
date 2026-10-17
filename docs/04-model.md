@@ -21,11 +21,17 @@ The model and `preprocessing_meta.json` are in `app/src/main/assets`.
 The current training and evaluation flow uses:
 
 - `data/onboarding_dataset.csv` - the canonical synthetic dataset
-- `src/onboarding_generator_v2.py` - generates the current dataset format
+- `notebooks/onboarding_dataset_generator.ipynb` - the sole generator for synthetic dataset runs
 - `notebooks/onboarding_transformer.ipynb` - trains and evaluates the model
 - `src/models/onboarding_model_flexible.keras` - saved Keras model
 - `src/models/onboarding_model.tflite` - mobile TensorFlow Lite export
 - `src/models/preprocessing_meta.json` - model vocabularies and preprocessing
+
+The generator uses a configurable seed and writes both a session-level `split`
+and an agent-level `agent_split`. All events in one session stay in the same
+`split`, and all sessions for one agent stay in the same `agent_split`.
+Generated rows are synthetic, scenario-based examples; passing structural
+checks does not establish real-world model performance.
 
 The earlier pipeline generated `banking_synthetic_sessions.csv`,
 `telecom_synthetic_sessions.csv`, and
