@@ -4,11 +4,36 @@
 
 This document defines the structure of the synthetic datasets required for the **Sales Agent Onboarding Guidance System**.
 
-The datasets represent **Customer Onboarding** sessions and the behaviour of the **Sales Agent** during onboarding. Banking and telecom data are kept **separate** because the two industries have different onboarding processes, fields, and events.
+The dataset represents **Customer Onboarding** sessions and the behaviour of the **Sales Agent** during onboarding. The current generated CSV can contain both banking and telecom sessions; the `industry` column identifies each workflow. Their field sequences remain industry-specific.
 
 The synthetic datasets will support the Transformer-based component of the system in predicting the **Next Onboarding Field** and support **Real-Time Guidance**, **field validation**, and **Onboarding Risk** assessment.
 
 ---
+
+## Current generated dataset and reproducibility
+
+The sole generator is the standalone Jupyter/Colab notebook at
+`notebooks/onboarding_dataset_generator.ipynb`. Run it from top to bottom,
+choose the session count, industry, seed, and output path in its first code
+cell, then run the generation and validation cells. It uses only the Python
+standard library and runs locally or in Google Colab. In Colab, the final
+optional cell downloads the generated CSV.
+
+The same seed and notebook version produce the same rows, including IDs,
+timestamps, event randomness, and split assignments. Synthetic timestamps
+begin on 1 January 2026 and advance 30 minutes per generated session; they are
+not real customer activity times.
+
+Every row includes two independent split columns:
+
+| Column | Meaning |
+|---|---|
+| `split` | Session-level train/validation/test split. All events for a session stay together; assignment is stratified by industry and scenario. This is the split used by the existing training notebook. |
+| `agent_split` | Agent-level train/validation/test split. All sessions assigned to the same `sales_agent_id` stay together, enabling a stricter evaluation where agents do not cross splits. |
+
+Both use 70% train, 15% validation, and 15% test by group, subject to
+rounding. These columns support separate evaluation protocols; do not combine
+them or claim an agent-level score when using `split`.
 
 ## Dataset Format
 
@@ -20,7 +45,7 @@ Each row represents one **Onboarding Event** that occurs during an **Onboarding 
 
 # 1. Banking Onboarding Dataset
 
-## Source Dataset
+## Reference Source Dataset (not used to generate the current CSV)
 
 **Fintech Onboarding Event Log**
 
@@ -28,7 +53,9 @@ Each row represents one **Onboarding Event** that occurs during an **Onboarding 
 - Rows: **537,094**
 - Columns: **6**
 
-The dataset provides event-level information from a financial onboarding process and is useful for understanding the sequence and timing of onboarding events.
+This real dataset is a reference for understanding financial onboarding
+events. The notebook does not load or merge those rows;
+`data/onboarding_dataset.csv` is synthetically generated.
 
 ### Relevant Source Columns
 
@@ -68,7 +95,7 @@ The `concept:fraud` column is **not included** in the synthetic system schema be
 
 # 2. Telecom Onboarding Dataset
 
-## Source Datasets
+## Reference Source Datasets (not used to generate the current CSV)
 
 ### Telecom Customer Onboarding Timeline
 
@@ -76,7 +103,8 @@ The `concept:fraud` column is **not included** in the synthetic system schema be
 - Rows: **200**
 - Columns: **21**
 
-This dataset provides telecom-specific onboarding information, including onboarding steps, status, timing, channel, agent involvement, failure reasons, and risk information.
+This synthetic timeline is a reference for telecom onboarding. It is not
+loaded by the current generator.
 
 ### Telco Customer Churn
 
@@ -84,7 +112,8 @@ This dataset provides telecom-specific onboarding information, including onboard
 - Rows: **7,043**
 - Columns: **21**
 
-This dataset provides telecom customer and service information that can be used to represent the telecom customer context.
+This real churn dataset is a reference for customer and service context. It
+is not loaded by the current generator.
 
 ## Telecom Synthetic Dataset Schema
 
@@ -227,7 +256,10 @@ The Telecom dataset uses telecom-specific:
 - Validation processes
 - Onboarding Risk information
 
-The datasets are not merged into a single cross-industry dataset.
+The generated CSV may contain both industries in one file. Industry-specific
+field definitions and session sequences are still selected separately by the
+generator; consumers should filter on `industry` when they need an
+industry-specific view.
 
 ---
 

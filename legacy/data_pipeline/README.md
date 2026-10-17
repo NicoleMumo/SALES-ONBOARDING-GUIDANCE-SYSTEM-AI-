@@ -7,7 +7,8 @@ model does not use them.**
 
 The Transformer (`notebooks/onboarding_transformer.ipynb`) trains from a
 separate, self-contained dataset and generator instead:
-`src/onboarding_generator_v2.py` and `data/onboarding_dataset.csv`.
+`notebooks/onboarding_dataset_generator.ipynb` and
+`data/onboarding_dataset.csv`.
 
 ## Files
 
