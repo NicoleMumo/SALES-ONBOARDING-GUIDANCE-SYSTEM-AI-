@@ -5,14 +5,15 @@
 
 Roadmap work is split into dataset, model, Android app, and database/authentication chores. Dataset reproducibility is committed on `chore/dataset-reproducibility`.
 
-### Completed code changes, pending remote push
+### Committed and pushed branches
+
+All four chore branches have been pushed to origin and are ready for review.
 
 - Per-event completion duration scoring and regression coverage are committed on `fix/per-event-risk-duration-mentor`.
 - Reproducible next-field baselines and evaluation documentation are committed on `chore/model-risk-evaluation-ready`.
 - Context-aware workflow inputs, event handling, and integration tests are committed on `chore/android-app-integration-ready`.
 - Firebase ownership rules, Emulator configuration/tests, and setup guidance are committed on `chore/database-authentication-ready`.
 
-The branches are local and ready for review. Push is blocked because Git cannot verify GitHub's TLS certificate chain (`unable to get local issuer certificate`). Do not disable certificate verification to work around this issue.
 
 ### Still required before calling the roadmap complete
 
