@@ -3,6 +3,14 @@
 The Android application is in the `app` module and uses Jetpack Compose for
 the onboarding experience.
 
+The app uses a consistent green-and-neutral visual style across sign-in,
+agent home, onboarding, completion, and admin screens. Onboarding progress is
+based on validated required fields; optional fields do not inflate or block
+the progress indicator. Agent profiles are added by administrators. The
+current sign-in callback is a UI/demo flow, not Firebase Authentication, so
+account registration and credential verification still require an
+authentication backend.
+
 ```text
 app/
   src/main/
