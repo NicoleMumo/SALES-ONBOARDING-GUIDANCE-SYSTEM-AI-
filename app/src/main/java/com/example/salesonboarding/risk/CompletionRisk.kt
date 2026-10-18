@@ -4,12 +4,14 @@ data class CompletionRiskFeatures(
     val elapsedMinutes: Double,
     val validationErrors: Int,
     val fieldRevisits: Int,
-    val progressPercent: Double
+    val progressPercent: Double,
+    val longEventCount: Int = 0
 ) {
     init {
         require(elapsedMinutes >= 0) { "Elapsed minutes cannot be negative." }
         require(validationErrors >= 0) { "Validation errors cannot be negative." }
         require(fieldRevisits >= 0) { "Field revisits cannot be negative." }
+        require(longEventCount >= 0) { "Long event count cannot be negative." }
         require(progressPercent in 0.0..100.0) {
             "Progress percent must be between 0 and 100."
         }
@@ -42,7 +44,7 @@ object CompletionRiskCalculator {
             score += VALIDATION_ERROR_WEIGHT
             reasons += "Validation errors occurred."
         }
-        if (features.elapsedMinutes > LONG_EVENT_THRESHOLD_MINUTES) {
+        if (features.longEventCount > 0) {
             score += LONG_EVENT_WEIGHT
             reasons += "The onboarding session is taking longer than expected."
         }
