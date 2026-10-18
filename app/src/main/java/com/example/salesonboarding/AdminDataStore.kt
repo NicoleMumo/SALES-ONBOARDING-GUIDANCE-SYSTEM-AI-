@@ -2,9 +2,21 @@ package com.example.salesonboarding
 
 import com.example.salesonboarding.validation.FieldRuleConfiguration
 import com.example.salesonboarding.validation.FieldRuleOverride
+import com.example.salesonboarding.validation.EmailFormat
+import com.example.salesonboarding.validation.FormField
+import com.example.salesonboarding.validation.KenyanPhoneFormat
+import com.example.salesonboarding.validation.MustBeTrue
+import com.example.salesonboarding.validation.NotBlank
+import com.example.salesonboarding.validation.OneOf
+import com.example.salesonboarding.validation.PositiveNumber
 import com.example.salesonboarding.validation.Required
+import com.example.salesonboarding.validation.ValidationRule
+import com.example.salesonboarding.validation.DateFormatAndMinimumAge
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.MutableData
+import com.google.firebase.database.Transaction
 import java.util.UUID
 
 data class SalesAgentAccount(
@@ -17,10 +29,94 @@ data class SalesAgentAccount(
 data class OnboardingAnalytics(
     val sessionCount: Int = 0,
     val completedCount: Int = 0,
-    val averageCompletionMinutes: Double = 0.0
+    val averageCompletionMinutes: Double = 0.0,
+    val averageReadinessPercent: Double = 0.0,
+    val commonPausePoint: String? = null,
+    val agentPerformance: List<AgentPerformance> = emptyList()
 ) {
     val completionRate: Double
         get() = if (sessionCount == 0) 0.0 else completedCount.toDouble() / sessionCount
+
+    companion object {
+        fun fromSessions(sessions: Collection<OnboardingSessionMetrics>): OnboardingAnalytics {
+            val completed = sessions.filter {
+                it.status.equals("completed", ignoreCase = true)
+            }
+
+            val durations = completed.mapNotNull { session ->
+                val started = session.startedAt
+                val finished = session.completedAt
+                if (started != null && finished != null && finished >= started) {
+                    (finished - started) / 60_000.0
+                } else {
+                    null
+                }
+            }
+            val readiness = sessions.mapNotNull { session ->
+                val requiredFields = session.requiredFieldIds.ifEmpty { session.playbookFieldIds }
+                if (requiredFields.isEmpty()) return@mapNotNull null
+                requiredFields.count { session.validation[it] == true }.toDouble() /
+                    requiredFields.size
+            }
+            val pausePoints = sessions.filterNot {
+                it.status.equals("completed", ignoreCase = true)
+            }.mapNotNull { session ->
+                val requiredFields = session.requiredFieldIds.ifEmpty { session.playbookFieldIds }
+                requiredFields.firstOrNull { session.validation[it] != true }
+                    ?.let { fieldId -> session.fieldNames[fieldId] ?: fieldId }
+            }
+            return OnboardingAnalytics(
+                sessionCount = sessions.size,
+                completedCount = completed.size,
+                averageCompletionMinutes = durations.averageOrZero(),
+                averageReadinessPercent = readiness.averageOrZero() * 100,
+                commonPausePoint = pausePoints.groupingBy { it }.eachCount()
+                    .maxByOrNull { it.value }?.key,
+                agentPerformance = sessions.groupBy { it.agentId.ifBlank { "Unknown agent" } }
+                    .map { (agentId, agentSessions) ->
+                        val agentCompleted = agentSessions.count {
+                            it.status.equals("completed", ignoreCase = true)
+                        }
+                        AgentPerformance(
+                            agentId = agentId,
+                            sessionCount = agentSessions.size,
+                            completedCount = agentCompleted
+                        )
+                    }
+                    .sortedByDescending(AgentPerformance::sessionCount)
+            )
+        }
+    }
+}
+
+data class AgentPerformance(
+    val agentId: String,
+    val sessionCount: Int,
+    val completedCount: Int
+) {
+    val completionRate: Double
+        get() = if (sessionCount == 0) 0.0 else completedCount.toDouble() / sessionCount
+}
+
+data class OnboardingSessionMetrics(
+    val status: String,
+    val startedAt: Long?,
+    val completedAt: Long?,
+    val agentId: String = "",
+    val validation: Map<String, Boolean> = emptyMap(),
+    val playbookFieldIds: List<String> = emptyList(),
+    val requiredFieldIds: List<String> = emptyList(),
+    val fieldNames: Map<String, String> = emptyMap()
+)
+
+enum class AdminRule(val label: String) {
+    REQUIRED("Required"),
+    NOT_BLANK("Not blank"),
+    EMAIL("Email format"),
+    PHONE("Kenyan phone"),
+    POSITIVE_NUMBER("Positive number"),
+    MUST_BE_TRUE("Must be confirmed"),
+    DATE("Date, age 18+")
 }
 
 interface AdminDataStore {
@@ -29,11 +125,20 @@ interface AdminDataStore {
     fun setAgentActive(agentId: String, isActive: Boolean, onResult: (Result<Unit>) -> Unit)
     fun loadRuleConfiguration(onResult: (Result<FieldRuleConfiguration>) -> Unit)
     fun saveRequiredRule(fieldId: String, enabled: Boolean, onResult: (Result<Unit>) -> Unit)
+    fun addCustomField(
+        fieldId: String,
+        name: String,
+        description: String,
+        fieldType: String,
+        rules: Set<AdminRule>,
+        choices: Set<String>,
+        onResult: (Result<Unit>) -> Unit
+    )
     fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit)
 }
 
 class FirebaseAdminDataStore(
-    database: DatabaseReference
+    private val database: DatabaseReference
 ) : AdminDataStore {
     private val agents = database.child("salesAgents")
     private val rules = database.child("fieldRuleOverrides")
@@ -75,26 +180,37 @@ class FirebaseAdminDataStore(
     }
 
     override fun loadRuleConfiguration(onResult: (Result<FieldRuleConfiguration>) -> Unit) {
-        rules.get()
-            .addOnSuccessListener { snapshot ->
-                val overrides = snapshot.children.associate { field ->
+        rules.get().addOnSuccessListener { ruleSnapshot ->
+            database.child("fieldDefinitions").get().addOnSuccessListener { fieldsSnapshot ->
+                val overrides = ruleSnapshot.children.associate { field ->
                     val required = field.child("required").getValue(Boolean::class.java) == true
                     field.key.orEmpty() to FieldRuleOverride(
                         addRules = if (required) {
-                            listOf(Required)
+                            listOf(Required, NotBlank)
                         } else {
                             emptyList()
                         },
                         removeRules = if (required) {
                             emptyList()
                         } else {
-                            listOf(Required)
+                            listOf(Required, NotBlank)
                         }
                     )
                 }
-                onResult(Result.success(FieldRuleConfiguration(overrides)))
+                val customFields = try {
+                    fieldsSnapshot.children.mapNotNull { it.toFormField() }
+                } catch (error: IllegalArgumentException) {
+                    onResult(
+                        Result.failure(
+                            IllegalStateException("A saved custom field contains an unknown validation rule.", error)
+                        )
+                    )
+                    return@addOnSuccessListener
+                }
+                onResult(Result.success(FieldRuleConfiguration(overrides, customFields)))
             }
-            .addOnFailureListener { onResult(Result.failure(it)) }
+                .addOnFailureListener { onResult(Result.failure(it)) }
+        }.addOnFailureListener { onResult(Result.failure(it)) }
     }
 
     override fun saveRequiredRule(
@@ -107,31 +223,84 @@ class FirebaseAdminDataStore(
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
 
+    override fun addCustomField(
+        fieldId: String,
+        name: String,
+        description: String,
+        fieldType: String,
+        rules: Set<AdminRule>,
+        choices: Set<String>,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val ruleNames = rules.map(AdminRule::name)
+        database.child("fieldDefinitions").child(fieldId).runTransaction(
+            object : Transaction.Handler {
+                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                    if (currentData.value != null) {
+                        return Transaction.abort()
+                    }
+                    currentData.value = mapOf(
+                        "fieldId" to fieldId,
+                        "fieldName" to name,
+                        "description" to description,
+                        "fieldType" to fieldType,
+                        "rules" to ruleNames,
+                        "choices" to choices.toList()
+                    )
+                    return Transaction.success(currentData)
+                }
+
+                override fun onComplete(
+                    error: DatabaseError?,
+                    committed: Boolean,
+                    currentData: DataSnapshot?
+                ) {
+                    when {
+                        error != null -> onResult(Result.failure(error.toException()))
+                        !committed -> onResult(
+                            Result.failure(IllegalArgumentException("A field with this ID already exists."))
+                        )
+                        else -> onResult(Result.success(Unit))
+                    }
+                }
+            }
+        )
+    }
+
     override fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit) {
         sessions.get()
             .addOnSuccessListener { snapshot ->
-                val sessionSnapshots = snapshot.children.toList()
-                val completed = sessionSnapshots.count {
-                    it.child("status").getValue(String::class.java) == "completed"
-                }
-                val durations = sessionSnapshots.mapNotNull { session ->
-                    val started = session.child("startedAt").getValue(Long::class.java)
-                    val finished = session.child("completedAt").getValue(Long::class.java)
-                    if (started != null && finished != null && finished >= started) {
-                        (finished - started) / 60_000.0
-                    } else {
-                        null
-                    }
-                }
-                onResult(
-                    Result.success(
-                        OnboardingAnalytics(
-                            sessionCount = sessionSnapshots.size,
-                            completedCount = completed,
-                            averageCompletionMinutes = durations.averageOrZero()
-                        )
+                val metrics = snapshot.children.map { session ->
+                    val playbookFields = session.child("playbookSnapshot").children
+                    val validation = session.child("validation").children.mapNotNull { field ->
+                        field.child("isValid").getValue(Boolean::class.java)?.let { valid ->
+                            field.key?.let { it to valid }
+                        }
+                    }.toMap()
+                    OnboardingSessionMetrics(
+                        status = session.child("status").getValue(String::class.java).orEmpty(),
+                        startedAt = session.child("startedAt").value.asLongTimestamp(),
+                        completedAt = session.child("completedAt").value.asLongTimestamp(),
+                        agentId = session.child("agentUid").getValue(String::class.java).orEmpty(),
+                        validation = validation,
+                        playbookFieldIds = playbookFields.mapNotNull {
+                            it.child("fieldId").getValue(String::class.java)
+                        },
+                        requiredFieldIds = playbookFields.mapNotNull { field ->
+                            if (field.child("isRequired").getValue(Boolean::class.java) == true) {
+                                field.child("fieldId").getValue(String::class.java)
+                            } else {
+                                null
+                            }
+                        },
+                        fieldNames = playbookFields.mapNotNull { field ->
+                            val fieldId = field.child("fieldId").getValue(String::class.java)
+                            val fieldName = field.child("fieldName").getValue(String::class.java)
+                            if (fieldId != null && fieldName != null) fieldId to fieldName else null
+                        }.toMap()
                     )
-                )
+                }
+                onResult(Result.success(OnboardingAnalytics.fromSessions(metrics)))
             }
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
@@ -145,6 +314,67 @@ class FirebaseAdminDataStore(
             isActive = child("isActive").getValue(Boolean::class.java) ?: true
         )
     }
+
+    private fun DataSnapshot.toFormField(): FormField? {
+        val fieldId = child("fieldId").getValue(String::class.java) ?: key ?: return null
+        val rules = child("rules").children.map {
+            val ruleName = it.getValue(String::class.java)
+                ?: throw IllegalArgumentException("A saved custom-field rule is not a string.")
+            AdminRule.valueOf(ruleName)
+        }.toSet()
+        val choices = child("choices").children.mapNotNull {
+            it.getValue(String::class.java)?.takeIf(String::isNotBlank)
+        }.toSet()
+        return FormField(
+            fieldId = fieldId,
+            fieldName = child("fieldName").getValue(String::class.java).orEmpty(),
+            fieldType = child("fieldType").getValue(String::class.java).orEmpty(),
+            isRequired = rules.any {
+                it == AdminRule.REQUIRED ||
+                    it == AdminRule.NOT_BLANK ||
+                    it == AdminRule.MUST_BE_TRUE
+            },
+            validationRule = rules.toValidationRules() +
+                if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
+            description = child("description").getValue(String::class.java).orEmpty()
+        )
+    }
 }
 
 private fun List<Double>.averageOrZero(): Double = if (isEmpty()) 0.0 else average()
+
+internal fun Set<AdminRule>.toValidationRules() = buildList {
+    if (AdminRule.REQUIRED in this@toValidationRules) add(Required)
+    if (AdminRule.NOT_BLANK in this@toValidationRules) add(NotBlank)
+    if (AdminRule.EMAIL in this@toValidationRules) add(EmailFormat)
+    if (AdminRule.PHONE in this@toValidationRules) add(KenyanPhoneFormat)
+    if (AdminRule.POSITIVE_NUMBER in this@toValidationRules) add(PositiveNumber)
+    if (AdminRule.MUST_BE_TRUE in this@toValidationRules) add(MustBeTrue)
+    if (AdminRule.DATE in this@toValidationRules) add(DateFormatAndMinimumAge(18))
+}
+
+internal fun customField(
+    fieldId: String,
+    name: String,
+    description: String,
+    fieldType: String,
+    rules: Set<AdminRule>,
+    choices: Set<String>
+): FormField {
+    val validationRules: List<ValidationRule> = rules.toValidationRules() +
+        if (choices.isEmpty()) emptyList() else listOf(OneOf(choices))
+    return FormField(
+        fieldId = fieldId,
+        fieldName = name,
+        fieldType = fieldType,
+        isRequired = rules.any {
+            it == AdminRule.REQUIRED ||
+                it == AdminRule.NOT_BLANK ||
+                it == AdminRule.MUST_BE_TRUE
+        },
+        validationRule = validationRules,
+        description = description
+    )
+}
+
+private fun Any?.asLongTimestamp(): Long? = (this as? Number)?.toLong()
