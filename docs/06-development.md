@@ -18,6 +18,21 @@
 The completion-risk evaluator reads `data/onboarding_dataset.csv` by default.
 Pass another dataset with `--dataset` and choose a split with `--split`.
 
+## Firebase Realtime Database rules
+
+The rule tests use the Firebase Emulator and a demo project ID. From the
+repository root, install the Node dependencies and run:
+
+```powershell
+npm install
+npm run test:database-rules
+```
+
+These tests check unauthenticated denial, agent session ownership, and
+admin-only management writes. They do not replace Firebase Authentication in
+the Android app. The app login flow must verify real signed-in users and
+trusted admin claims before customer data is used.
+
 ## Regenerate the synthetic dataset
 
 Run `notebooks/onboarding_dataset_generator.ipynb` from top to bottom. Its
