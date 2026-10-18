@@ -10,6 +10,7 @@ import com.example.salesonboarding.validation.NotBlank
 import com.example.salesonboarding.validation.OneOf
 import com.example.salesonboarding.validation.PositiveNumber
 import com.example.salesonboarding.validation.Required
+import com.example.salesonboarding.validation.ValidationRule
 import com.example.salesonboarding.validation.DateFormatAndMinimumAge
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DataSnapshot
@@ -41,6 +42,7 @@ data class OnboardingAnalytics(
             val completed = sessions.filter {
                 it.status.equals("completed", ignoreCase = true)
             }
+
             val durations = completed.mapNotNull { session ->
                 val started = session.startedAt
                 val finished = session.completedAt
@@ -279,7 +281,7 @@ class FirebaseAdminDataStore(
                         status = session.child("status").getValue(String::class.java).orEmpty(),
                         startedAt = session.child("startedAt").value.asLongTimestamp(),
                         completedAt = session.child("completedAt").value.asLongTimestamp(),
-                        agentId = session.child("agentId").getValue(String::class.java).orEmpty(),
+                        agentId = session.child("agentUid").getValue(String::class.java).orEmpty(),
                         validation = validation,
                         playbookFieldIds = playbookFields.mapNotNull {
                             it.child("fieldId").getValue(String::class.java)
@@ -349,6 +351,30 @@ internal fun Set<AdminRule>.toValidationRules() = buildList {
     if (AdminRule.POSITIVE_NUMBER in this@toValidationRules) add(PositiveNumber)
     if (AdminRule.MUST_BE_TRUE in this@toValidationRules) add(MustBeTrue)
     if (AdminRule.DATE in this@toValidationRules) add(DateFormatAndMinimumAge(18))
+}
+
+internal fun customField(
+    fieldId: String,
+    name: String,
+    description: String,
+    fieldType: String,
+    rules: Set<AdminRule>,
+    choices: Set<String>
+): FormField {
+    val validationRules: List<ValidationRule> = rules.toValidationRules() +
+        if (choices.isEmpty()) emptyList() else listOf(OneOf(choices))
+    return FormField(
+        fieldId = fieldId,
+        fieldName = name,
+        fieldType = fieldType,
+        isRequired = rules.any {
+            it == AdminRule.REQUIRED ||
+                it == AdminRule.NOT_BLANK ||
+                it == AdminRule.MUST_BE_TRUE
+        },
+        validationRule = validationRules,
+        description = description
+    )
 }
 
 private fun Any?.asLongTimestamp(): Long? = (this as? Number)?.toLong()

@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.example.salesonboarding.validation.ValidationResult
 
 data class NextFieldGuidance(
     val prediction: FieldPrediction? = null,
@@ -26,7 +27,8 @@ data class NextFieldGuidance(
     val nextFieldId: String? = null,
     val message: String = "",
     val isComplete: Boolean = false,
-    val riskGuidance: CompletionRiskGuidance? = null
+    val riskGuidance: CompletionRiskGuidance? = null,
+    val modelUnavailable: Boolean = false
 )
 
 data class OnboardingReadiness(
@@ -51,8 +53,9 @@ class OnboardingFormController(
     private val predictor: NextFieldPredictor? = null,
     private val industry: String = "telecom",
     private val context: String = "individual",
-    private val agentId: String = "unknown-agent",
-    playbook: OnboardingPlaybook? = null
+    private val agentUid: String = "unknown-agent",
+    playbook: OnboardingPlaybook? = null,
+    initialModelUnavailable: Boolean = false
 ) {
     val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
         id = "$industry-standard-onboarding",
@@ -61,10 +64,16 @@ class OnboardingFormController(
         fields = fields
     )
 
+    private val entryOrder = mutableListOf<String>()
+    private val pendingSince = mutableMapOf<String, Long>()
+    private var lastValidation = "NONE"
+    private var modelUnavailable = initialModelUnavailable
+
     private val session = LiveValidationSession(
         sessionId = sessionId,
         fields = fields,
-        scope = scope
+        scope = scope,
+        onValidationSettled = ::onValidationSettled
     )
 
     val stateFlow: StateFlow<LiveValidationState> = session.stateFlow
@@ -77,10 +86,11 @@ class OnboardingFormController(
     init {
         (entryStore as? OnboardingSessionStore)?.startSession(
             sessionId,
-            agentId,
+            agentUid,
             industry,
             context,
-            this.playbook
+            this.playbook,
+            System.currentTimeMillis()
         )
         scope.launch {
             stateFlow.collect { state ->
@@ -88,20 +98,10 @@ class OnboardingFormController(
                 state.results.forEach { (fieldId, result) ->
                     sessionStore?.recordValidation(sessionId, fieldId, result.isValid, result.errorMessage)
                 }
-                val history = fields
-                    .filter {
-                        it.fieldId in MODEL_FIELD_IDS &&
-                            state.values[it.fieldId].isNullOrBlank().not() &&
-                            state.results[it.fieldId]?.isValid == true
-                    }
-                    .map { it.fieldId }
+                val history = entryOrder.filter { it in MODEL_FIELD_IDS }
                 if (history != lastGuidanceKey) {
                     lastGuidanceKey = history
-                    val prediction = if (predictor == null) {
-                        guidance.value.prediction
-                    } else {
-                        predictor.predict(history, industry, context, "passed")
-                    }
+                    val prediction = if (predictor == null) guidance.value.prediction else predictSafely(history)
                     guidance.value = buildGuidance(state, prediction)
                 } else {
                     guidance.value = buildGuidance(state, guidance.value.prediction)
@@ -116,13 +116,41 @@ class OnboardingFormController(
     }
 
     fun updateField(fieldId: String, value: String) {
+        pendingSince.putIfAbsent(fieldId, System.currentTimeMillis())
         session.updateField(fieldId, value)
-        (entryStore as? OnboardingSessionStore)?.appendEvent(
-            sessionId,
-            "field_updated",
-            fieldId,
-            value
+    }
+
+    private fun onValidationSettled(fieldId: String, result: ValidationResult) {
+        val now = System.currentTimeMillis()
+        val elapsedMinutes = ((now - (pendingSince.remove(fieldId) ?: now)).coerceAtLeast(0L)) / 60_000.0
+        val isRevisit = fieldId in entryOrder
+        entryOrder += fieldId
+        lastValidation = if (result.isValid) "passed" else "failed"
+
+        (entryStore as? OnboardingSessionStore)?.let { store ->
+            store.appendEvent(sessionId, "validation_settled", fieldId)
+        }
+        recordRiskEvent(
+            CompletionRiskEvent(
+                durationMinutes = elapsedMinutes,
+                validationPassed = result.isValid,
+                isRevisit = isRevisit,
+                progressPercent = readiness().scorePercent.toDouble()
+            )
         )
+        if (predictor != null) {
+            val history = entryOrder.filter { it in MODEL_FIELD_IDS }
+            val prediction = predictSafely(history)
+            guidance.value = buildGuidance(stateFlow.value, prediction)
+            lastGuidanceKey = history
+        }
+    }
+
+    private fun predictSafely(history: List<String>): FieldPrediction? = try {
+        predictor?.predict(history, industry, context, lastValidation)
+    } catch (_: Exception) {
+        modelUnavailable = true
+        null
     }
 
     fun recordRiskEvent(event: CompletionRiskEvent) {
@@ -191,7 +219,8 @@ class OnboardingFormController(
                 prediction = prediction,
                 correction = correction,
                 message = "Correct $fieldName: ${correction.message}",
-                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from)
+                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from),
+                modelUnavailable = modelUnavailable
             )
         }
 
@@ -203,7 +232,8 @@ class OnboardingFormController(
                 prediction = prediction,
                 message = "All required information is complete. You can continue.",
                 isComplete = true,
-                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from)
+                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from),
+                modelUnavailable = modelUnavailable
             )
         }
 
@@ -215,7 +245,8 @@ class OnboardingFormController(
             prediction = prediction,
             nextFieldId = recommendedField.fieldId,
             message = "Collect ${recommendedField.fieldName} next.",
-            riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from)
+            riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from),
+            modelUnavailable = modelUnavailable
         )
     }
 

@@ -81,7 +81,7 @@ class OnboardingFormControllerTest {
             entryStore = store,
             industry = "telecom",
             context = "individual",
-            agentId = "agent@example.com"
+            agentUid = "agent-uid"
         )
 
         controller.updateField("full_name", "Jane Wanjiku")
@@ -93,8 +93,8 @@ class OnboardingFormControllerTest {
         assertTrue(controller.submit())
         assertEquals(
             SessionStart(
-                "successful-session",
-                "agent@example.com",
+            "successful-session",
+                "agent-uid",
                 "telecom",
                 "individual",
                 "telecom-standard-onboarding",
@@ -105,8 +105,8 @@ class OnboardingFormControllerTest {
         )
         assertEquals(setOf("full_name", "email_address"), store.validatedFields)
         assertEquals(setOf("full_name", "email_address"), store.savedEntries.map { it.fieldId }.toSet())
-        assertTrue(store.events.any { it.type == "field_updated" && it.fieldId == "full_name" })
-        assertTrue(store.events.any { it.type == "field_updated" && it.fieldId == "email_address" })
+        assertTrue(store.events.any { it.type == "validation_settled" && it.fieldId == "full_name" })
+        assertTrue(store.events.any { it.type == "validation_settled" && it.fieldId == "email_address" })
         assertEquals("successful-session", store.completedSessionId)
     }
 
@@ -141,6 +141,58 @@ class OnboardingFormControllerTest {
 
         assertTrue(controller.canContinue())
         assertEquals(listOf(listOf("full_name")), modelHistories)
+    }
+
+    @Test
+    fun predictorReceivesEntryOrderRetriesContextAndActualValidation() = runTest {
+        data class Input(val history: List<String>, val industry: String, val context: String, val validation: String)
+        val inputs = mutableListOf<Input>()
+        val controller = OnboardingFormController(
+            sessionId = "sequence-session",
+            fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = NextFieldPredictor { history, industry, context, validation ->
+                inputs += Input(history, industry, context, validation)
+                null
+            },
+            industry = "telecom",
+            context = "broadband"
+        )
+
+        controller.updateField("full_name", "")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateField("email_address", "jane@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals(listOf("full_name", "full_name", "email_address"), inputs.last().history)
+        assertEquals("telecom", inputs.last().industry)
+        assertEquals("broadband", inputs.last().context)
+        assertEquals("passed", inputs.last().validation)
+        assertTrue(controller.riskFlow.value != null)
+    }
+
+    @Test
+    fun failedModelPredictionFallsBackToWorkflowGuidance() = runTest {
+        val controller = OnboardingFormController(
+            sessionId = "model-failure-session",
+            fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = NextFieldPredictor { _, _, _, _ -> error("model unavailable") }
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals("email_address", controller.guidanceFlow.value.nextFieldId)
+        assertTrue(controller.guidanceFlow.value.modelUnavailable)
     }
 
     @Test
@@ -200,8 +252,7 @@ class OnboardingFormControllerTest {
 
     private data class SessionEvent(
         val type: String,
-        val fieldId: String?,
-        val value: String?
+        val fieldId: String?
     )
 
     private class RecordingOnboardingSessionStore : OnboardingSessionStore {
@@ -219,12 +270,13 @@ class OnboardingFormControllerTest {
             entries += entry
         }
 
-        override fun startSession(
+            override fun startSession(
             sessionId: String,
             agentId: String,
             industry: String,
             context: String,
-            playbook: OnboardingPlaybook
+            playbook: OnboardingPlaybook,
+            consentConfirmedAt: Long
         ) {
             startedSession = SessionStart(
                 sessionId,
@@ -241,8 +293,8 @@ class OnboardingFormControllerTest {
             if (isValid) validatedFields += fieldId
         }
 
-        override fun appendEvent(sessionId: String, type: String, fieldId: String?, value: String?) {
-            events += SessionEvent(type, fieldId, value)
+        override fun appendEvent(sessionId: String, type: String, fieldId: String?) {
+            events += SessionEvent(type, fieldId)
         }
 
         override fun markCompleted(sessionId: String) {

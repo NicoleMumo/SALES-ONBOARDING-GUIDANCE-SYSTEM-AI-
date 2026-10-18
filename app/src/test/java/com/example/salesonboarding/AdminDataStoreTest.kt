@@ -34,6 +34,34 @@ class AdminDataStoreTest {
     }
 
     @Test
+    fun savedFieldCanBeAppliedLocallyWithoutReloadingAndKeepsRuleOverrides() {
+        val fullName = KnownFields.get("full_name")
+        val initialConfiguration = FieldRuleConfiguration(
+            overrides = mapOf(
+                fullName.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                    removeRules = listOf(Required, NotBlank)
+                )
+            )
+        )
+        val custom = customField(
+            fieldId = "business_type",
+            name = "Business type",
+            description = "Select the customer type.",
+            fieldType = "choice",
+            rules = setOf(AdminRule.REQUIRED),
+            choices = setOf("Retail", "Wholesale")
+        )
+
+        val updated = initialConfiguration.withCustomField(custom)
+        val configuredFields = updated.allFields(listOf(fullName))
+
+        assertEquals(listOf("full_name", "business_type"), configuredFields.map { it.fieldId })
+        assertTrue(configuredFields.first().validationRule.none { it == Required || it == NotBlank })
+        assertEquals("Select the customer type.", configuredFields.last().description)
+        assertTrue(configuredFields.last().validationRule.contains(OneOf(setOf("Retail", "Wholesale"))))
+    }
+
+    @Test
     fun selectedCustomFieldRulesAreAllConverted() {
         val rules = setOf(
             AdminRule.REQUIRED,
