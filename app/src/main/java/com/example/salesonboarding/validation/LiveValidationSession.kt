@@ -19,7 +19,8 @@ class LiveValidationSession(
     fields: List<FormField> = KnownFields.all,
     configuration: FieldRuleConfiguration = FieldRuleConfiguration(),
     private val scope: CoroutineScope,
-    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS
+    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS,
+    private val onValidationSettled: (fieldId: String, result: ValidationResult) -> Unit = { _, _ -> }
 ) {
     private val fieldsById = configuration.allFields(fields).associateBy { it.fieldId }
     private val validationJobs = mutableMapOf<String, Job>()
@@ -69,6 +70,7 @@ class LiveValidationSession(
             updatedResults[fieldId] = field.validate(entry, context)
         }
         state.value = state.value.copy(results = updatedResults)
+        onValidationSettled(changedFieldId, updatedResults.getValue(changedFieldId))
     }
 
     private fun ValidationRule.dependsOn(fieldId: String): Boolean =
