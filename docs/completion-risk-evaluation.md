@@ -6,10 +6,17 @@ scenario is `incomplete_sessions`, `long_completion_times`,
 `revisited_fields`, or `validation_errors`. Normal completions are the
 negative class.
 
-Run the reproducible evaluation with:
+The duration feature counts whether any individual event exceeded 15 minutes;
+it does not compare summed session duration with an event-level threshold.
+The same rule is used by the Android scorer. The ground-truth labels still
+come from the synthetic generator's scenario, so this is not independent
+evidence that the score predicts real abandonment.
+
+Run each reproducible evaluation with:
 
 ```powershell
-python src/evaluate_completion_risk.py
+python src/evaluate_completion_risk.py --split-column split --seed 42 --output results/completion-risk-session.json
+python src/evaluate_completion_risk.py --split-column agent_split --seed 42 --output results/completion-risk-agent.json
 ```
 
 ## Test-set result
@@ -26,9 +33,9 @@ python src/evaluate_completion_risk.py
 | Actually difficult | 210 | 259 |
 | Actually normal | 0 | 431 |
 
-The scorer is conservative: it does not incorrectly flag any normal session
-in this test split, but it misses some difficult sessions. Most detected
-sessions are driven by validation errors. Long or incomplete sessions without
-validation errors often remain below the medium-risk threshold. This means
-the current scorer is useful for high-confidence intervention, but should not
-be treated as a complete predictor of abandonment risk.
+The figures above are the previous session-total-duration evaluation and are
+retained as historical results; rerun both commands after the per-event fix
+before citing current risk performance. Each output JSON includes the selected
+split, confusion matrix, average precision, recall at precision of at least
+0.80, Brier score, and calibration bins. Do not interpret these synthetic
+metrics as real customer performance.
