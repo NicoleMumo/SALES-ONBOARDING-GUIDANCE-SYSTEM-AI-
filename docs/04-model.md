@@ -45,3 +45,20 @@ The model was trained and evaluated on synthetic data. The high evaluation
 scores reflect the structured dataset and should not be treated as proof of
 production performance. Real-data validation, privacy review, and confidence
 thresholding are still required before production use.
+
+## Comparing the model with simple baselines
+
+The evaluation script compares the Transformer with canonical workflow order,
+majority lookups, and a two-field Markov baseline. It reports top-1, top-3,
+and macro-F1, including retry and revisit steps. Run it for both split types:
+
+```powershell
+python src/evaluate_next_field.py --split-column split --seed 42 --output results/next-field-session.json
+python src/evaluate_next_field.py --split-column agent_split --seed 42 --output results/next-field-agent.json
+```
+
+The session-level run evaluates the saved Transformer when its local Keras
+artifact is available. The agent-level run reports baselines only until the
+model has been retrained with `agent_split`. These commands have not yet been
+run to produce new results. Do not claim that the Transformer adds value
+until the comparisons are complete.
