@@ -17,7 +17,7 @@ class CompletionRiskGuidanceTest {
     @Test
     fun mediumRiskRecommendsReviewingInformation() {
         val result = CompletionRiskCalculator.calculate(
-            CompletionRiskFeatures(16.0, 0, 1, 40.0)
+            CompletionRiskFeatures(16.0, 0, 1, 40.0, longEventCount = 1)
         )
 
         assertEquals(
@@ -29,7 +29,7 @@ class CompletionRiskGuidanceTest {
     @Test
     fun highRiskRecommendsHelpingWithRemainingInformation() {
         val result = CompletionRiskCalculator.calculate(
-            CompletionRiskFeatures(16.0, 1, 2, 40.0)
+            CompletionRiskFeatures(16.0, 1, 2, 40.0, longEventCount = 1)
         )
 
         assertEquals(
