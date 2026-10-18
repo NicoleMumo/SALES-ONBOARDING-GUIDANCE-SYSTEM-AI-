@@ -30,4 +30,10 @@ class FieldRuleConfiguration(
 
     fun allFields(fields: List<FormField>): List<FormField> =
         (fields.map(::fieldFor) + customFields).distinctBy(FormField::fieldId)
+
+    fun withCustomField(field: FormField): FieldRuleConfiguration =
+        FieldRuleConfiguration(
+            overrides = overrides,
+            customFields = (customFields.filterNot { it.fieldId == field.fieldId } + field)
+        )
 }

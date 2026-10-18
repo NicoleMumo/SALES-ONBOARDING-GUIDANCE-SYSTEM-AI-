@@ -7,25 +7,27 @@ import com.google.firebase.database.DataSnapshot
 
 data class StoredOnboardingSession(
     val sessionId: String,
-    val agentId: String,
+    val agentUid: String,
     val industry: String,
     val context: String,
     val status: String,
     val startedAt: Long?,
     val completedAt: Long?,
+    val consentConfirmedAt: Long?,
     val entries: List<FieldEntry>
 )
 
 interface OnboardingSessionStore : FieldEntryStore {
     fun startSession(
         sessionId: String,
-        agentId: String,
+        agentUid: String,
         industry: String,
         context: String,
-        playbook: OnboardingPlaybook
+        playbook: OnboardingPlaybook,
+        consentConfirmedAt: Long = System.currentTimeMillis()
     )
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
-    fun appendEvent(sessionId: String, type: String, fieldId: String?, value: String?)
+    fun appendEvent(sessionId: String, type: String, fieldId: String?)
     fun markCompleted(sessionId: String)
     fun getSession(sessionId: String, onResult: (Result<StoredOnboardingSession?>) -> Unit)
 }
@@ -57,19 +59,21 @@ class FirebaseFieldEntryStore(
 
     override fun startSession(
         sessionId: String,
-        agentId: String,
+        agentUid: String,
         industry: String,
         context: String,
-        playbook: OnboardingPlaybook
+        playbook: OnboardingPlaybook,
+        consentConfirmedAt: Long
     ) {
         sessions.child(sessionId).updateChildren(
             mapOf(
                 "sessionId" to sessionId,
-                "agentId" to agentId,
+                "agentUid" to agentUid,
                 "industry" to industry,
                 "context" to context,
                 "status" to "in_progress",
                 "startedAt" to System.currentTimeMillis(),
+                "consentConfirmedAt" to consentConfirmedAt,
                 "playbookId" to playbook.id,
                 "playbookTitle" to playbook.title,
                 "playbookVersion" to playbook.version,
@@ -103,12 +107,11 @@ class FirebaseFieldEntryStore(
         ).reportFailure("Could not save validation for field '$fieldId'.")
     }
 
-    override fun appendEvent(sessionId: String, type: String, fieldId: String?, value: String?) {
+    override fun appendEvent(sessionId: String, type: String, fieldId: String?) {
         sessions.child(sessionId).child("events").push().setValue(
             mapOf(
                 "type" to type,
                 "fieldId" to fieldId,
-                "valueProvided" to !value.isNullOrBlank(),
                 "timestamp" to System.currentTimeMillis()
             )
         ).reportFailure("Could not save onboarding event '$type'.")
@@ -143,12 +146,13 @@ class FirebaseFieldEntryStore(
         }
         return StoredOnboardingSession(
             sessionId = child("sessionId").getValue(String::class.java) ?: key.orEmpty(),
-            agentId = child("agentId").getValue(String::class.java).orEmpty(),
+            agentUid = child("agentUid").getValue(String::class.java).orEmpty(),
             industry = child("industry").getValue(String::class.java).orEmpty(),
             context = child("context").getValue(String::class.java).orEmpty(),
             status = child("status").getValue(String::class.java).orEmpty(),
             startedAt = child("startedAt").getValue(Long::class.java),
             completedAt = child("completedAt").getValue(Long::class.java),
+            consentConfirmedAt = child("consentConfirmedAt").getValue(Long::class.java),
             entries = entries
         )
     }
