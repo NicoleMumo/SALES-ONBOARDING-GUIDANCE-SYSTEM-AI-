@@ -20,7 +20,10 @@ object CompletionRiskScorer {
             elapsedMinutes = events.sumOf { it.durationMinutes },
             validationErrors = events.count { !it.validationPassed },
             fieldRevisits = events.count { it.isRevisit },
-            progressPercent = events.lastOrNull()?.progressPercent ?: 0.0
+            progressPercent = events.lastOrNull()?.progressPercent ?: 0.0,
+            longEventCount = events.count {
+                it.durationMinutes > CompletionRiskCalculator.LONG_EVENT_THRESHOLD_MINUTES
+            }
         )
         return CompletionRiskCalculator.calculate(features)
     }
