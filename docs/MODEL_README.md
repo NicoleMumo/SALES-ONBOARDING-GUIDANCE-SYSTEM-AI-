@@ -144,6 +144,13 @@ to deterministic, not a claim about how real customers behave.
 
 ## Performance (full 19-epoch run, 58,453 train / 12,415 test transitions)
 
+These are historical results on synthetic data. A mentor's independent
+read-only analysis reported a four-feature majority lookup at 99.09% Top-1 on
+the same test rows, compared with 99.46% for the Transformer. That small gap
+means the headline score alone does not establish value from the Transformer.
+Use `src/evaluate_next_field.py` to reproduce simple baselines before making
+comparative claims; no fresh baseline result is committed yet.
+
 | Metric | Target | Achieved |
 |---|---:|---:|
 | Top-1 | 85% | 99.46% |
@@ -195,7 +202,7 @@ Headline accuracy hides real variation. Tested and found:
   explicit warning for the second. `demo.py` includes the same fix
   (`--robustness` flag).
 
-## Is a Transformer overkill? — tested, not assumed
+## Does the Transformer add value over simple rules? — still being evaluated
 
 A Gradient Boosted Trees model (`simple_model_compare.ipynb`, 7 hand-made
 features: last 3 fields, industry, context, validation status, sequence
@@ -206,9 +213,12 @@ length) trained in under 2 seconds:
 | Transformer | 99.46% | **99.09%** |
 | Simple tree model | 98.20% | **80.21%** |
 
-Nearly matches on familiar data, drops sharply (18pp) on genuinely new
-sequences — concrete justification for the Transformer's complexity: it's
-not about the headline score, it's about generalization.
+The tree comparison is historical and does not settle whether the Transformer
+is warranted. The mentor's 99.09% lookup result is a much stronger simple
+baseline on the same test rows. The evaluation script now reports canonical,
+lookup, Markov, and Transformer performance (for the existing session split);
+run it and replace this section with the reproducible comparison before
+claiming the model adds value.
 
 ## Accessibility (screen readers)
 
