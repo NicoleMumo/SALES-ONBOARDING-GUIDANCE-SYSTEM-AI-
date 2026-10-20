@@ -61,6 +61,101 @@ class OnboardingPlaybookTest {
     }
 
     @Test
+    fun bankingContextPlaybooksMatchTheSyntheticSessionFields() {
+        val configuration = FieldRuleConfiguration()
+        val individual = OnboardingPlaybooks.forIndustry("banking", configuration, "individual")
+        val business = OnboardingPlaybooks.forIndustry("banking", configuration, "business")
+
+        assertEquals(
+            listOf(
+                "full_name",
+                "email_address",
+                "mobile_phone_number",
+                "date_of_birth",
+                "home_address",
+                "identification_document_type",
+                "identification_document_number",
+                "selfie_liveness_check",
+                "face_match_verification",
+                "profession",
+                "income",
+                "assets",
+                "us_person_status",
+                "politically_exposed_person_status",
+                "terms_and_conditions_acceptance"
+            ),
+            individual.fields.map { it.fieldId }
+        )
+        assertEquals(
+            listOf(
+                "full_name",
+                "business_name",
+                "email_address",
+                "mobile_phone_number",
+                "date_of_birth",
+                "home_address",
+                "identification_document_type",
+                "identification_document_number",
+                "selfie_liveness_check",
+                "face_match_verification",
+                "profession",
+                "income",
+                "assets",
+                "us_person_status",
+                "politically_exposed_person_status",
+                "terms_and_conditions_acceptance",
+                "commercial_address",
+                "beneficial_owner_information",
+                "business_relationship_purpose",
+                "business_relationship_nature",
+                "ownership_and_control_information"
+            ),
+            business.fields.map { it.fieldId }
+        )
+    }
+
+    @Test
+    fun telecomContextPlaybooksMatchTheSyntheticSessionFields() {
+        val baseFields = listOf(
+            "full_name",
+            "email_address",
+            "contact_phone_number",
+            "date_of_birth",
+            "gender",
+            "physical_address",
+            "identification_document",
+            "subscriber_type",
+            "service_type",
+            "contract_type",
+            "payment_method",
+            "paperless_billing_preference"
+        )
+        val configuration = FieldRuleConfiguration()
+        fun fieldIds(context: String) =
+            OnboardingPlaybooks.forIndustry("telecom", configuration, context)
+                .fields
+                .map { it.fieldId }
+
+        assertEquals(
+            baseFields + "phone_service_selection" + "subscriber_number",
+            fieldIds("mobile")
+        )
+        assertEquals(
+            baseFields + "internet_service_selection" + "streaming_addons_selection" + "subscriber_number",
+            fieldIds("broadband")
+        )
+        assertEquals(
+            baseFields + "internet_service_selection" + "streaming_addons_selection" + "subscriber_number",
+            fieldIds("tv")
+        )
+        assertEquals(baseFields + "subscriber_number", fieldIds("iot"))
+        assertEquals(
+            baseFields + "phone_service_selection" + "subscriber_number",
+            fieldIds("landline")
+        )
+    }
+
+    @Test
     fun customFieldsAreAppendedAfterStandardSteps() {
         val customField = KnownFields.get("profession")
         val playbook = OnboardingPlaybooks.forIndustry(

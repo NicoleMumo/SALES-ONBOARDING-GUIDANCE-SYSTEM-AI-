@@ -27,10 +27,7 @@ class LoginFormValidatorTest {
     }
 
     @Test
-    fun shortPasswordIsRejected() {
-        assertEquals(
-            "Password must be at least 8 characters.",
-            LoginFormValidator.validate("agent@example.com", "short")
-        )
+    fun existingShortPasswordCanBeUsedToSignIn() {
+        assertNull(LoginFormValidator.validate("agent@example.com", "short"))
     }
 }

@@ -2,23 +2,50 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "salesAgents": {
-      ".read": "auth != null && auth.token.admin === true",
-      ".write": "auth != null && auth.token.admin === true"
+    "companyMemberships": {
+      ".read": "auth != null && auth.token.admin == true && query.orderByChild == 'companyId' && query.equalTo == auth.token.companyId",
+      ".indexOn": ["companyId"],
+      "$agentId": {
+        ".read": "auth != null && ($agentId == auth.uid || (auth.token.admin == true && data.child('companyId').val() == auth.token.companyId))",
+        ".write": "auth != null && ((auth.token.admin == true && data.child('companyId').val() == auth.token.companyId && newData.child('companyId').val() == auth.token.companyId) || ($agentId == auth.uid && !data.exists() && newData.child('email').val() == auth.token.email && newData.child('isActive').val() == true && root.child('companies').child(newData.child('companyId').val()).child('agentInvitations').child(newData.child('invitationKey').val()).child('email').val() == auth.token.email && root.child('companies').child(newData.child('companyId').val()).child('agentInvitations').child(newData.child('invitationKey').val()).child('isActive').val() == true))",
+        ".validate": "newData.hasChildren(['companyId', 'email', 'displayName', 'isActive', 'invitationKey']) && newData.child('companyId').val().matches(/^[A-Za-z0-9_-]{3,64}$/)"
+      }
     },
-    "fieldRuleOverrides": {
-      ".read": "auth != null",
-      ".write": "auth != null && auth.token.admin === true"
-    },
-    "fieldDefinitions": {
-      ".read": "auth != null",
-      ".write": "auth != null && auth.token.admin === true"
-    },
-    "onboardingSessions": {
-      ".read": "auth != null && auth.token.admin === true",
-      "$sessionId": {
-        ".read": "auth != null && (auth.token.admin === true || data.child('agentUid').val() === auth.uid)",
-        ".write": "auth != null && (auth.token.admin === true || (newData.child('agentUid').val() === auth.uid && (!data.exists() || data.child('agentUid').val() === auth.uid)))"
+    "companies": {
+      "$companyId": {
+        "settings": {
+          ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId) || (root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true))",
+          "industry": {
+            ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId",
+            ".validate": "newData.val() == 'banking' || newData.val() == 'telecom'"
+          }
+        },
+        "agentInvitations": {
+          ".read": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId",
+          ".indexOn": ["email"],
+          "$emailKey": {
+            ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId) || data.child('email').val() == auth.token.email)",
+            ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId",
+            ".validate": "newData.hasChildren(['email', 'displayName', 'isActive'])"
+          }
+        },
+        "fieldRuleOverrides": {
+          ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId) || (root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true))",
+          ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId"
+        },
+        "fieldDefinitions": {
+          ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId) || (root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true))",
+          ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId"
+        },
+        "onboardingSessions": {
+          ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId && query.orderByChild == 'startedAt') || (root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && query.orderByChild == 'agentId' && query.equalTo == auth.uid))",
+          ".indexOn": ["agentId", "startedAt"],
+          "$sessionId": {
+            ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId) || (data.child('companyId').val() == $companyId && data.child('agentId').val() == auth.uid && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true))",
+            ".write": "auth != null && auth.token.admin != true && root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && ((!data.exists() && newData.child('companyId').val() == $companyId && newData.child('agentId').val() == auth.uid && newData.child('status').val() == 'in_progress') || (data.child('companyId').val() == $companyId && data.child('agentId').val() == auth.uid && newData.child('companyId').val() == $companyId && newData.child('agentId').val() == auth.uid && data.child('status').val() == 'in_progress' && (newData.child('status').val() == 'in_progress' || newData.child('status').val() == 'completed')))",
+            ".validate": "newData.hasChildren(['companyId', 'agentId', 'status']) && newData.child('companyId').val() == $companyId"
+          }
+        }
       }
     }
   }
