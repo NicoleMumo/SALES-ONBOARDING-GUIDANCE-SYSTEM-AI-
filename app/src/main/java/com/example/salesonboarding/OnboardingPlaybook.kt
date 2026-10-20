@@ -5,8 +5,6 @@ import com.example.salesonboarding.validation.FormField
 import com.example.salesonboarding.validation.KnownFields
 import com.example.salesonboarding.validation.NotBlank
 import com.example.salesonboarding.validation.Required
-import com.example.salesonboarding.validation.RequiredIf
-import com.example.salesonboarding.validation.OneOf
 import java.security.MessageDigest
 
 data class OnboardingPlaybook(
@@ -43,29 +41,65 @@ data class OnboardingPlaybook(
 }
 
 object OnboardingPlaybooks {
-    private val bankingBaseFields = listOf(
-            "full_name",
-            "email_address",
-            "mobile_phone_number",
-            "date_of_birth",
-            "home_address",
-            "identification_document_type",
-            "identification_document_number",
-            "selfie_liveness_check",
-            "face_match_verification",
-            "profession",
-            "income",
-            "assets",
-            "us_person_status",
-            "politically_exposed_person_status",
-            "terms_and_conditions_acceptance"
+    private val bankingIndividualFields = listOf(
+        "full_name",
+        "email_address",
+        "mobile_phone_number",
+        "date_of_birth",
+        "home_address",
+        "identification_document_type",
+        "identification_document_number",
+        "selfie_liveness_check",
+        "face_match_verification",
+        "profession",
+        "income",
+        "assets",
+        "us_person_status",
+        "politically_exposed_person_status",
+        "terms_and_conditions_acceptance"
     )
-    private val bankingBusinessFields = listOf(
-        "commercial_address",
-        "beneficial_owner_information",
-        "business_relationship_purpose",
-        "business_relationship_nature",
-        "ownership_and_control_information"
+
+    private val bankingBusinessFields =
+        listOf("full_name", "business_name") + bankingIndividualFields.drop(1) + listOf(
+            "commercial_address",
+            "beneficial_owner_information",
+            "business_relationship_purpose",
+            "business_relationship_nature",
+            "ownership_and_control_information"
+        )
+
+    private val telecomBaseFields = listOf(
+        "full_name",
+        "email_address",
+        "contact_phone_number",
+        "date_of_birth",
+        "gender",
+        "physical_address",
+        "identification_document",
+        "subscriber_type",
+        "service_type",
+        "contract_type",
+        "payment_method",
+        "paperless_billing_preference"
+    )
+
+    private val fieldsByIndustry = mapOf(
+        "telecom" to telecomBaseFields + listOf("subscriber_number"),
+        "banking" to bankingIndividualFields
+    )
+
+    private val fieldsByContext = mapOf(
+        "banking" to mapOf(
+            "individual" to bankingIndividualFields,
+            "business" to bankingBusinessFields
+        ),
+        "telecom" to mapOf(
+            "mobile" to telecomFields("mobile"),
+            "broadband" to telecomFields("broadband"),
+            "tv" to telecomFields("tv"),
+            "iot" to telecomFields("iot"),
+            "landline" to telecomFields("landline")
+        )
     )
 
     fun forIndustry(
@@ -73,61 +107,95 @@ object OnboardingPlaybooks {
         configuration: FieldRuleConfiguration,
         context: String? = null
     ): OnboardingPlaybook {
-        val workflowContext = context ?: if (industry == "banking") "individual" else "mobile"
-        val fieldIds = when (industry) {
-            "banking" -> bankingBaseFields + if (workflowContext == "business") bankingBusinessFields else emptyList()
-            "telecom" -> listOf(
-                "full_name", "email_address", "contact_phone_number", "date_of_birth",
-                "gender", "physical_address", "identification_document", "subscriber_type",
-                "service_type", "contract_type", "payment_method", "paperless_billing_preference"
-            ) + when (workflowContext) {
-                "mobile", "landline" -> listOf("phone_service_selection")
-                "broadband", "tv" -> listOf("internet_service_selection", "streaming_addons_selection")
-                "iot" -> emptyList()
-                else -> throw IllegalArgumentException("Unsupported telecom context '$workflowContext'.")
-            } + "subscriber_number"
-            else -> throw IllegalArgumentException("No onboarding playbook is defined for industry '$industry'.")
+        val baseFieldIds = requireNotNull(fieldsByIndustry[industry]) {
+            "No onboarding playbook is defined for industry '$industry'."
         }
-        if (industry == "banking" && workflowContext !in setOf("individual", "business")) {
-            throw IllegalArgumentException("Unsupported banking context '$workflowContext'.")
+        val fieldIds = if (context == null) {
+            baseFieldIds
+        } else {
+            requireNotNull(fieldsByContext[industry]?.get(context)) {
+                "No onboarding playbook is defined for '$industry' context '$context'."
+            }
         }
         val catalogue = KnownFields.all.associateBy(FormField::fieldId)
-        val businessOnly = if (industry == "banking" && workflowContext == "business") {
-            bankingBusinessFields.toSet()
-        } else {
-            emptySet()
-        }
         val industryFields = fieldIds.map { fieldId ->
-            val field = requireNotNull(catalogue[fieldId]) {
-                "Playbook field '$fieldId' is missing from the known-field catalogue."
-            }
-            val configured = configuration.fieldFor(field)
-            when {
-                industry == "telecom" && fieldId == "service_type" -> configured.copy(
+            val field = catalogue[fieldId] ?: if (fieldId == "business_name") {
+                FormField(
+                    fieldId = "business_name",
+                    fieldName = "Registered business name",
+                    fieldType = "text",
                     isRequired = true,
-                    validationRule = listOf(Required, NotBlank, OneOf(setOf(workflowContext)))
+                    validationRule = listOf(Required, NotBlank),
+                    description = "Enter the business name as shown on its registration documents."
                 )
-                fieldId in businessOnly -> {
-                    configured.copy(
+            } else {
+                error("Playbook field '$fieldId' is missing from the known-field catalogue.")
+            }
+            val configuredField = configuration.fieldFor(field)
+            when {
+                industry == "banking" && context == "business" && fieldId in BANKING_BUSINESS_REQUIRED_FIELDS ->
+                    configuredField.copy(
                         isRequired = true,
-                        validationRule = (configured.validationRule.filterNot { it is RequiredIf } + Required + NotBlank).distinct()
+                        validationRule = configuredField.validationRule
+                            .filterNot { it is com.example.salesonboarding.validation.RequiredIf } +
+                            listOf(Required, NotBlank)
                     )
-                }
-                else -> configured
+                industry == "banking" && context == "business" && fieldId in BANKING_BUSINESS_OPTIONAL_FIELDS ->
+                    configuredField.copy(
+                        validationRule = configuredField.validationRule
+                            .filterNot { it is com.example.salesonboarding.validation.RequiredIf }
+                    )
+                context != null && fieldId in setOf("phone_service_selection", "internet_service_selection") ->
+                    configuredField.copy(
+                        isRequired = true,
+                        validationRule = configuredField.validationRule
+                            .filterNot { it is com.example.salesonboarding.validation.RequiredIf } +
+                            listOf(Required, NotBlank)
+                    )
+                else -> configuredField
             }
         }
         val fields = (industryFields + configuration.customFields)
             .distinctBy(FormField::fieldId)
-        val title = when (industry) {
+        val industryTitle = when (industry) {
             "telecom" -> "Telecommunications onboarding"
             "banking" -> "Banking onboarding"
             else -> industry.replaceFirstChar(Char::uppercase) + " onboarding"
         }
+        val title = if (context == null) industryTitle else {
+            "${industryTitle.removeSuffix(" onboarding")} ${context.replaceFirstChar(Char::uppercase)} onboarding"
+        }
         return OnboardingPlaybook.create(
-            id = "$industry-standard-onboarding",
-            title = "$title (${workflowContext.replaceFirstChar(Char::uppercase)})",
+            id = if (context == null) "$industry-standard-onboarding" else "$industry-$context-onboarding",
+            title = title,
             industry = industry,
             fields = fields
         )
     }
+
+    private fun telecomFields(context: String): List<String> {
+        val contextFields = when (context) {
+            "mobile", "landline" -> listOf("phone_service_selection")
+            "broadband", "tv" -> listOf("internet_service_selection")
+            else -> emptyList()
+        }
+        val streamingFields = if (context == "tv" || context == "broadband") {
+            listOf("streaming_addons_selection")
+        } else {
+            emptyList()
+        }
+        return telecomBaseFields + contextFields + streamingFields + listOf("subscriber_number")
+    }
+
+    private val BANKING_BUSINESS_REQUIRED_FIELDS = setOf(
+        "commercial_address",
+        "beneficial_owner_information",
+        "business_relationship_nature",
+        "business_relationship_purpose"
+    )
+
+    private val BANKING_BUSINESS_OPTIONAL_FIELDS = setOf(
+        "ownership_and_control_information",
+        "assets"
+    )
 }

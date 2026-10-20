@@ -1,20 +1,29 @@
 package com.example.salesonboarding
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,25 +32,37 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.salesonboarding.validation.FieldRuleConfiguration
+import com.example.salesonboarding.validation.FormField
 import com.example.salesonboarding.validation.KnownFields
+import com.example.salesonboarding.validation.OneOf
 import java.util.Locale
 
 @Composable
 fun AdminDashboardScreen(
     onSignOut: () -> Unit,
     store: AdminDataStore,
+    companyId: String,
     onConfigurationChanged: (FieldRuleConfiguration) -> Unit,
+    onCompanyIndustryChanged: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedSection by remember { mutableStateOf(AdminSection.AGENTS) }
     var agents by remember { mutableStateOf<List<SalesAgentAccount>>(emptyList()) }
     var analytics by remember { mutableStateOf<OnboardingAnalytics?>(null) }
+    var sessions by remember { mutableStateOf<List<StoredOnboardingSession>>(emptyList()) }
     var configuration by remember { mutableStateOf(FieldRuleConfiguration()) }
+    var companyIndustry by remember { mutableStateOf<String?>(null) }
+    var isSavingCompanyIndustry by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var agentStatusMessage by remember { mutableStateOf<String?>(null) }
     var isLoadingAnalytics by remember { mutableStateOf(false) }
     var analyticsErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoadingSessions by remember { mutableStateOf(false) }
+    var sessionsErrorMessage by remember { mutableStateOf<String?>(null) }
 
     fun <T> handle(result: Result<T>, onSuccess: (T) -> Unit = {}) {
         result.onSuccess {
@@ -52,7 +73,20 @@ fun AdminDashboardScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    fun loadSessions() {
+        isLoadingSessions = true
+        sessionsErrorMessage = null
+        store.loadSessions { result ->
+            isLoadingSessions = false
+            result.onSuccess { sessions = it; sessionsErrorMessage = null }
+                .onFailure { sessionsErrorMessage = it.message ?: "Could not load onboarding sessions." }
+        }
+    }
+
+    LaunchedEffect(companyId) {
+        store.loadCompanyIndustry(companyId) {
+            handle(it) { companyIndustry = it }
+        }
         store.observeAgents { handle(it) { agents = it } }
         store.loadRuleConfiguration { handle(it) {
             configuration = it
@@ -71,156 +105,380 @@ fun AdminDashboardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            text = "SalesMesh admin",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Text(
-            text = "Manage access, onboarding validation, and operational performance.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 720.dp)
+                .align(Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "SalesMesh",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Company $companyId",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onSignOut) { Text("Sign out") }
+            }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AdminSection.values().forEach { section ->
-                androidx.compose.material3.FilterChip(
-                    selected = selectedSection == section,
-                    onClick = { selectedSection = section },
-                    label = { Text(section.label) }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Admin dashboard", style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    "Manage your company’s agents, forms, and activity.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
 
-        when (selectedSection) {
-            AdminSection.AGENTS -> AgentAccountsSection(
-                agents = agents,
-                onAdd = { email, name ->
-                    store.addAgent(email, name) {
-                        handle(it) {
-                            store.observeAgents { refreshed -> handle(refreshed) { agents = it } }
-                        }
-                    }
-                },
-                onToggleActive = { agent ->
-                    store.setAgentActive(agent.id, !agent.isActive) {
-                        handle(it) {
-                            agents = agents.map { current ->
-                                if (current.id == agent.id) current.copy(isActive = !agent.isActive) else current
+            errorMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+            agentStatusMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.primary)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AdminSummaryCard(
+                    label = "Agent profiles",
+                    value = agents.size.toString(),
+                    detail = "${agents.count(SalesAgentAccount::isActive)} active",
+                    modifier = Modifier.weight(1f)
+                )
+                AdminSummaryCard(
+                    label = "Onboarding sessions",
+                    value = analytics?.sessionCount?.toString() ?: "—",
+                    detail = "${analytics?.completedCount ?: 0} completed",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AdminSection.values().forEach { section ->
+                    FilterChip(
+                        selected = selectedSection == section,
+                        onClick = {
+                            selectedSection = section
+                            if (section == AdminSection.SESSIONS) loadSessions()
+                        },
+                        label = { Text(section.label) }
+                    )
+                }
+            }
+
+            when (selectedSection) {
+                AdminSection.COMPANY -> CompanySettingsSection(
+                    industry = companyIndustry,
+                    isSaving = isSavingCompanyIndustry,
+                    onSaveIndustry = { industry ->
+                        isSavingCompanyIndustry = true
+                        store.saveCompanyIndustry(industry) { result ->
+                            isSavingCompanyIndustry = false
+                            handle(result) {
+                                companyIndustry = industry
+                                onCompanyIndustryChanged(industry)
                             }
                         }
                     }
-                }
-            )
-            AdminSection.RULES -> RuleConfigurationSection(
-                configuration = configuration,
-                onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
-                    store.addCustomField(fieldId, name, description, type, rules, choices) {
-                        onComplete(it)
-                        handle(it) {
-                            store.loadRuleConfiguration { loaded ->
-                                handle(loaded) {
-                                    configuration = it
-                                    onConfigurationChanged(it)
+                )
+                AdminSection.AGENTS -> AgentAccountsSection(
+                    agents = agents,
+                    onAdd = { email, name, onComplete ->
+                        agentStatusMessage = null
+                        store.addAgent(email, name) {
+                            it.onSuccess {
+                                agentStatusMessage = "Invitation added. Share the company ID with the agent so they can register with this email, verify it, and join your company."
+                                store.observeAgents { refreshed -> handle(refreshed) { agents = it } }
+                                onComplete(Result.success(Unit))
+                            }.onFailure { error ->
+                                errorMessage = error.message ?: "Could not add the agent profile."
+                                onComplete(Result.failure(error))
+                            }
+                        }
+                    },
+                    onToggleActive = { agent ->
+                        store.setAgentActive(agent.id, !agent.isActive) {
+                            handle(it) {
+                                agents = agents.map { current ->
+                                    if (current.id == agent.id) current.copy(isActive = !agent.isActive) else current
                                 }
                             }
                         }
                     }
-                },
-                onRequiredChanged = { fieldId, enabled ->
-                    store.saveRequiredRule(fieldId, enabled) {
-                        handle(it) {
-                            store.loadRuleConfiguration { loaded ->
-                                handle(loaded) {
-                                    configuration = it
-                                    onConfigurationChanged(it)
+                )
+                AdminSection.RULES -> RuleConfigurationSection(
+                    configuration = configuration,
+                    onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
+                        store.addCustomField(fieldId, name, description, type, rules, choices) {
+                            onComplete(it)
+                            handle(it) {
+                                val updatedConfiguration = configuration.withCustomField(
+                                    customField(fieldId, name, description, type, rules, choices)
+                                )
+                                configuration = updatedConfiguration
+                                onConfigurationChanged(updatedConfiguration)
+                            }
+                        }
+                    },
+                    onRequiredChanged = { fieldId, enabled ->
+                        store.saveRequiredRule(fieldId, enabled) {
+                            handle(it) {
+                                store.loadRuleConfiguration { loaded ->
+                                    handle(loaded) {
+                                        configuration = it
+                                        onConfigurationChanged(it)
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            )
-            AdminSection.ANALYTICS -> AnalyticsSection(
-                analytics = analytics,
-                agents = agents,
-                isLoading = isLoadingAnalytics,
-                errorMessage = analyticsErrorMessage,
-                onRefresh = {
-                    isLoadingAnalytics = true
-                    analyticsErrorMessage = null
-                    store.loadAnalytics {
-                        isLoadingAnalytics = false
-                        it.onSuccess { analytics = it; analyticsErrorMessage = null }
-                            .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
-                        handle(it)
+                )
+                AdminSection.ANALYTICS -> AnalyticsSection(
+                    analytics = analytics,
+                    agents = agents,
+                    isLoading = isLoadingAnalytics,
+                    errorMessage = analyticsErrorMessage,
+                    onRefresh = {
+                        isLoadingAnalytics = true
+                        analyticsErrorMessage = null
+                        store.loadAnalytics {
+                            isLoadingAnalytics = false
+                            it.onSuccess { analytics = it; analyticsErrorMessage = null }
+                                .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
+                            handle(it)
+                        }
                     }
-                }
-            )
-        }
+                )
+                AdminSection.SESSIONS -> SessionHistoryContent(
+                    title = "All client sessions",
+                    description = "Search and filter the organization’s onboarding records. Details are read-only.",
+                    sessions = sessions,
+                    agents = agents,
+                    isLoading = isLoadingSessions,
+                    errorMessage = sessionsErrorMessage,
+                    onRefresh = ::loadSessions
+                )
+            }
 
-        errorMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
         }
+    }
+}
 
-        Button(
-            onClick = onSignOut,
-            modifier = Modifier.fillMaxWidth()
+@Composable
+private fun AdminSummaryCard(
+    label: String,
+    value: String,
+    detail: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text("Sign out")
+            Text(label, style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 private enum class AdminSection(val label: String) {
+    COMPANY("Company"),
     AGENTS("Sales agents"),
+    SESSIONS("Client sessions"),
     RULES("Field rules"),
     ANALYTICS("Analytics")
 }
 
 @Composable
+private fun CompanySettingsSection(
+    industry: String?,
+    isSaving: Boolean,
+    onSaveIndustry: (String) -> Unit
+) {
+    var selectedIndustry by remember(industry) { mutableStateOf(industry) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Company onboarding industry", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Agents in this company will use the selected industry’s onboarding form. You can change it while the company setup is being finalized.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = selectedIndustry == "banking",
+                onClick = { selectedIndustry = "banking" },
+                enabled = !isSaving,
+                label = { Text("Banking") }
+            )
+            FilterChip(
+                selected = selectedIndustry == "telecom",
+                onClick = { selectedIndustry = "telecom" },
+                enabled = !isSaving,
+                label = { Text("Telecommunications") }
+            )
+        }
+        Button(
+            onClick = { selectedIndustry?.let(onSaveIndustry) },
+            enabled = !isSaving && selectedIndustry != null && selectedIndustry != industry,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (isSaving) "Saving..." else if (industry == null) "Set company industry" else "Save industry")
+        }
+    }
+}
+
+@Composable
 private fun AgentAccountsSection(
     agents: List<SalesAgentAccount>,
-    onAdd: (String, String) -> Unit,
+    onAdd: (String, String, (Result<Unit>) -> Unit) -> Unit,
     onToggleActive: (SalesAgentAccount) -> Unit
 ) {
         var email by remember { mutableStateOf("") }
         var name by remember { mutableStateOf("") }
-        Card(modifier = Modifier.fillMaxWidth()) {
+        var isCreating by remember { mutableStateOf(false) }
+        var creationError by remember { mutableStateOf<String?>(null) }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Sales agent accounts", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true)
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true)
+                Text("Add an agent to the team", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Add their work email here. Share the company ID with them; they will register with this email and verify it before joining.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                creationError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+                OutlinedTextField(
+                    name,
+                    { name = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("Agent name") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    email,
+                    { email = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("Work email") },
+                    singleLine = true
+                )
                 Button(
                     onClick = {
-                        onAdd(email.trim(), name.trim())
-                        email = ""
-                        name = ""
+                        val submittedEmail = email.trim()
+                        isCreating = true
+                        creationError = null
+                        onAdd(submittedEmail, name.trim()) { result ->
+                            isCreating = false
+                            result.onSuccess {
+                                email = ""
+                                name = ""
+                            }.onFailure {
+                                creationError = it.message ?: "Could not create this agent. Check the connection and try again."
+                            }
+                        }
                     },
-                    enabled = email.contains("@") && name.isNotBlank(),
+                    enabled = !isCreating && email.contains("@") && name.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Add agent")
+                    Text(if (isCreating) "Adding agent..." else "Add agent")
                 }
-                HorizontalDivider()
+            }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Team members", style = MaterialTheme.typography.titleMedium)
                 if (agents.isEmpty()) {
-                    Text("No agent accounts have been added yet.")
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Text(
+                            "No agents yet. Add an agent above to get started.",
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 } else {
                     agents.forEach { agent ->
-                        Row(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(agent.displayName, style = MaterialTheme.typography.titleSmall)
-                                Text(agent.email, style = MaterialTheme.typography.bodySmall)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                        .padding(10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        agent.displayName.firstOrNull()?.uppercase() ?: "A",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(agent.displayName, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        agent.email,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        when {
+                                            !agent.isActive -> "Inactive"
+                                            agent.isRegistered -> "Registered"
+                                            else -> "Invitation pending"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (agent.isActive) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = agent.isActive,
+                                    onCheckedChange = { onToggleActive(agent) }
+                                )
                             }
-                            Switch(checked = agent.isActive, onCheckedChange = { onToggleActive(agent) })
                         }
                     }
                 }
@@ -260,7 +518,7 @@ private fun RuleConfigurationSection(
             ) {
                 Text("Onboarding field rules", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Changes affect future onboarding sessions. Custom fields are not added to the AI model vocabulary.",
+                    "Fields apply to agents in your company and affect new sessions. Custom fields are not added to the AI model vocabulary.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -315,6 +573,7 @@ private fun RuleConfigurationSection(
                     .orEmpty()
                 Button(
                     onClick = {
+                        isSavingField = true
                         onAddField(
                             fieldId,
                             fieldName.trim(),
@@ -332,7 +591,6 @@ private fun RuleConfigurationSection(
                             }
                             isSavingField = false
                         }
-                        isSavingField = true
                     },
                     enabled = fieldId.isNotBlank() && fieldName.isNotBlank() &&
                         description.isNotBlank() && !isSavingField &&
@@ -341,7 +599,23 @@ private fun RuleConfigurationSection(
                         fieldId !in configuration.customFields.map { it.fieldId },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (isSavingField) "Saving..." else "Add field")
+                    if (isSavingField) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    Text(if (isSavingField) "Saving field..." else "Add field")
+                }
+                if (isSavingField) {
+                    Text(
+                        "Waiting for the database to confirm the field. Keep this screen open.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 HorizontalDivider()
                 configuration.customFields.forEach { field ->
@@ -394,40 +668,120 @@ private fun AnalyticsSection(
     errorMessage: String?,
     onRefresh: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Onboarding analytics", style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onRefresh, enabled = !isLoading) {
-                Text(if (isLoading) "Refreshing..." else "Refresh analytics")
+            Column {
+                Text("Team insights", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "A quick view of onboarding consistency.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            if (errorMessage != null) {
-                Text(errorMessage, color = MaterialTheme.colorScheme.error)
-            } else if (analytics == null && !isLoading) {
-                Text("No session data is available.")
-            } else if (isLoading && analytics == null) {
-                Text("Loading analytics...")
-            } else if (analytics != null) {
-                Text("Sessions: ${analytics.sessionCount}")
-                Text("Completion rate: ${"%.1f".format(analytics.completionRate * 100)}%")
-                Text("Average completion time: ${"%.1f".format(analytics.averageCompletionMinutes)} minutes")
-                Text("Average form progress: ${"%.0f".format(analytics.averageReadinessPercent)}%")
-                analytics.commonPausePoint?.let {
-                    Text("Most common unfinished step: $it")
+            TextButton(onClick = onRefresh, enabled = !isLoading) {
+                Text(if (isLoading) "Refreshing..." else "Refresh")
+            }
+        }
+        if (errorMessage != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Text(
+                    errorMessage,
+                    modifier = Modifier.padding(14.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        } else if (analytics == null && !isLoading) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Text(
+                    "No onboarding sessions are available yet.",
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else if (isLoading && analytics == null) {
+            Text("Loading team insights...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (analytics != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AdminSummaryCard(
+                    "Completion rate",
+                    "${"%.0f".format(analytics.completionRate * 100)}%",
+                    "${analytics.completedCount} of ${analytics.sessionCount} sessions",
+                    Modifier.weight(1f)
+                )
+                AdminSummaryCard(
+                    "Average time",
+                    "${"%.1f".format(analytics.averageCompletionMinutes)} min",
+                    "For completed sessions",
+                    Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AdminSummaryCard(
+                    "Average progress",
+                    "${"%.0f".format(analytics.averageReadinessPercent)}%",
+                    "Required fields completed",
+                    Modifier.weight(1f)
+                )
+                AdminSummaryCard(
+                    "Total sessions",
+                    analytics.sessionCount.toString(),
+                    "Across the team",
+                    Modifier.weight(1f)
+                )
+            }
+            analytics.commonPausePoint?.let { pausePoint ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("Common unfinished step", style = MaterialTheme.typography.titleSmall)
+                        Text(pausePoint, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                if (analytics.agentPerformance.isNotEmpty()) {
-                    HorizontalDivider()
-                    Text("Team consistency", style = MaterialTheme.typography.titleSmall)
-                    analytics.agentPerformance.forEach { performance ->
-                        val displayName = agents.firstOrNull {
-                            it.email.equals(performance.agentId, ignoreCase = true)
-                        }?.displayName ?: performance.agentId
-                        Text(
-                            "$displayName — ${performance.completedCount}/${performance.sessionCount} completed " +
-                                "(${ "%.0f".format(performance.completionRate * 100) }%)"
-                        )
+            }
+            if (analytics.agentPerformance.isNotEmpty()) {
+                Text("Team consistency", style = MaterialTheme.typography.titleMedium)
+                analytics.agentPerformance.forEach { performance ->
+                    val displayName = agents.firstOrNull {
+                        it.email.equals(performance.agentId, ignoreCase = true)
+                    }?.displayName ?: performance.agentId
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(displayName, style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "${performance.completedCount} of ${performance.sessionCount} sessions completed",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                "${"%.0f".format(performance.completionRate * 100)}%",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
@@ -446,3 +800,22 @@ private fun List<com.example.salesonboarding.validation.ValidationRule>.toAdminR
     if (this@toAdminRules.any { it is com.example.salesonboarding.validation.MustBeTrue }) add(AdminRule.MUST_BE_TRUE)
     if (this@toAdminRules.any { it is com.example.salesonboarding.validation.DateFormatAndMinimumAge }) add(AdminRule.DATE)
 }
+
+private fun customField(
+    fieldId: String,
+    name: String,
+    description: String,
+    fieldType: String,
+    rules: Set<AdminRule>,
+    choices: Set<String>
+): FormField = FormField(
+    fieldId = fieldId,
+    fieldName = name,
+    fieldType = fieldType,
+    isRequired = rules.any {
+        it == AdminRule.REQUIRED || it == AdminRule.NOT_BLANK || it == AdminRule.MUST_BE_TRUE
+    },
+    validationRule = rules.toValidationRules() +
+        if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
+    description = description
+)

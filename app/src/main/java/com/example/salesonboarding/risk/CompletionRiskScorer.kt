@@ -17,7 +17,7 @@ data class CompletionRiskEvent(
 object CompletionRiskScorer {
     fun score(events: List<CompletionRiskEvent>): CompletionRiskResult {
         val features = CompletionRiskFeatures(
-            elapsedMinutes = events.sumOf { it.durationMinutes },
+            elapsedMinutes = events.maxOfOrNull { it.durationMinutes } ?: 0.0,
             validationErrors = events.count { !it.validationPassed },
             fieldRevisits = events.count { it.isRevisit },
             progressPercent = events.lastOrNull()?.progressPercent ?: 0.0,
