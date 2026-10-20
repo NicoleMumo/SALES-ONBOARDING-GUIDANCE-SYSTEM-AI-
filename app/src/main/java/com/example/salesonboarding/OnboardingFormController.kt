@@ -305,6 +305,8 @@ class OnboardingFormController(
     )
 
     companion object {
+        private val MODEL_FIELD_IDS = KnownFields.all.mapTo(mutableSetOf()) { it.fieldId }
+
         val DEFAULT_FIELDS: List<FormField> = listOf(
             KnownFields.get("full_name"),
             KnownFields.get("email_address"),
