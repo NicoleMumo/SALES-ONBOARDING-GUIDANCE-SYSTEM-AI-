@@ -23,5 +23,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - run: cp app/google-services.example.json app/google-services.json
       - run: ./gradlew :app:testDebugUnitTest
