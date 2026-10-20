@@ -1,20 +1,21 @@
 {
   "project_info": {
     "project_number": "000000000000",
-    "project_id": "salesmesh-ci",
-    "storage_bucket": "salesmesh-ci.appspot.com"
+    "project_id": "salesmesh-example",
+    "storage_bucket": "salesmesh-example.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
         "android_client_info": {
           "package_name": "com.example.salesonboarding"
         }
       },
-      "oauth_client": [],
       "api_key": [
-        { "current_key": "not-a-real-api-key" }
+        {
+          "current_key": "EXAMPLE_KEY_NOT_FOR_USE"
+        }
       ],
       "services": {
         "appinvite_service": {

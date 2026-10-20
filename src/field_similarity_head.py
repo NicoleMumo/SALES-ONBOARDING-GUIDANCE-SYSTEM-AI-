@@ -27,14 +27,14 @@ def build_description_vocab(descriptions):
     """Tiny whitespace tokenizer + vocab, no external dependencies."""
     vocab = {"<pad>": 0, "<unk>": 1}
     for desc in descriptions:
-        for word in desc.lower().replace("-", " ").replace(",", " ").split():
+        for word in desc.lower().replace("-", " ").replace(",", " ").replace("_", " ").split():
             if word not in vocab:
                 vocab[word] = len(vocab)
     return vocab
 
 
 def encode_description(description, vocab, max_desc_len):
-    words = description.lower().replace("-", " ").replace(",", " ").split()
+    words = description.lower().replace("-", " ").replace(",", " ").replace("_", " ").split()
     ids = [vocab.get(w, vocab["<unk>"]) for w in words][:max_desc_len]
     return ids + [vocab["<pad>"]] * (max_desc_len - len(ids))
 
@@ -53,7 +53,7 @@ class FieldSimilarityHead(layers.Layer):
     """
 
     def __init__(self, field_names, field_descriptions, vocab, max_desc_len,
-                 text_embed_dim, output_dim, **kwargs):
+                 text_embed_dim, output_dim, oov_replacement_rate=0.15, **kwargs):
         super().__init__(**kwargs)
         self.field_names = list(field_names)
         self.field_descriptions = list(field_descriptions)
@@ -61,6 +61,7 @@ class FieldSimilarityHead(layers.Layer):
         self.max_desc_len = max_desc_len
         self.text_embed_dim = text_embed_dim
         self.output_dim = output_dim
+        self.oov_replacement_rate = oov_replacement_rate
 
         encoded = [encode_description(d, vocab, max_desc_len) for d in field_descriptions]
         self.description_token_ids = tf.constant(encoded, dtype=tf.int32)  # (num_fields, max_desc_len)
@@ -85,8 +86,22 @@ class FieldSimilarityHead(layers.Layer):
         pooled = tf.reduce_sum(word_vectors * mask, axis=1) / tf.maximum(tf.reduce_sum(mask, axis=1), 1.0)
         return self.text_projection(pooled)                           # (n, output_dim)
 
-    def call(self, session_vector):
-        field_vectors = self.encode_descriptions(self.description_token_ids)  # (num_fields, output_dim)
+    def call(self, session_vector, training=None):
+        token_ids = self.description_token_ids
+        if training is not None:
+            def replace_words_with_unknown():
+                replace_mask = tf.logical_and(
+                    token_ids != 0,
+                    tf.random.uniform(tf.shape(token_ids)) < self.oov_replacement_rate,
+                )
+                return tf.where(replace_mask, tf.ones_like(token_ids), token_ids)
+
+            token_ids = tf.cond(
+                tf.cast(training, tf.bool),
+                replace_words_with_unknown,
+                lambda: self.description_token_ids,
+            )
+        field_vectors = self.encode_descriptions(token_ids)  # (num_fields, output_dim)
         session_vector = self.session_projection(session_vector)              # (batch, output_dim)
         logits = tf.matmul(session_vector, field_vectors, transpose_b=True)   # (batch, num_fields)
         return logits
@@ -107,5 +122,6 @@ class FieldSimilarityHead(layers.Layer):
             "field_names": self.field_names, "field_descriptions": self.field_descriptions,
             "vocab": self.vocab, "max_desc_len": self.max_desc_len,
             "text_embed_dim": self.text_embed_dim, "output_dim": self.output_dim,
+            "oov_replacement_rate": self.oov_replacement_rate,
         })
         return config

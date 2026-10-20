@@ -65,10 +65,6 @@ data class FormField(
         return ValidationResult.valid
     }
 
-    fun getNextField(fields: List<FormField>): FormField? {
-        val index = fields.indexOfFirst { it.fieldId == fieldId }
-        return fields.getOrNull(index + 1)
-    }
 }
 
 sealed interface ValidationRule {
@@ -103,7 +99,8 @@ data class PatternByFieldValue(
     override fun validate(value: String?, context: ValidationContext): String? {
         if (value.isNullOrBlank()) return null
         val selectedValue = context[dependsOnFieldId]?.trim()?.lowercase(Locale.ROOT)
-        val pattern = patternsByValue[selectedValue] ?: return message
+        if (selectedValue.isNullOrBlank()) return null
+        val pattern = patternsByValue[selectedValue] ?: return null
         return if (Regex(pattern).matches(value)) null else message
     }
 }
