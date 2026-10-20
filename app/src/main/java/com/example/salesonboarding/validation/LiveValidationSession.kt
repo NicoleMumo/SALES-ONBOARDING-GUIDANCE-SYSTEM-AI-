@@ -11,7 +11,15 @@ import kotlinx.coroutines.launch
 data class LiveValidationState(
     val values: Map<String, String?> = emptyMap(),
     val results: Map<String, ValidationResult> = emptyMap(),
-    val touchedFieldIds: Set<String> = emptySet()
+    val touchedFieldIds: Set<String> = emptySet(),
+    val interactionHistory: List<FieldInteraction> = emptyList()
+)
+
+data class FieldInteraction(
+    val fieldId: String,
+    val startedAtMillis: Long,
+    val validationPassed: Boolean? = null,
+    val validatedAtMillis: Long? = null
 )
 
 class LiveValidationSession(
@@ -19,8 +27,7 @@ class LiveValidationSession(
     fields: List<FormField> = KnownFields.all,
     configuration: FieldRuleConfiguration = FieldRuleConfiguration(),
     private val scope: CoroutineScope,
-    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS,
-    private val onValidationSettled: (fieldId: String, result: ValidationResult) -> Unit = { _, _ -> }
+    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS
 ) {
     private val fieldsById = configuration.allFields(fields).associateBy { it.fieldId }
     private val validationJobs = mutableMapOf<String, Job>()
@@ -34,9 +41,24 @@ class LiveValidationSession(
      */
     fun updateField(fieldId: String, value: String?): Job {
         require(fieldsById.containsKey(fieldId)) { "Unknown field: $fieldId" }
-        state.value = state.value.copy(
+        val currentState = state.value
+        val lastInteraction = currentState.interactionHistory.lastOrNull()
+        val history = if (lastInteraction?.fieldId != fieldId || lastInteraction?.validationPassed != null) {
+            currentState.interactionHistory + FieldInteraction(fieldId, System.currentTimeMillis())
+        } else {
+            currentState.interactionHistory
+        }
+        val affectedIds = buildSet {
+            add(fieldId)
+            fieldsById.values
+                .filter { field -> field.validationRule.any { it.dependsOn(fieldId) } }
+                .forEach { add(it.fieldId) }
+        }
+        state.value = currentState.copy(
             values = state.value.values + (fieldId to value),
-            touchedFieldIds = state.value.touchedFieldIds + fieldId
+            results = currentState.results - affectedIds,
+            touchedFieldIds = currentState.touchedFieldIds + fieldId,
+            interactionHistory = history
         )
 
         validationJobs[fieldId]?.cancel()
@@ -69,8 +91,17 @@ class LiveValidationSession(
             )
             updatedResults[fieldId] = field.validate(entry, context)
         }
-        state.value = state.value.copy(results = updatedResults)
-        onValidationSettled(changedFieldId, updatedResults.getValue(changedFieldId))
+        val validatedAt = System.currentTimeMillis()
+        val changedFieldResult = updatedResults[changedFieldId]
+        val history = state.value.interactionHistory.toMutableList()
+        val interactionIndex = history.indexOfLast { it.fieldId == changedFieldId }
+        if (interactionIndex >= 0 && changedFieldResult != null) {
+            history[interactionIndex] = history[interactionIndex].copy(
+                validationPassed = changedFieldResult.isValid,
+                validatedAtMillis = validatedAt
+            )
+        }
+        state.value = state.value.copy(results = updatedResults, interactionHistory = history)
     }
 
     private fun ValidationRule.dependsOn(fieldId: String): Boolean =

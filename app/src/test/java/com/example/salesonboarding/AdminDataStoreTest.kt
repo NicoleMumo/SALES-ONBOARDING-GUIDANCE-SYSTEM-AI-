@@ -43,13 +43,17 @@ class AdminDataStoreTest {
                 )
             )
         )
-        val custom = customField(
+        val custom = FormField(
             fieldId = "business_type",
-            name = "Business type",
+            fieldName = "Business type",
             description = "Select the customer type.",
             fieldType = "choice",
-            rules = setOf(AdminRule.REQUIRED),
-            choices = setOf("Retail", "Wholesale")
+            isRequired = true,
+            validationRule = listOf(
+                Required,
+                NotBlank,
+                OneOf(setOf("Retail", "Wholesale"))
+            )
         )
 
         val updated = initialConfiguration.withCustomField(custom)

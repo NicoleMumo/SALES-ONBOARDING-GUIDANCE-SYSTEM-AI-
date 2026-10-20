@@ -34,6 +34,6 @@ class FieldRuleConfiguration(
     fun withCustomField(field: FormField): FieldRuleConfiguration =
         FieldRuleConfiguration(
             overrides = overrides,
-            customFields = (customFields.filterNot { it.fieldId == field.fieldId } + field)
+            customFields = customFields.filterNot { it.fieldId == field.fieldId } + field
         )
 }

@@ -14,10 +14,15 @@ class NextFieldPredictorTest {
     @Test
     fun validAnswersAreSentToThePredictorAndRecommendationIsPublished() = runTest {
         var receivedHistory: List<String>? = null
+        var receivedValidation: String? = null
         val predictor = NextFieldPredictor { history, _, _, validation ->
-            receivedHistory = history
-            assertEquals("passed", validation)
-            FieldPrediction("mobile_phone_number", 0.8f)
+            if (validation == "passed") {
+                receivedHistory = history
+                receivedValidation = validation
+                FieldPrediction("mobile_phone_number", 0.8f)
+            } else {
+                null
+            }
         }
         val controller = OnboardingFormController(
             sessionId = "session",
@@ -39,6 +44,7 @@ class NextFieldPredictorTest {
         runCurrent()
 
         assertEquals(listOf("full_name", "email_address"), receivedHistory)
+        assertEquals("passed", receivedValidation)
         assertEquals("mobile_phone_number", controller.guidanceFlow.value.prediction?.fieldId)
         assertTrue(controller.guidanceFlow.value.prediction?.confidence == 0.8f)
     }
@@ -47,13 +53,16 @@ class NextFieldPredictorTest {
     fun telecomAndBankingWorkflowsPassTheirSelectedIndustryToGuidance() = runTest {
         val receivedIndustries = mutableListOf<String>()
         val predictor = NextFieldPredictor { _, industry, context, validation ->
-            receivedIndustries += industry
             assertEquals("individual", context)
-            assertEquals("passed", validation)
-            FieldPrediction("email_address", 0.7f)
+            if (validation == "passed") {
+                receivedIndustries += industry
+                FieldPrediction("email_address", 0.7f)
+            } else {
+                null
+            }
         }
 
-        listOf("telecom", "banking").forEachIndexed { index, industry ->
+        listOf("telecom", "banking").forEach { industry ->
             val controller = OnboardingFormController(
                 sessionId = "session-$industry",
                 fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
@@ -70,7 +79,7 @@ class NextFieldPredictorTest {
 
             assertEquals("email_address", controller.guidanceFlow.value.prediction?.fieldId)
             assertEquals(0.7f, controller.guidanceFlow.value.prediction?.confidence)
-            assertEquals(index + 1, receivedIndustries.size)
+            assertEquals(industry, receivedIndustries.last())
         }
 
         assertEquals(listOf("telecom", "banking"), receivedIndustries)

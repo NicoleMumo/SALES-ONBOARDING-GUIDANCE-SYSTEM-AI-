@@ -61,6 +61,12 @@ class ValidationRulesTest {
     @Test fun everyKnownFieldHasAValidAndInvalidCase() {
         assertTrue(KnownFields.all.size == 33)
         KnownFields.all.forEach { field ->
+            assertTrue(
+                "Expected ${field.fieldId} to have agent-facing instructions",
+                field.description.isNotBlank()
+            )
+        }
+        KnownFields.all.forEach { field ->
             val validValue = when (field.fieldId) {
                 "assets" -> ""
                 "date_of_birth" -> "1990-01-01"

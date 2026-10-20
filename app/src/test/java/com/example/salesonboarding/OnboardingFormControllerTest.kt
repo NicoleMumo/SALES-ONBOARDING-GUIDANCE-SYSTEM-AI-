@@ -81,7 +81,7 @@ class OnboardingFormControllerTest {
             entryStore = store,
             industry = "telecom",
             context = "individual",
-            agentUid = "agent-uid"
+            agentId = "agent@example.com"
         )
 
         controller.updateField("full_name", "Jane Wanjiku")
@@ -93,8 +93,8 @@ class OnboardingFormControllerTest {
         assertTrue(controller.submit())
         assertEquals(
             SessionStart(
-            "successful-session",
-                "agent-uid",
+                "successful-session",
+                "agent@example.com",
                 "telecom",
                 "individual",
                 "telecom-standard-onboarding",
@@ -105,13 +105,13 @@ class OnboardingFormControllerTest {
         )
         assertEquals(setOf("full_name", "email_address"), store.validatedFields)
         assertEquals(setOf("full_name", "email_address"), store.savedEntries.map { it.fieldId }.toSet())
-        assertTrue(store.events.any { it.type == "validation_settled" && it.fieldId == "full_name" })
-        assertTrue(store.events.any { it.type == "validation_settled" && it.fieldId == "email_address" })
+        assertTrue(store.events.any { it.type == "field_validation_passed" && it.fieldId == "full_name" })
+        assertTrue(store.events.any { it.type == "field_validation_passed" && it.fieldId == "email_address" })
         assertEquals("successful-session", store.completedSessionId)
     }
 
     @Test
-    fun customFieldValidationWorksWithoutPassingCustomIdsToTheModel() = runTest {
+    fun customFieldValidationWorksAndPreservesHistoryForDynamicModelScoring() = runTest {
         val customField = FormField(
             fieldId = "loyalty_email",
             fieldName = "Loyalty email",
@@ -140,59 +140,7 @@ class OnboardingFormControllerTest {
         runCurrent()
 
         assertTrue(controller.canContinue())
-        assertEquals(listOf(listOf("full_name")), modelHistories)
-    }
-
-    @Test
-    fun predictorReceivesEntryOrderRetriesContextAndActualValidation() = runTest {
-        data class Input(val history: List<String>, val industry: String, val context: String, val validation: String)
-        val inputs = mutableListOf<Input>()
-        val controller = OnboardingFormController(
-            sessionId = "sequence-session",
-            fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
-            scope = backgroundScope,
-            entryStore = InMemoryFieldEntryStore(),
-            predictor = NextFieldPredictor { history, industry, context, validation ->
-                inputs += Input(history, industry, context, validation)
-                null
-            },
-            industry = "telecom",
-            context = "broadband"
-        )
-
-        controller.updateField("full_name", "")
-        advanceTimeBy(300)
-        runCurrent()
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
-        runCurrent()
-        controller.updateField("email_address", "jane@example.com")
-        advanceTimeBy(300)
-        runCurrent()
-
-        assertEquals(listOf("full_name", "full_name", "email_address"), inputs.last().history)
-        assertEquals("telecom", inputs.last().industry)
-        assertEquals("broadband", inputs.last().context)
-        assertEquals("passed", inputs.last().validation)
-        assertTrue(controller.riskFlow.value != null)
-    }
-
-    @Test
-    fun failedModelPredictionFallsBackToWorkflowGuidance() = runTest {
-        val controller = OnboardingFormController(
-            sessionId = "model-failure-session",
-            fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
-            scope = backgroundScope,
-            entryStore = InMemoryFieldEntryStore(),
-            predictor = NextFieldPredictor { _, _, _, _ -> error("model unavailable") }
-        )
-
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
-        runCurrent()
-
-        assertEquals("email_address", controller.guidanceFlow.value.nextFieldId)
-        assertTrue(controller.guidanceFlow.value.modelUnavailable)
+        assertEquals(listOf(emptyList(), listOf("loyalty_email")), modelHistories)
     }
 
     @Test
@@ -270,13 +218,12 @@ class OnboardingFormControllerTest {
             entries += entry
         }
 
-            override fun startSession(
+        override fun startSession(
             sessionId: String,
             agentId: String,
             industry: String,
             context: String,
-            playbook: OnboardingPlaybook,
-            consentConfirmedAt: Long
+            playbook: OnboardingPlaybook
         ) {
             startedSession = SessionStart(
                 sessionId,

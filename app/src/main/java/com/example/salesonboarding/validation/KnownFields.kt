@@ -2,10 +2,49 @@ package com.example.salesonboarding.validation
 
 object KnownFields {
     private val required = listOf(Required, NotBlank)
+    private val descriptions = mapOf(
+        "assets" to "Enter the business's declared assets as a number greater than zero.",
+        "beneficial_owner_information" to "List the people who ultimately own or control the business.",
+        "business_relationship_nature" to "Describe the business and its relationship with the account.",
+        "business_relationship_purpose" to "Record why the business wants to open or use this account.",
+        "commercial_address" to "Enter the address where the business operates.",
+        "contact_phone_number" to "Enter a phone number where the customer can be reached.",
+        "contract_type" to "Choose the customer's prepaid or postpaid plan.",
+        "date_of_birth" to "Enter the customer's date of birth. The customer must be at least 18.",
+        "email_address" to "Enter an email address the customer can access.",
+        "face_match_verification" to "Record the result of your organization's face-match check.",
+        "full_name" to "Enter the customer's name as shown on their identification document.",
+        "gender" to "Choose the gender stated by the customer.",
+        "home_address" to "Enter the customer's home address, including the area or street where available.",
+        "identification_document" to "Record the identification document provided by the customer.",
+        "identification_document_number" to "Enter the number exactly as it appears on the selected document.",
+        "identification_document_type" to "Choose the type of identification document provided.",
+        "income" to "Enter the customer's verified income as a number greater than zero.",
+        "internet_service_selection" to "Choose the internet or TV service the customer wants.",
+        "mobile_phone_number" to "Enter the customer's mobile number in the format shown below.",
+        "ownership_and_control_information" to "Describe who owns or controls the business.",
+        "paperless_billing_preference" to "Record whether the customer wants paperless bills.",
+        "payment_method" to "Choose how the customer plans to pay.",
+        "phone_service_selection" to "Choose the phone service the customer wants.",
+        "physical_address" to "Enter the customer's current residential or business address.",
+        "politically_exposed_person_status" to "Record the answer given by the customer.",
+        "profession" to "Enter the customer's job, trade, or occupation.",
+        "selfie_liveness_check" to "Record the result of your organization's live-selfie check.",
+        "service_type" to "Choose the telecom service the customer is signing up for.",
+        "streaming_addons_selection" to "List any streaming add-ons the customer wants.",
+        "subscriber_number" to "Enter the phone number that will be linked to the service.",
+        "subscriber_type" to "Choose who will own or use the service.",
+        "terms_and_conditions_acceptance" to "Confirm the customer reviewed and accepted the terms presented.",
+        "us_person_status" to "Record the answer given by the customer."
+    )
     private val businessOnly = { fieldId: String ->
         FormField(
-            fieldId, fieldId, "text", false,
-            listOf(RequiredIf("customer_type", "business"))
+            fieldId = fieldId,
+            fieldName = fieldId.replace('_', ' ').replaceFirstChar { it.uppercase() },
+            fieldType = "text",
+            isRequired = false,
+            validationRule = listOf(RequiredIf("customer_type", "business")),
+            description = descriptions[fieldId].orEmpty()
         )
     }
 
@@ -38,7 +77,10 @@ object KnownFields {
                         "passport" to "^[A-Za-z]\\d{7}$",
                         "alien_card" to "^[A-Za-z0-9]{5,20}$",
                         "refugee_id" to "^[A-Za-z0-9]{5,20}$",
-                        "military_id" to "^[A-Za-z0-9]{5,20}$"
+                        "military_id" to "^[A-Za-z0-9]{5,20}$",
+                        "business_registration" to "^[A-Za-z0-9-]{5,30}$",
+                        "tax_pin" to "^[A-Za-z0-9-]{5,30}$",
+                        "other" to "^[A-Za-z0-9-]{5,30}$"
                     ),
                     "Enter a valid number for the selected document type."
                 )
@@ -62,7 +104,9 @@ object KnownFields {
         FormField("subscriber_type", "Subscriber type", "choice", true, listOf(*required.toTypedArray(), OneOf(setOf("individual", "business", "child", "foreign_national", "refugee", "stateless", "company")))),
         FormField("terms_and_conditions_acceptance", "Terms and conditions acceptance", "boolean", true, listOf(*required.toTypedArray(), MustBeTrue)),
         FormField("us_person_status", "US person status", "boolean", true, listOf(*required.toTypedArray(), OneOf(setOf("yes", "no"))))
-    )
+    ).map { field ->
+        field.copy(description = field.description.ifBlank { descriptions[field.fieldId].orEmpty() })
+    }
 
     private val byId = all.associateBy { it.fieldId }
 
