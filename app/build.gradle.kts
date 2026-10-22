@@ -63,6 +63,7 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.17.0")
     implementation("com.google.firebase:firebase-database")
     implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
