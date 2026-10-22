@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -86,6 +87,7 @@ fun OnboardingScreen(
 ) {
     val state by controller.stateFlow.collectAsState()
     val guidance by controller.guidanceFlow.collectAsState()
+    val draftSaveStatus by controller.draftSaveStatusFlow.collectAsState()
     val readiness = controller.readiness(state)
     val isOnline = rememberNetworkStatus()
 
@@ -94,14 +96,21 @@ fun OnboardingScreen(
         fields = controller.fields,
         state = state,
         guidance = guidance,
+        draftSaveStatus = draftSaveStatus,
+        showDraftStatus = controller.supportsDraftSaving,
         readiness = readiness,
         isOnline = isOnline,
-        onValueChange = { fieldId, value -> controller.updateField(fieldId, value) },
+        onValueChange = { fieldId, value ->
+            controller.setResumeField(fieldId)
+            controller.updateField(fieldId, value)
+        },
         onSubmit = { onResult -> controller.submit(state, onResult) },
         canContinue = controller.canContinue(state),
         onNewOnboarding = onNewOnboarding,
         onReturnToDashboard = onReturnToDashboard,
         configurationWarning = configurationWarning,
+        initialFieldId = controller.resumeFieldId,
+        onResumeFieldChange = controller::setResumeField,
         modifier = modifier
     )
 }
@@ -147,12 +156,12 @@ fun OnboardingConsentScreen(
             ) {
                 ConsentPoint(
                     title = "Purpose of Collection",
-                    description = "Information is used solely to verify identity and set up the customer account in compliance with regulations."
+                    description = "Information is collected to set up the customer account and follow your company's onboarding process."
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ConsentPoint(
                     title = "Data Security & Retention",
-                    description = "Stored securely in Firebase with restricted organizational access. Deletion is governed by company policy."
+                    description = "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ConsentPoint(
@@ -240,6 +249,8 @@ fun OnboardingScreenContent(
     fields: List<FormField>,
     state: LiveValidationState,
     guidance: NextFieldGuidance,
+    draftSaveStatus: DraftSaveStatus = DraftSaveStatus(),
+    showDraftStatus: Boolean = false,
     readiness: OnboardingReadiness,
     isOnline: Boolean,
     onValueChange: (fieldId: String, value: String) -> Unit,
@@ -248,16 +259,19 @@ fun OnboardingScreenContent(
     onNewOnboarding: () -> Unit = {},
     onReturnToDashboard: () -> Unit = {},
     configurationWarning: String? = null,
+    initialFieldId: String? = null,
+    onResumeFieldChange: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val errors = remember(state) {
         ValidationErrorDisplayMapper.forState(state).associateBy { it.fieldId }
     }
     var submitted by remember { mutableStateOf(false) }
+    var reviewing by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
     var activeFieldId by remember(playbook.id, playbook.version) {
-        mutableStateOf(fields.firstOrNull()?.fieldId)
+        mutableStateOf(initialFieldId ?: fields.firstOrNull()?.fieldId)
     }
     var visitedFieldIds by remember(playbook.id, playbook.version) {
         mutableStateOf(emptyList<String>())
@@ -334,6 +348,45 @@ fun OnboardingScreenContent(
         return
     }
 
+    if (reviewing) {
+        OnboardingReviewContent(
+            fields = fields,
+            values = state.values,
+            readiness = readiness,
+            isSubmitting = isSubmitting,
+            errorMessage = submitError,
+            onEditField = { fieldId ->
+                reviewing = false
+                activeFieldId = fieldId
+                onResumeFieldChange(fieldId)
+            },
+            onBackToForm = {
+                reviewing = false
+                currentField?.let { field ->
+                    activeFieldId = field.fieldId
+                    onResumeFieldChange(field.fieldId)
+                }
+            },
+            onSubmit = {
+                if (!isSubmitting && canContinue) {
+                    isSubmitting = true
+                    submitError = null
+                    val accepted = onSubmit { result ->
+                        isSubmitting = false
+                        result.onSuccess { submitted = true }
+                            .onFailure {
+                                submitError = it.message
+                                    ?: "Could not save this onboarding session."
+                            }
+                    }
+                    if (!accepted) isSubmitting = false
+                }
+            },
+            modifier = modifier
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -376,51 +429,47 @@ fun OnboardingScreenContent(
                 )
             }
 
-            // 3. Urgent Correction Banner (only shown when a prior field needs attention)
-            guidance.correction?.let { correction ->
-                val correctionField = fields.firstOrNull {
-                    it.fieldId == correction.fieldId && it.fieldId != currentField?.fieldId
+            // 3. Prominent next-field guidance, styled by the kind of action needed
+            item {
+                val correction = guidance.correction
+                val suggestionTone = when {
+                    correctionTarget != null -> NextFieldSuggestionTone.ATTENTION
+                    predictedTarget != null && predictedTarget == nextField ->
+                        NextFieldSuggestionTone.RECOMMENDED
+                    nextField != null -> NextFieldSuggestionTone.NEXT
+                    canContinue -> NextFieldSuggestionTone.COMPLETE
+                    else -> null
                 }
-                if (correctionField != null) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    activeFieldId = correctionField.fieldId
-                                },
-                            shape = MaterialTheme.shapes.medium,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Text("⚠️", style = MaterialTheme.typography.titleMedium)
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Please review ${correctionField.fieldName}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Text(
-                                        correction.message,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                                Text(
-                                    "Fix →",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
+                if (suggestionTone != null) {
+                    val suggestedField = nextField
+                    val isRequired = suggestedField?.let { field ->
+                        field.isRequired || field.validationRule.any { rule ->
+                            rule is RequiredIf && state.values[rule.dependsOnFieldId]
+                                ?.trim()
+                                ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
+                        }
+                    } == true
+                    NextFieldSuggestionCard(
+                        field = suggestedField,
+                        tone = suggestionTone,
+                        isRequired = isRequired,
+                        detail = when (suggestionTone) {
+                            NextFieldSuggestionTone.ATTENTION ->
+                                correction?.message ?: "Review this field before continuing."
+                            NextFieldSuggestionTone.RECOMMENDED ->
+                                "The onboarding model recommends collecting this field next."
+                            NextFieldSuggestionTone.NEXT ->
+                                "This field still needs a valid answer."
+                            NextFieldSuggestionTone.COMPLETE ->
+                                "All required information is complete. Review your answers and finish."
+                        },
+                        onClick = suggestedField?.let { field ->
+                            {
+                                activeFieldId = field.fieldId
+                                onResumeFieldChange(field.fieldId)
                             }
                         }
-                    }
+                    )
                 }
             }
 
@@ -657,6 +706,24 @@ fun OnboardingScreenContent(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (showDraftStatus) {
+                    Text(
+                        text = when {
+                            draftSaveStatus.errorMessage != null -> draftSaveStatus.errorMessage
+                            draftSaveStatus.isSaving -> "Saving your draft…"
+                            draftSaveStatus.savedAtMillis != null ->
+                                "Draft saved. You can resume this session later."
+                            else -> "Your answers are saved as you go."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (draftSaveStatus.errorMessage != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+
                 // Submit error alert
                 submitError?.let {
                     Text(
@@ -714,6 +781,7 @@ fun OnboardingScreenContent(
                             if (previousFieldId != null) {
                                 visitedFieldIds = visitedFieldIds.dropLast(1)
                                 activeFieldId = previousFieldId
+                                onResumeFieldChange(previousFieldId)
                             }
                         },
                         enabled = visitedFieldIds.isNotEmpty() && !isSubmitting,
@@ -743,18 +811,9 @@ fun OnboardingScreenContent(
                                 }
                                 if (next != null) {
                                     activeFieldId = next.fieldId
+                                    onResumeFieldChange(next.fieldId)
                                 } else if (canContinue) {
-                                    isSubmitting = true
-                                    submitError = null
-                                    val accepted = onSubmit { result ->
-                                        isSubmitting = false
-                                        result.onSuccess { submitted = true }
-                                            .onFailure {
-                                                submitError = it.message
-                                                    ?: "Could not save this onboarding session."
-                                            }
-                                    }
-                                    if (!accepted) isSubmitting = false
+                                    reviewing = true
                                 }
                             }
                         },
@@ -777,7 +836,7 @@ fun OnboardingScreenContent(
                                 when {
                                     isOptionalSkip -> "Skip this field"
                                     nextField != null -> "Continue"
-                                    canContinue -> "Complete onboarding"
+                                    canContinue -> "Review answers"
                                     else -> "Review answers"
                                 },
                                 style = MaterialTheme.typography.labelLarge,
@@ -785,6 +844,303 @@ fun OnboardingScreenContent(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnboardingReviewContent(
+    fields: List<FormField>,
+    values: Map<String, String?>,
+    readiness: OnboardingReadiness,
+    isSubmitting: Boolean,
+    errorMessage: String?,
+    onEditField: (String) -> Unit,
+    onBackToForm: () -> Unit,
+    onSubmit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                "Review customer details",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                "Check the answers with the customer. Edit any field before saving this onboarding.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "${readiness.completedRequiredFieldCount} of ${readiness.requiredFieldCount} required fields complete",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (readiness.isReady) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                }
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(fields, key = FormField::fieldId) { field ->
+                val answer = values[field.fieldId].orEmpty()
+                val isRequired = field.isRequired || field.validationRule
+                    .filterIsInstance<RequiredIf>()
+                    .any { rule ->
+                        values[rule.dependsOnFieldId]
+                            ?.trim()
+                            ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
+                    }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onEditField(field.fieldId) },
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    field.fieldName,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                RequirementBadge(isRequired)
+                            }
+                            Text(
+                                answer.ifBlank { "Not provided" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (answer.isBlank()) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+                        Text(
+                            "Edit",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (errorMessage != null) {
+                    Text(
+                        errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                Text(
+                    "Only validated answers will be submitted.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = onBackToForm,
+                        enabled = !isSubmitting,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                    ) {
+                        Text("Back to form")
+                    }
+                    Button(
+                        onClick = onSubmit,
+                        enabled = readiness.isReady && !isSubmitting,
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(50.dp)
+                    ) {
+                        if (isSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Saving…")
+                        } else {
+                            Text("Confirm and save")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class NextFieldSuggestionTone {
+    ATTENTION,
+    RECOMMENDED,
+    NEXT,
+    COMPLETE
+}
+
+@Composable
+private fun NextFieldSuggestionCard(
+    field: FormField?,
+    tone: NextFieldSuggestionTone,
+    isRequired: Boolean,
+    detail: String,
+    onClick: (() -> Unit)?
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val containerColor = when (tone) {
+        NextFieldSuggestionTone.ATTENTION -> colorScheme.errorContainer
+        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.secondaryContainer
+        NextFieldSuggestionTone.NEXT,
+        NextFieldSuggestionTone.COMPLETE -> colorScheme.primaryContainer
+    }
+    val contentColor = when (tone) {
+        NextFieldSuggestionTone.ATTENTION -> colorScheme.onErrorContainer
+        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.onSecondaryContainer
+        NextFieldSuggestionTone.NEXT,
+        NextFieldSuggestionTone.COMPLETE -> colorScheme.onPrimaryContainer
+    }
+    val accentColor = when (tone) {
+        NextFieldSuggestionTone.ATTENTION -> colorScheme.error
+        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.secondary
+        NextFieldSuggestionTone.NEXT,
+        NextFieldSuggestionTone.COMPLETE -> colorScheme.primary
+    }
+    val markerContentColor = when (tone) {
+        NextFieldSuggestionTone.ATTENTION -> colorScheme.onError
+        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.onSecondary
+        NextFieldSuggestionTone.NEXT,
+        NextFieldSuggestionTone.COMPLETE -> colorScheme.onPrimary
+    }
+    val heading = when (tone) {
+        NextFieldSuggestionTone.ATTENTION -> "FIX THIS FIELD FIRST"
+        NextFieldSuggestionTone.RECOMMENDED -> "AI NEXT-FIELD SUGGESTION"
+        NextFieldSuggestionTone.NEXT -> "NEXT FIELD TO COMPLETE"
+        NextFieldSuggestionTone.COMPLETE -> "REQUIRED INFORMATION COMPLETE"
+    }
+    val marker = when (tone) {
+        NextFieldSuggestionTone.ATTENTION -> "!"
+        NextFieldSuggestionTone.RECOMMENDED -> "AI"
+        NextFieldSuggestionTone.NEXT -> "→"
+        NextFieldSuggestionTone.COMPLETE -> "✓"
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.45f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = accentColor,
+                contentColor = markerContentColor
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        marker,
+                        style = if (tone == NextFieldSuggestionTone.RECOMMENDED) {
+                            MaterialTheme.typography.labelMedium
+                        } else {
+                            MaterialTheme.typography.titleMedium
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    heading,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor
+                )
+                if (field != null) {
+                    Text(
+                        field.fieldName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor
+                    )
+                    Text(
+                        if (isRequired) "Required" else "Optional",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = contentColor.copy(alpha = 0.8f)
+                    )
+                }
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor
+                )
+                if (onClick != null) {
+                    Text(
+                        "Tap to open this field",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = contentColor
+                    )
                 }
             }
         }
@@ -1048,10 +1404,14 @@ fun rememberOnboardingController(
     fields: List<FormField> = OnboardingFormController.DEFAULT_FIELDS,
     playbook: OnboardingPlaybook? = null,
     initialModelUnavailable: Boolean = false,
-    agentEmail: String = ""
+    agentEmail: String = "",
+    initialValues: Map<String, String?> = emptyMap(),
+    initialResumeFieldId: String? = null,
+    isResumingSession: Boolean = false
 ): OnboardingFormController = remember(
     sessionId, scope, entryStore, predictor, industry, context,
-    agentUid, fields, playbook, initialModelUnavailable, agentEmail
+    agentUid, fields, playbook, initialModelUnavailable, agentEmail,
+    initialValues, initialResumeFieldId, isResumingSession
 ) {
     OnboardingFormController(
         sessionId,
@@ -1064,7 +1424,10 @@ fun rememberOnboardingController(
         agentId = agentUid,
         playbook = playbook,
         initialModelUnavailable = initialModelUnavailable,
-        agentEmail = agentEmail
+        agentEmail = agentEmail,
+        initialValues = initialValues,
+        initialResumeFieldId = initialResumeFieldId,
+        isResumingSession = isResumingSession
     )
 }
 

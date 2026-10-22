@@ -4,6 +4,8 @@ import com.example.salesonboarding.validation.FieldEntry
 import com.example.salesonboarding.validation.FieldEntryStore
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.MutableData
+import com.google.firebase.database.Transaction
 
 data class StoredOnboardingSession(
     val sessionId: String,
@@ -17,7 +19,8 @@ data class StoredOnboardingSession(
     val agentEmail: String = "",
     val playbookTitle: String = "",
     val fieldNames: Map<String, String> = emptyMap(),
-    val validatedFieldIds: Set<String> = emptySet()
+    val validatedFieldIds: Set<String> = emptySet(),
+    val resumeFieldId: String? = null
 )
 
 interface SessionHistoryStore {
@@ -53,6 +56,25 @@ interface OnboardingSessionStore : FieldEntryStore {
         try {
             entries.forEach(::save)
             markCompleted(sessionId)
+            onResult(Result.success(Unit))
+        } catch (error: Exception) {
+            onResult(Result.failure(error))
+        }
+    }
+    fun completeSession(
+        sessionId: String,
+        entries: List<FieldEntry>,
+        fieldIds: List<String>,
+        onResult: (Result<Unit>) -> Unit
+    ) = completeSession(sessionId, entries, onResult)
+    fun saveDraft(
+        sessionId: String,
+        entries: List<FieldEntry>,
+        resumeFieldId: String?,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        try {
+            entries.filter { !it.value.isNullOrBlank() }.forEach(::save)
             onResult(Result.success(Unit))
         } catch (error: Exception) {
             onResult(Result.failure(error))
@@ -174,11 +196,20 @@ class FirebaseFieldEntryStore(
         sessionId: String,
         entries: List<FieldEntry>,
         onResult: (Result<Unit>) -> Unit
+    ) = completeSession(sessionId, entries, entries.map(FieldEntry::fieldId), onResult)
+
+    override fun completeSession(
+        sessionId: String,
+        entries: List<FieldEntry>,
+        fieldIds: List<String>,
+        onResult: (Result<Unit>) -> Unit
     ) {
         val updates = mutableMapOf<String, Any?>(
             "status" to "completed",
-            "completedAt" to System.currentTimeMillis()
+            "completedAt" to System.currentTimeMillis(),
+            "resumeFieldId" to null
         )
+        fieldIds.forEach { fieldId -> updates["entries/$fieldId"] = null }
         entries.forEach { entry ->
             updates["entries/${entry.fieldId}"] = mapOf(
                 "entryId" to entry.entryId,
@@ -192,6 +223,59 @@ class FirebaseFieldEntryStore(
         sessions.child(sessionId).updateChildren(updates)
             .addOnSuccessListener { onResult(Result.success(Unit)) }
             .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun saveDraft(
+        sessionId: String,
+        entries: List<FieldEntry>,
+        resumeFieldId: String?,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val now = System.currentTimeMillis()
+        sessions.child(sessionId).runTransaction(object : Transaction.Handler {
+            override fun doTransaction(currentData: MutableData): Transaction.Result {
+                if (currentData.child("status").getValue(String::class.java) != "in_progress") {
+                    return Transaction.abort()
+                }
+                currentData.child("updatedAt").value = now
+                currentData.child("lastSavedAt").value = now
+                currentData.child("resumeFieldId").value = resumeFieldId
+                entries.forEach { entry ->
+                    currentData.child("entries").child(entry.fieldId).value =
+                        if (entry.value.isNullOrBlank()) {
+                            null
+                        } else {
+                            mapOf(
+                                "entryId" to entry.entryId,
+                                "sessionId" to entry.sessionId,
+                                "fieldId" to entry.fieldId,
+                                "value" to entry.value,
+                                "timestamp" to entry.timestamp,
+                                "isValid" to entry.isValid
+                            )
+                        }
+                }
+                return Transaction.success(currentData)
+            }
+
+            override fun onComplete(
+                error: com.google.firebase.database.DatabaseError?,
+                committed: Boolean,
+                currentData: DataSnapshot?
+            ) {
+                when {
+                    error != null -> onResult(Result.failure(error.toException()))
+                    committed -> onResult(Result.success(Unit))
+                    else -> onResult(
+                        Result.failure(
+                            IllegalStateException(
+                                "This session is no longer in progress. Refresh your sessions before continuing."
+                            )
+                        )
+                    )
+                }
+            }
+        }, false)
     }
 
     override fun getSession(
@@ -275,6 +359,7 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         agentEmail = child("agentEmail").getValue(String::class.java).orEmpty(),
         playbookTitle = child("playbookTitle").getValue(String::class.java).orEmpty(),
         fieldNames = fieldNames,
-        validatedFieldIds = validatedFieldIds
+        validatedFieldIds = validatedFieldIds,
+        resumeFieldId = child("resumeFieldId").getValue(String::class.java)
     )
 }

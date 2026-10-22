@@ -53,13 +53,20 @@ timestamps, and a copy of the form fields and rules used.
 
 Other saved data includes:
 
-- Valid, non-empty answers under `entries/{fieldId}`.
+- Non-empty draft answers under `entries/{fieldId}` while a session is in
+  progress. Drafts include a resume field and last-saved time.
+- Valid, non-empty answers under `entries/{fieldId}` when the session is
+  completed. Invalid draft values are removed when the agent completes the
+  session.
 - The latest answer-check result under `validation/{fieldId}`.
 - Events under `events`, with the event type, field ID, and time.
 
 The event records do not contain the customer's answer. The app saves the
-answers and completed status together. It shows completion only after Firebase
-confirms the save.
+draft as the agent types, with a short delay to reduce repeated writes. A save
+failure is shown in the form. Agents can resume their own in-progress sessions
+from **My onboarded clients**. The app shows its answer-review step before it
+submits a completed session, and shows completion only after Firebase confirms
+the save.
 
 Time spent on fields and revisits are used for in-app completion-risk
 guidance. They are calculated in memory and are not saved as event details.

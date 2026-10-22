@@ -1,6 +1,8 @@
 package com.example.salesonboarding
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,12 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -84,14 +88,32 @@ fun IndustrySelectionScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            "New customer",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Text(
+                    "STEP 1 OF 3",
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Text(
+                "New customer",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 text = "Choose an industry",
@@ -109,7 +131,20 @@ fun IndustrySelectionScreen(
             options.forEach { option ->
                 val isSelected = selectedIndustry == option.id
                 ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            border = BorderStroke(
+                                if (isSelected) 1.5.dp else 1.dp,
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant
+                                }
+                            ),
+                            shape = MaterialTheme.shapes.medium
+                        ),
+                    shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.elevatedCardColors(
                         containerColor = if (isSelected) {
                             MaterialTheme.colorScheme.primaryContainer
@@ -157,7 +192,14 @@ fun IndustrySelectionScreen(
         }
 
         if (selectedIndustry != null) {
-            Text("Choose customer context", style = MaterialTheme.typography.titleMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Choose the service or account type", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "This selects the fields and checks used for this customer.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -167,6 +209,22 @@ fun IndustrySelectionScreen(
                         selected = selectedContext == context,
                         onClick = { selectedContext = context; errorMessage = null },
                         label = { Text(context.replaceFirstChar(Char::uppercase)) }
+                    )
+                }
+            }
+            val selectedContextValue = selectedContext
+            val selectedIndustryValue = selectedIndustry
+            if (selectedContextValue != null && selectedIndustryValue != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(
+                        "Selected playbook: ${selectedContextValue.replaceFirstChar(Char::uppercase)} ${selectedIndustryValue.displayIndustryName()}",
+                        modifier = Modifier.padding(14.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
             }
@@ -194,10 +252,17 @@ fun IndustrySelectionScreen(
             enabled = selectedIndustry != null && selectedContext != null,
             contentPadding = PaddingValues(vertical = 14.dp)
         ) {
-            Text("Continue")
+            Text("Continue to consent")
         }
     }
 }
+
+private fun String.displayIndustryName(): String =
+    when (this) {
+        "telecom" -> "Telecommunications"
+        "banking" -> "Banking"
+        else -> replaceFirstChar(Char::uppercase)
+    }
 
 @Preview(showBackground = true)
 @Composable

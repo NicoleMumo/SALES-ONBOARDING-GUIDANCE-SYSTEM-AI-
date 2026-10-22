@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,7 @@ fun AgentSessionHistoryScreen(
     agentUid: String,
     store: SessionHistoryStore,
     onBack: () -> Unit,
+    onResumeSession: (StoredOnboardingSession) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var sessions by remember(agentUid) { mutableStateOf<List<StoredOnboardingSession>>(emptyList()) }
@@ -55,13 +57,14 @@ fun AgentSessionHistoryScreen(
     LaunchedEffect(agentUid, store) { refresh() }
     SessionHistoryContent(
         title = "My onboarded clients",
-        description = "View the sessions you created. Session details are read-only here.",
+        description = "Review completed sessions or continue a saved draft.",
         sessions = sessions,
         agents = emptyList(),
         isLoading = isLoading,
         errorMessage = errorMessage,
         onRefresh = ::refresh,
         onBack = onBack,
+        onResumeSession = onResumeSession,
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())
     )
 }
@@ -76,7 +79,8 @@ fun SessionHistoryContent(
     errorMessage: String?,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    onResumeSession: ((StoredOnboardingSession) -> Unit)? = null
 ) {
     var searchText by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf("all") }
@@ -205,6 +209,13 @@ fun SessionHistoryContent(
                         it.email.equals(session.agentEmail, ignoreCase = true)
                     }?.displayName,
                     expanded = session.sessionId in expandedSessionIds,
+                    onResumeSession = if (
+                        onResumeSession != null && session.status.equals("in_progress", ignoreCase = true)
+                    ) {
+                        { onResumeSession(session) }
+                    } else {
+                        null
+                    },
                     onToggleDetails = {
                         expandedSessionIds = if (session.sessionId in expandedSessionIds) {
                             expandedSessionIds - session.sessionId
@@ -223,6 +234,7 @@ private fun SessionHistoryCard(
     session: StoredOnboardingSession,
     agentName: String?,
     expanded: Boolean,
+    onResumeSession: (() -> Unit)?,
     onToggleDetails: () -> Unit
 ) {
     Card(
@@ -244,6 +256,19 @@ private fun SessionHistoryCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (onResumeSession != null) {
+                Text(
+                    "Your saved answers are ready to continue.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Button(
+                    onClick = onResumeSession,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Resume onboarding")
+                }
+            }
             val filledFieldIds = session.entries
                 .filter { !it.value.isNullOrBlank() && it.isValid != false }
                 .mapTo(mutableSetOf()) { it.fieldId }
