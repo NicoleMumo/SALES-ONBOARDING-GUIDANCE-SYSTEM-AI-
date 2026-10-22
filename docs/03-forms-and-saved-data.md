@@ -49,13 +49,12 @@ The image and OCR result are not uploaded or saved by this feature. The agent
 must check the document and enter only the required answers.
 
 OCR is text extraction, not proof that a document is genuine or belongs to the
-customer. The app does not currently capture a selfie, check liveness, match
-faces, screen sanctions, or make KYC/AML approval decisions. Banking playbooks
-do not ask agents to manually mark liveness or face-match checks as passed.
-
-Smile ID has been selected for evaluation, but no provider API or backend
-endpoint is implemented. See [02 - Connect Firebase](02-connect-firebase.md)
-for the proposed server-side verification API and the work still required.
+customer. The agent must compare the original document with the customer and
+follow the organization's approved manual review process. The app does not
+record an identity-verification decision. It does not capture a selfie, check
+liveness, match faces, screen sanctions, or make KYC/AML approval decisions.
+Banking playbooks do not ask agents to mark liveness or face-match checks as
+passed.
 
 ## What the app saves
 

@@ -94,56 +94,23 @@ Before production, decide who may see the data, why it is collected, how long
 it is kept, and how it will be deleted. Do not use real customer details until
 the rules and privacy plan have been reviewed and tested.
 
-## Future identity-verification API
+## Free document reading and manual identity review
 
-The Android app currently has no server-side identity-verification endpoint.
-Smile ID is only a provider under evaluation; the app does not capture a
-selfie, perform liveness or face matching, or make KYC/AML decisions.
+The app uses on-device ML Kit text recognition to read text from a document
+photo selected by the agent. It does not call a billable OCR endpoint. The
+photo and extracted text are not automatically uploaded or saved.
 
-If the organization approves a provider, use a trusted backend such as Firebase
-Cloud Functions as the only component that holds provider credentials. A
-proposed app-to-backend contract is:
+OCR is only a data-entry aid. The agent must compare the text with the original
+document and customer, then follow the organization's approved manual review
+process. The app does not store an identity-verification decision and does not
+perform official KYC/AML checks, selfie capture, liveness detection, face
+matching, or sanctions screening. It does not approve or reject customers.
 
-```text
-POST /v1/identity-verifications
-Authorization: Bearer <Firebase ID token>
-Content-Type: application/json
-
-{
-  "sessionId": "existing-session-id",
-  "countryCode": "KE",
-  "documentType": "national_id",
-  "documentObjectRef": "private, short-lived document reference",
-  "selfieObjectRef": "private, short-lived selfie reference"
-}
-```
-
-The backend must verify the caller's Firebase identity, active company
-membership, ownership of the in-progress session, and consent before contacting
-the provider. It must map the provider response to a minimal app response, for
-example:
-
-```json
-{
-  "verificationId": "server-generated-id",
-  "overallStatus": "NEEDS_HUMAN_REVIEW",
-  "liveness": "PENDING",
-  "faceMatch": "PENDING"
-}
-```
-
-These statuses are not account approval. Any pass, failure, mismatch, or
-uncertain result must follow an organization-approved human-review policy.
-Never put provider secrets in the Android app, Realtime Database, or source
-control. Do not store identity images, raw OCR text, or biometric templates in
-Realtime Database or logs. Before implementation, confirm Smile ID's coverage,
-supported document types, fees, data-processing terms, retention/deletion
-controls, and applicable Kenyan privacy and financial-sector requirements.
-Create and test the backend endpoint, private image upload and deletion flow,
-Firebase rules, consent copy, and review process before enabling the feature.
-The Android-side `IdentityVerificationGateway` types define an integration
-boundary only; there is no network client or provider-backed implementation
-yet.
+There is no free KYC API included. A third-party identity-verification service
+may charge for checks or require a paid plan. Do not add one unless the
+organization approves its cost, coverage, data handling, and compliance terms.
+If a service is considered later, put credentials and provider calls on a
+trusted backend, never in the Android app or source control.
 
 ## Common problems
 

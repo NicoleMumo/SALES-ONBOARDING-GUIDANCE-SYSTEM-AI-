@@ -85,7 +85,7 @@ fun DocumentOcrScanner(
             Text(if (isScanning) "Reading document…" else "Read text from a document photo")
         }
         Text(
-            "Text is read on this device. The photo and scan result are not uploaded or saved automatically. Check every result with the customer.",
+            "Free on-device text reading. Nothing is uploaded or saved automatically. Compare the result with the original document; OCR does not verify identity.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
