@@ -10,8 +10,8 @@ field to complete next. Company admins manage agents, forms, and sessions.
 - The identification-document screen can read printed text from a selected
   photo on the device. OCR does not verify document authenticity or save the
   photo or extracted text.
-- Smile ID is only being evaluated. The app has no live KYC, selfie, liveness,
-  face-match, sanctions, or automated approval service.
+- Identity checks are manual. The app has no paid KYC service, selfie,
+  liveness, face-match, sanctions, or automated approval feature.
 - The training data is simulated. It does not come from real customers.
 - The new test for the model's Android prediction flow has not been run.
 - Firebase access rules and privacy plans still need testing before real
