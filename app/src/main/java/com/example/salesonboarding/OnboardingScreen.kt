@@ -160,13 +160,18 @@ fun OnboardingConsentScreen(
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ConsentPoint(
-                    title = "Data Security & Retention",
-                    description = "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
+                    title = "Document photos",
+                    description = "If you choose a document photo, text is read on this device to help with data entry. The photo and scan result are not uploaded or saved automatically."
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ConsentPoint(
-                    title = "Customer Rights",
+                    title = "Customer rights",
                     description = "The customer may request review of their submitted details through authorized company channels."
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ConsentPoint(
+                    title = "Access and retention",
+                    description = "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
                 )
             }
         }
@@ -687,6 +692,9 @@ fun OnboardingScreenContent(
                                         imeAction = ImeAction.Done
                                     )
                                 )
+                                if (field.fieldId == "identification_document") {
+                                    DocumentOcrScanner()
+                                }
                             }
                         }
                     }

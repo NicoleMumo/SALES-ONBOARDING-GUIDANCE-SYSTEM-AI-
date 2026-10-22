@@ -40,6 +40,23 @@ whether the session can be submitted.
 See [04 - Training data and AI](04-training-data-and-ai.md) for the model test
 status and its limits.
 
+## Document OCR and identity checks
+
+On the identification-document step, an agent can choose a document photo.
+Bundled Google ML Kit reads printed text on the device. The app displays the
+text for the agent to inspect; it does not automatically fill form fields.
+The image and OCR result are not uploaded or saved by this feature. The agent
+must check the document and enter only the required answers.
+
+OCR is text extraction, not proof that a document is genuine or belongs to the
+customer. The app does not currently capture a selfie, check liveness, match
+faces, screen sanctions, or make KYC/AML approval decisions. Banking playbooks
+do not ask agents to manually mark liveness or face-match checks as passed.
+
+Smile ID has been selected for evaluation, but no provider API or backend
+endpoint is implemented. See [02 - Connect Firebase](02-connect-firebase.md)
+for the proposed server-side verification API and the work still required.
+
 ## What the app saves
 
 Sessions are stored in Firebase at:

@@ -29,6 +29,10 @@ class OnboardingPlaybookTest {
         assertTrue(telecomBroadband.fields.any { it.fieldId == "internet_service_selection" })
         assertTrue(telecomBroadband.fields.any { it.fieldId == "streaming_addons_selection" })
         assertFalse(telecomBroadband.fields.any { it.fieldId == "phone_service_selection" })
+        assertTrue(bankingIndividual.fields.any { it.fieldId == "identification_document" })
+        assertFalse(bankingIndividual.fields.any {
+            it.fieldId == "selfie_liveness_check" || it.fieldId == "face_match_verification"
+        })
     }
 
     @Test
@@ -73,10 +77,9 @@ class OnboardingPlaybookTest {
                 "mobile_phone_number",
                 "date_of_birth",
                 "home_address",
+                "identification_document",
                 "identification_document_type",
                 "identification_document_number",
-                "selfie_liveness_check",
-                "face_match_verification",
                 "profession",
                 "income",
                 "assets",
@@ -94,10 +97,9 @@ class OnboardingPlaybookTest {
                 "mobile_phone_number",
                 "date_of_birth",
                 "home_address",
+                "identification_document",
                 "identification_document_type",
                 "identification_document_number",
-                "selfie_liveness_check",
-                "face_match_verification",
                 "profession",
                 "income",
                 "assets",

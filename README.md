@@ -7,6 +7,11 @@ field to complete next. Company admins manage agents, forms, and sessions.
 ## Before you start
 
 - The app uses Kotlin, Jetpack Compose, Firebase, and TensorFlow Lite.
+- The identification-document screen can read printed text from a selected
+  photo on the device. OCR does not verify document authenticity or save the
+  photo or extracted text.
+- Smile ID is only being evaluated. The app has no live KYC, selfie, liveness,
+  face-match, sanctions, or automated approval service.
 - The training data is simulated. It does not come from real customers.
 - The new test for the model's Android prediction flow has not been run.
 - Firebase access rules and privacy plans still need testing before real

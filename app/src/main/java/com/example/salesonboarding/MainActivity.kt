@@ -475,7 +475,11 @@ class MainActivity : ComponentActivity() {
                                     initialResumeFieldId = resumedSession
                                         ?.takeIf { it.sessionId == onboardingSessionId }
                                         ?.let { session ->
-                                            session.resumeFieldId ?: playbook.fields.firstOrNull { field ->
+                                            session.resumeFieldId
+                                                ?.takeIf { resumeId ->
+                                                    playbook.fields.any { it.fieldId == resumeId }
+                                                }
+                                                ?: playbook.fields.firstOrNull { field ->
                                                 val savedEntry = session.entries.firstOrNull {
                                                     it.fieldId == field.fieldId
                                                 }

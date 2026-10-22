@@ -94,6 +94,57 @@ Before production, decide who may see the data, why it is collected, how long
 it is kept, and how it will be deleted. Do not use real customer details until
 the rules and privacy plan have been reviewed and tested.
 
+## Future identity-verification API
+
+The Android app currently has no server-side identity-verification endpoint.
+Smile ID is only a provider under evaluation; the app does not capture a
+selfie, perform liveness or face matching, or make KYC/AML decisions.
+
+If the organization approves a provider, use a trusted backend such as Firebase
+Cloud Functions as the only component that holds provider credentials. A
+proposed app-to-backend contract is:
+
+```text
+POST /v1/identity-verifications
+Authorization: Bearer <Firebase ID token>
+Content-Type: application/json
+
+{
+  "sessionId": "existing-session-id",
+  "countryCode": "KE",
+  "documentType": "national_id",
+  "documentObjectRef": "private, short-lived document reference",
+  "selfieObjectRef": "private, short-lived selfie reference"
+}
+```
+
+The backend must verify the caller's Firebase identity, active company
+membership, ownership of the in-progress session, and consent before contacting
+the provider. It must map the provider response to a minimal app response, for
+example:
+
+```json
+{
+  "verificationId": "server-generated-id",
+  "overallStatus": "NEEDS_HUMAN_REVIEW",
+  "liveness": "PENDING",
+  "faceMatch": "PENDING"
+}
+```
+
+These statuses are not account approval. Any pass, failure, mismatch, or
+uncertain result must follow an organization-approved human-review policy.
+Never put provider secrets in the Android app, Realtime Database, or source
+control. Do not store identity images, raw OCR text, or biometric templates in
+Realtime Database or logs. Before implementation, confirm Smile ID's coverage,
+supported document types, fees, data-processing terms, retention/deletion
+controls, and applicable Kenyan privacy and financial-sector requirements.
+Create and test the backend endpoint, private image upload and deletion flow,
+Firebase rules, consent copy, and review process before enabling the feature.
+The Android-side `IdentityVerificationGateway` types define an integration
+boundary only; there is no network client or provider-backed implementation
+yet.
+
 ## Common problems
 
 - **Admin access denied:** Check the verified email, admin claim, company ID,
