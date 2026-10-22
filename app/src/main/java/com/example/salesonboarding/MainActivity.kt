@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                 var selectedContext by remember { mutableStateOf<String?>(null) }
                 var consentGiven by remember { mutableStateOf(false) }
                 var onboardingSessionId by remember { mutableStateOf<String?>(null) }
+                var resumedSession by remember { mutableStateOf<StoredOnboardingSession?>(null) }
                 var fieldRuleConfiguration by remember { mutableStateOf(FieldRuleConfiguration()) }
                 var isLoadingFieldConfiguration by remember { mutableStateOf(true) }
                 var fieldConfigurationWarning by remember { mutableStateOf<String?>(null) }
@@ -358,6 +359,7 @@ class MainActivity : ComponentActivity() {
                                 selectedContext = null
                                 consentGiven = false
                                 onboardingSessionId = null
+                                resumedSession = null
                                 showAgentSessions = false
                             },
                             modifier = Modifier.padding(innerPadding)
@@ -367,6 +369,15 @@ class MainActivity : ComponentActivity() {
                             agentUid = agentId,
                             store = sessionHistoryStore,
                             onBack = { showAgentSessions = false },
+                            onResumeSession = { session ->
+                                resumedSession = session
+                                onboardingSessionId = session.sessionId
+                                selectedIndustry = session.industry
+                                selectedContext = session.context
+                                consentGiven = true
+                                showAgentSessions = false
+                                showAgentHome = false
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (showAgentHome && selectedIndustry == null) {
@@ -374,8 +385,10 @@ class MainActivity : ComponentActivity() {
                             onStartOnboarding = {
                                 showAgentSessions = false
                                 showAgentHome = false
+                                resumedSession = null
                             },
                             onViewSessions = { showAgentSessions = true },
+                            companyIndustry = companyIndustry,
                             onSignOut = {
                                 FirebaseAuth.getInstance().signOut()
                                 signedIn = false
@@ -394,6 +407,7 @@ class MainActivity : ComponentActivity() {
                             onIndustrySelected = { industry, context ->
                                 selectedIndustry = industry
                                 selectedContext = context
+                                resumedSession = null
                                 consentGiven = false
                                 onboardingSessionId = UUID.randomUUID().toString()
                             },
@@ -452,7 +466,28 @@ class MainActivity : ComponentActivity() {
                                     agentEmail = FirebaseAuth.getInstance().currentUser?.email.orEmpty(),
                                     fields = playbook.fields,
                                     playbook = playbook,
-                                    initialModelUnavailable = predictorAttempt.isFailure
+                                    initialModelUnavailable = predictorAttempt.isFailure,
+                                    initialValues = resumedSession
+                                        ?.takeIf { it.sessionId == onboardingSessionId }
+                                        ?.entries
+                                        ?.associate { it.fieldId to it.value }
+                                        .orEmpty(),
+                                    initialResumeFieldId = resumedSession
+                                        ?.takeIf { it.sessionId == onboardingSessionId }
+                                        ?.let { session ->
+                                            session.resumeFieldId
+                                                ?.takeIf { resumeId ->
+                                                    playbook.fields.any { it.fieldId == resumeId }
+                                                }
+                                                ?: playbook.fields.firstOrNull { field ->
+                                                val savedEntry = session.entries.firstOrNull {
+                                                    it.fieldId == field.fieldId
+                                                }
+                                                savedEntry?.value.isNullOrBlank() ||
+                                                    savedEntry?.isValid == false
+                                            }?.fieldId
+                                        },
+                                    isResumingSession = resumedSession?.sessionId == onboardingSessionId
                                 )
                                 OnboardingScreen(
                                     controller = controller,
@@ -461,6 +496,7 @@ class MainActivity : ComponentActivity() {
                                         selectedContext = null
                                         consentGiven = false
                                         onboardingSessionId = null
+                                        resumedSession = null
                                         showAgentHome = false
                                         showAgentSessions = false
                                     },

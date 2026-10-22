@@ -16,6 +16,8 @@ import com.example.salesonboarding.risk.CompletionRiskGuidanceMapper
 import com.example.salesonboarding.risk.CompletionRiskResult
 import com.example.salesonboarding.risk.CompletionRiskScorer
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,10 +47,16 @@ data class OnboardingReadiness(
         get() = incompleteRequiredFields.isEmpty() && invalidOptionalFields.isEmpty()
 }
 
+data class DraftSaveStatus(
+    val isSaving: Boolean = false,
+    val savedAtMillis: Long? = null,
+    val errorMessage: String? = null
+)
+
 class OnboardingFormController(
     private val sessionId: String,
     val fields: List<FormField> = DEFAULT_FIELDS,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val entryStore: FieldEntryStore,
     private val predictor: NextFieldPredictor? = null,
     private val industry: String = "telecom",
@@ -56,7 +64,10 @@ class OnboardingFormController(
     private val agentId: String = "unknown-agent",
     playbook: OnboardingPlaybook? = null,
     initialModelUnavailable: Boolean = false,
-    private val agentEmail: String = ""
+    private val agentEmail: String = "",
+    initialValues: Map<String, String?> = emptyMap(),
+    private val initialResumeFieldId: String? = null,
+    private val isResumingSession: Boolean = false
 ) {
     val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
         id = "$industry-standard-onboarding",
@@ -64,32 +75,44 @@ class OnboardingFormController(
         industry = industry,
         fields = fields
     )
+    val supportsDraftSaving: Boolean = entryStore is OnboardingSessionStore
     private val modelUnavailable = initialModelUnavailable || predictor == null
 
     private val session = LiveValidationSession(
         sessionId = sessionId,
         fields = fields,
-        scope = scope
+        scope = scope,
+        initialValues = initialValues
     )
 
     val stateFlow: StateFlow<LiveValidationState> = session.stateFlow
     private val guidance = MutableStateFlow(NextFieldGuidance())
     val guidanceFlow: StateFlow<NextFieldGuidance> = guidance.asStateFlow()
+    private val draftSaveStatus = MutableStateFlow(DraftSaveStatus())
+    val draftSaveStatusFlow: StateFlow<DraftSaveStatus> = draftSaveStatus.asStateFlow()
     private val risk = MutableStateFlow<CompletionRiskResult?>(null)
     val riskFlow: StateFlow<CompletionRiskResult?> = risk.asStateFlow()
     private var lastPredictorInput: PredictorInput? = null
     private var lastObservedResults: Map<String, ValidationResult> = emptyMap()
     private val processedRiskInteractions = mutableSetOf<Int>()
+    private var currentResumeFieldId = initialResumeFieldId ?: fields.firstOrNull()?.fieldId
+    val resumeFieldId: String?
+        get() = currentResumeFieldId
+    private var hasDraftChanges = initialValues.values.any { !it.isNullOrBlank() }
+    private var draftSaveJob: Job? = null
+    private var draftSaveRequestId = 0
 
     init {
-        (entryStore as? OnboardingSessionStore)?.startSession(
-            sessionId,
-            agentId,
-            industry,
-            context,
-            this.playbook,
-            agentEmail
-        )
+        if (!isResumingSession) {
+            (entryStore as? OnboardingSessionStore)?.startSession(
+                sessionId,
+                agentId,
+                industry,
+                context,
+                this.playbook,
+                agentEmail
+            )
+        }
         scope.launch {
             stateFlow.collect { state ->
                 val sessionStore = entryStore as? OnboardingSessionStore
@@ -176,6 +199,14 @@ class OnboardingFormController(
 
     fun updateField(fieldId: String, value: String) {
         session.updateField(fieldId, value)
+        hasDraftChanges = true
+        scheduleDraftSave()
+    }
+
+    fun setResumeField(fieldId: String) {
+        if (fields.none { it.fieldId == fieldId }) return
+        currentResumeFieldId = fieldId
+        scheduleDraftSave()
     }
 
     fun recordRiskEvent(event: CompletionRiskEvent) {
@@ -234,13 +265,50 @@ class OnboardingFormController(
         }
         val sessionStore = entryStore as? OnboardingSessionStore
         if (sessionStore != null) {
-            sessionStore.completeSession(sessionId, entries, onResult)
+            draftSaveJob?.cancel()
+            draftSaveRequestId++
+            draftSaveStatus.value = DraftSaveStatus()
+            sessionStore.completeSession(sessionId, entries, fields.map(FormField::fieldId), onResult)
         } else {
             runCatching { entries.forEach(entryStore::save) }
                 .onSuccess { onResult(Result.success(Unit)) }
                 .onFailure { onResult(Result.failure(it)) }
         }
         return true
+    }
+
+    private fun scheduleDraftSave() {
+        val sessionStore = entryStore as? OnboardingSessionStore ?: return
+        if (!hasDraftChanges) return
+        draftSaveJob?.cancel()
+        val requestId = ++draftSaveRequestId
+        draftSaveStatus.value = DraftSaveStatus(isSaving = true)
+        draftSaveJob = scope.launch {
+            delay(DRAFT_SAVE_DEBOUNCE_MILLIS)
+            val currentState = stateFlow.value
+            val entries = fields.map { field ->
+                FieldEntry(
+                    entryId = "$sessionId:${field.fieldId}",
+                    sessionId = sessionId,
+                    fieldId = field.fieldId,
+                    value = currentState.values[field.fieldId],
+                    isValid = currentState.results[field.fieldId]?.isValid
+                )
+            }
+            sessionStore.saveDraft(sessionId, entries, currentResumeFieldId) { result ->
+                if (requestId == draftSaveRequestId) {
+                    draftSaveStatus.value = result.fold(
+                        onSuccess = { DraftSaveStatus(savedAtMillis = System.currentTimeMillis()) },
+                        onFailure = {
+                            DraftSaveStatus(
+                                errorMessage = it.message
+                                    ?: "Could not save this draft. Check your connection and try again."
+                            )
+                        }
+                    )
+                }
+            }
+        }
     }
 
     private fun buildGuidance(
@@ -305,6 +373,7 @@ class OnboardingFormController(
     )
 
     companion object {
+        private const val DRAFT_SAVE_DEBOUNCE_MILLIS = 700L
         private val MODEL_FIELD_IDS = KnownFields.all.mapTo(mutableSetOf()) { it.fieldId }
 
         val DEFAULT_FIELDS: List<FormField> = listOf(

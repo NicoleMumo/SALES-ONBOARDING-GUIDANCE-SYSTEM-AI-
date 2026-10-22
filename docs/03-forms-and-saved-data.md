@@ -40,6 +40,23 @@ whether the session can be submitted.
 See [04 - Training data and AI](04-training-data-and-ai.md) for the model test
 status and its limits.
 
+## Document OCR and identity checks
+
+On the identification-document step, an agent can choose a document photo.
+Bundled Google ML Kit reads printed text on the device. The app displays the
+text for the agent to inspect; it does not automatically fill form fields.
+The image and OCR result are not uploaded or saved by this feature. The agent
+must check the document and enter only the required answers.
+
+OCR is text extraction, not proof that a document is genuine or belongs to the
+customer. The app does not currently capture a selfie, check liveness, match
+faces, screen sanctions, or make KYC/AML approval decisions. Banking playbooks
+do not ask agents to manually mark liveness or face-match checks as passed.
+
+Smile ID has been selected for evaluation, but no provider API or backend
+endpoint is implemented. See [02 - Connect Firebase](02-connect-firebase.md)
+for the proposed server-side verification API and the work still required.
+
 ## What the app saves
 
 Sessions are stored in Firebase at:
@@ -53,13 +70,20 @@ timestamps, and a copy of the form fields and rules used.
 
 Other saved data includes:
 
-- Valid, non-empty answers under `entries/{fieldId}`.
+- Non-empty draft answers under `entries/{fieldId}` while a session is in
+  progress. Drafts include a resume field and last-saved time.
+- Valid, non-empty answers under `entries/{fieldId}` when the session is
+  completed. Invalid draft values are removed when the agent completes the
+  session.
 - The latest answer-check result under `validation/{fieldId}`.
 - Events under `events`, with the event type, field ID, and time.
 
 The event records do not contain the customer's answer. The app saves the
-answers and completed status together. It shows completion only after Firebase
-confirms the save.
+draft as the agent types, with a short delay to reduce repeated writes. A save
+failure is shown in the form. Agents can resume their own in-progress sessions
+from **My onboarded clients**. The app shows its answer-review step before it
+submits a completed session, and shows completion only after Firebase confirms
+the save.
 
 Time spent on fields and revisits are used for in-app completion-risk
 guidance. They are calculated in memory and are not saved as event details.
