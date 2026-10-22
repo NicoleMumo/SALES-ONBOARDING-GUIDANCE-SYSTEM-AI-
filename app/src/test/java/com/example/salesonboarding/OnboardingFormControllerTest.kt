@@ -111,6 +111,55 @@ class OnboardingFormControllerTest {
     }
 
     @Test
+    fun draftAutosavesAnswersAndTheFieldToResume() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            sessionId = "draft-session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address")
+            ),
+            scope = backgroundScope,
+            entryStore = store
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        controller.setResumeField("email_address")
+        advanceTimeBy(700)
+        runCurrent()
+
+        assertEquals("Jane Wanjiku", store.savedDraftEntries.single {
+            it.fieldId == "full_name"
+        }.value)
+        assertEquals("email_address", store.savedDraftResumeFieldId)
+        assertFalse(controller.draftSaveStatusFlow.value.isSaving)
+        assertEquals(null, controller.draftSaveStatusFlow.value.errorMessage)
+    }
+
+    @Test
+    fun resumedSessionRestoresAnswersWithoutStartingANewSession() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            sessionId = "existing-draft",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address")
+            ),
+            scope = backgroundScope,
+            entryStore = store,
+            initialValues = mapOf("full_name" to "Jane Wanjiku"),
+            initialResumeFieldId = "email_address",
+            isResumingSession = true
+        )
+        runCurrent()
+
+        assertEquals("Jane Wanjiku", controller.stateFlow.value.values["full_name"])
+        assertEquals("email_address", controller.resumeFieldId)
+        assertEquals(null, store.startedSession)
+        assertEquals(1, controller.readiness().completedRequiredFieldCount)
+    }
+
+    @Test
     fun customFieldValidationWorksAndPreservesHistoryForDynamicModelScoring() = runTest {
         val customField = FormField(
             fieldId = "loyalty_email",
@@ -206,6 +255,8 @@ class OnboardingFormControllerTest {
     private class RecordingOnboardingSessionStore : OnboardingSessionStore {
         var startedSession: SessionStart? = null
         var completedSessionId: String? = null
+        var savedDraftEntries: List<FieldEntry> = emptyList()
+        var savedDraftResumeFieldId: String? = null
         val validatedFields = mutableSetOf<String>()
         val events = mutableListOf<SessionEvent>()
         private val entries = mutableListOf<FieldEntry>()
@@ -216,6 +267,17 @@ class OnboardingFormControllerTest {
         override fun save(entry: FieldEntry) {
             entries.removeAll { it.fieldId == entry.fieldId }
             entries += entry
+        }
+
+        override fun saveDraft(
+            sessionId: String,
+            entries: List<FieldEntry>,
+            resumeFieldId: String?,
+            onResult: (Result<Unit>) -> Unit
+        ) {
+            savedDraftEntries = entries
+            savedDraftResumeFieldId = resumeFieldId
+            onResult(Result.success(Unit))
         }
 
         override fun startSession(

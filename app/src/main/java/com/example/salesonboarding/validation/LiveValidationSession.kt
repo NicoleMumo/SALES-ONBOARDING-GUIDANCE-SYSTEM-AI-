@@ -27,13 +27,40 @@ class LiveValidationSession(
     fields: List<FormField> = KnownFields.all,
     configuration: FieldRuleConfiguration = FieldRuleConfiguration(),
     private val scope: CoroutineScope,
-    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS
+    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS,
+    initialValues: Map<String, String?> = emptyMap()
 ) {
     private val fieldsById = configuration.allFields(fields).associateBy { it.fieldId }
     private val validationJobs = mutableMapOf<String, Job>()
     private val state = MutableStateFlow(LiveValidationState())
 
     val stateFlow: StateFlow<LiveValidationState> = state.asStateFlow()
+
+    init {
+        val restoredValues = initialValues
+            .filterKeys(fieldsById::containsKey)
+            .filterValues { !it.isNullOrBlank() }
+        if (restoredValues.isNotEmpty()) {
+            val context = ValidationContext(restoredValues)
+            val results = restoredValues.mapValues { (fieldId, value) ->
+                val field = fieldsById.getValue(fieldId)
+                field.validate(
+                    FieldEntry(
+                        entryId = "$sessionId:$fieldId",
+                        sessionId = sessionId,
+                        fieldId = fieldId,
+                        value = value
+                    ),
+                    context
+                )
+            }
+            state.value = LiveValidationState(
+                values = restoredValues,
+                results = results,
+                touchedFieldIds = restoredValues.keys
+            )
+        }
+    }
 
     /**
      * Values are published immediately, while validation waits 300 ms after
