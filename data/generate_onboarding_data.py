@@ -2,9 +2,11 @@
 Realistic synthetic onboarding-session generator (v3) for SalesMesh.
 
 Replacement for the older v2 simulator. It retains the 28-column event
-schema and extends v3's 33-field vocabulary with the app's banking-business
-`business_name` field. It uses the same industries, contexts, and validation
-values.
+schema and uses the same industries, contexts, and validation values. The
+banking flow matches the app's banking playbooks: an ID photo step
+(`identification_document`) followed by document type and number, and no
+selfie, liveness or face-match steps, which the app does not have. The
+vocabulary is the 32 fields of the app's standard playbooks.
 
 What v3 adds is *latent structure*: the sequences are produced by simulated
 people and systems, not by per-session scenario labels.
@@ -19,13 +21,17 @@ people and systems, not by per-session scenario labels.
   Systems    the identity-verification / activation service has outage
              windows, so "could not be verified" failures cluster in time
              across agents, the way real outages do.
-  Causality  revisits have reasons: a failed face match sends the agent back
-             to the selfie; an unverifiable ID number is often a misspelt
-             name or wrong date of birth; deferred fields ("I'll get you the
+  Causality  revisits have reasons: an unverifiable ID number is often a
+             misspelt name or wrong date of birth; a blurry ID photo is more
+             likely on a low-end phone; deferred fields ("I'll get you the
              email later") reappear at the end of the stage.
   Outcomes   abandonment is a hazard that rises with consecutive failures,
              elapsed time vs. patience, and missing documents -- it is NOT
              drawn up front.
+
+Splits are by agent: all of an agent's sessions go to one of train,
+validation or test (about 70/15/15 of sessions), so the test set only
+contains agents the model never saw in training.
 
 `onboarding_scenario` is derived *after* the session from what happened
 (descriptive only). It summarises the whole session, so never feed it to a
@@ -46,6 +52,7 @@ import csv
 import math
 import random
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -93,8 +100,6 @@ F = {
     "home_address":                     dict(med=1.3, sd=0.55, fail=0.04, why=(3, 1, 0), cx=0.20),
     "identification_document_type":     dict(med=0.3, sd=0.40, fail=0.01, why=(1, 1, 0), cx=0.10, doc=True),
     "identification_document_number":   dict(med=1.0, sd=0.50, fail=0.07, why=(0, 2, 5), cx=0.10, ver=True, doc=True),
-    "selfie_liveness_check":            dict(med=1.6, sd=0.55, fail=0.10, why=(0, 0, 1), cx=0.35, ver=True),
-    "face_match_verification":          dict(med=0.8, sd=0.45, fail=0.07, why=(0, 0, 1), cx=0.10, ver=True),
     "profession":                       dict(med=0.5, sd=0.45, fail=0.01, why=(1, 1, 0), cx=0.10),
     "income":                           dict(med=1.1, sd=0.55, fail=0.06, why=(4, 1, 0), cx=0.30),
     "assets":                           dict(med=1.5, sd=0.60, fail=0.08, why=(4, 1, 0), cx=0.35),
@@ -110,6 +115,7 @@ F = {
     "contact_phone_number":             dict(med=0.5, sd=0.45, fail=0.04, why=(0, 3, 2), cx=0.05),
     "gender":                           dict(med=0.2, sd=0.35, fail=0.00, why=(1, 0, 0), cx=0.02),
     "physical_address":                 dict(med=1.2, sd=0.55, fail=0.04, why=(3, 1, 0), cx=0.20),
+    # ID photo step, used by both industries
     "identification_document":          dict(med=1.5, sd=0.50, fail=0.08, why=(1, 2, 5), cx=0.15, ver=True, doc=True),
     "subscriber_type":                  dict(med=0.3, sd=0.40, fail=0.00, why=(1, 0, 0), cx=0.15),
     "service_type":                     dict(med=0.6, sd=0.50, fail=0.00, why=(1, 0, 0), cx=0.20),
@@ -131,7 +137,6 @@ DEFERRABLE = {"email_address", "assets", "income", "home_address", "physical_add
 
 # Failure on key -> agent goes back to one of these fields first (with prob).
 CAUSAL_BACKTRACK = {
-    "face_match_verification": (["selfie_liveness_check"], 0.75),
     "identification_document_number": (["full_name", "date_of_birth", "identification_document_type"], 0.35),
     "identification_document": (["full_name", "date_of_birth"], 0.35),
     "subscriber_number": (["payment_method", "service_type"], 0.25),
@@ -145,10 +150,9 @@ BANKING_FIELDS = [
     ("mobile_phone_number", "customer_information", None),
     ("date_of_birth", "customer_information", None),
     ("home_address", "customer_information", None),
+    ("identification_document", "identity_verification", None),
     ("identification_document_type", "identity_verification", None),
     ("identification_document_number", "identity_verification", None),
-    ("selfie_liveness_check", "identity_verification", None),
-    ("face_match_verification", "identity_verification", None),
     ("profession", "financial_profile", None),
     ("income", "financial_profile", None),
     ("assets", "financial_profile", None),
@@ -185,7 +189,8 @@ TELECOM_FIELDS = [
 TELECOM_STAGES = ["kyc", "service_selection", "activation"]
 
 DEFS = {"banking": (BANKING_FIELDS, BANKING_STAGES), "telecom": (TELECOM_FIELDS, TELECOM_STAGES)}
-ID_FIELDS = {"banking": ["identification_document_type", "identification_document_number"],
+ID_FIELDS = {"banking": ["identification_document", "identification_document_type",
+                         "identification_document_number"],
              "telecom": ["identification_document"]}
 OCR_PREFILLED = {"full_name", "date_of_birth"}
 
@@ -235,7 +240,7 @@ class Customer:
         ready = 0.72 if context == "business" else 0.90
         self.has_documents = rng.random() < ready
         self.patience = rng.lognormvariate(math.log(35 if industry == "banking" else 22), 0.45)
-        self.low_end_device = rng.random() < 0.28            # selfie/liveness struggles
+        self.low_end_device = rng.random() < 0.28            # blurrier ID photos
 
 
 def weighted(rng, d):
@@ -340,8 +345,8 @@ def simulate_session(rng, industry, context, agent, customer, start, outages, re
         if spec.get("ver") and in_outage(t) and rng.random() < CONFIG["outage_fail_probability"]:
             return True, REASONS[2]
         p = spec["fail"] * err * (0.5 ** attempt)
-        if field == "selfie_liveness_check" and customer.low_end_device:
-            p *= 2.2
+        if field == "identification_document" and customer.low_end_device:
+            p *= 1.5
         if agent.style == "id_first" and field in OCR_PREFILLED:
             p *= 0.3
         if field in ("email_address", "home_address", "income", "assets"):
@@ -595,20 +600,36 @@ def generate(n_sessions, seed):
     totals = sorted(sum(r["dur"] + r["rt"] for r in s[4]) for s in raw)
     long_threshold = totals[int(0.9 * len(totals))]
 
-    n_days = len(days)
+    split_of_agent = assign_agent_splits(raw, seed)
     events = []
-    for customer, agent, industry, context, rows, stage_of, total, abandoned, day in raw:
+    for customer, agent, industry, context, rows, stage_of, total, abandoned, _day in raw:
         minutes = sum(r["dur"] + r["rt"] for r in rows)
         scenario = derive_scenario(rows, abandoned, minutes, long_threshold)
         sid = f"SESSION-{uuid.UUID(int=rng.getrandbits(128)).hex[:8].upper()}"
         ev = to_events(sid, customer, agent, industry, context, rows, stage_of, total,
                        abandoned, scenario)
-        frac = (day - start_day).days / n_days
-        split = "train" if frac < 0.70 else ("validation" if frac < 0.85 else "test")
         for e in ev:
-            e["split"] = split
+            e["split"] = split_of_agent[agent.id]
         events.extend(ev)
     return events
+
+
+def assign_agent_splits(raw, seed):
+    """Put each agent wholly in train, validation or test, about 70/15/15 of sessions.
+
+    Agents are shuffled with their own seeded RNG (so the session stream is not
+    disturbed), then filled into the splits in that order by session count.
+    """
+    sessions_per_agent = Counter(agent.id for _, agent, *_ in raw)
+    agent_ids = sorted(sessions_per_agent)
+    random.Random(seed + 101).shuffle(agent_ids)
+    total = sum(sessions_per_agent.values())
+    split_of, seen = {}, 0
+    for agent_id in agent_ids:
+        share = seen / total
+        split_of[agent_id] = "train" if share < 0.70 else ("validation" if share < 0.85 else "test")
+        seen += sessions_per_agent[agent_id]
+    return split_of
 
 
 def add_noise(rng, events):

@@ -13,12 +13,12 @@ DEFAULT_DATASET = ROOT / "data" / "onboarding_dataset.csv"
 
 BANKING_INDIVIDUAL = [
     "full_name", "email_address", "mobile_phone_number", "date_of_birth",
-    "home_address", "identification_document_type", "identification_document_number",
-    "selfie_liveness_check", "face_match_verification", "profession", "income",
+    "home_address", "identification_document", "identification_document_type",
+    "identification_document_number", "profession", "income",
     "assets", "us_person_status", "politically_exposed_person_status",
     "terms_and_conditions_acceptance",
 ]
-BANKING_BUSINESS = BANKING_INDIVIDUAL + [
+BANKING_BUSINESS = ["full_name", "business_name", *BANKING_INDIVIDUAL[1:],
     "commercial_address", "beneficial_owner_information", "business_relationship_purpose",
     "business_relationship_nature", "ownership_and_control_information",
 ]

@@ -15,11 +15,11 @@ class EvaluationBaselineTests(unittest.TestCase):
         self.assertEqual(
             "commercial_address",
             canonical_prediction(
-                ["full_name", "email_address", "mobile_phone_number", "date_of_birth",
-                 "home_address", "identification_document_type", "identification_document_number",
-                 "selfie_liveness_check", "face_match_verification", "profession", "income",
-                 "assets", "us_person_status", "politically_exposed_person_status",
-                 "terms_and_conditions_acceptance"],
+                ["full_name", "business_name", "email_address", "mobile_phone_number",
+                 "date_of_birth", "home_address", "identification_document",
+                 "identification_document_type", "identification_document_number",
+                 "profession", "income", "assets", "us_person_status",
+                 "politically_exposed_person_status", "terms_and_conditions_acceptance"],
                 "banking",
                 "business",
             ),

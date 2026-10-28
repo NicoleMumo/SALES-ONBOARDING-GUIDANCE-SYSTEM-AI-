@@ -123,6 +123,14 @@ def next_field_baselines(rows):
     return results
 
 
+def agents_in_more_than_one_split(rows):
+    """Agents with events in more than one split. With an agent split this is empty."""
+    splits_by_agent = defaultdict(set)
+    for row in rows:
+        splits_by_agent[row["sales_agent_id"]].add(row["split"])
+    return sorted(agent for agent, splits in splits_by_agent.items() if len(splits) > 1)
+
+
 def _number(row, key):
     try:
         return float(row[key] or 0)
@@ -183,8 +191,14 @@ def report(path):
     print(f"failed events with no reason: {missing_reasons:,}")
     print("most-failed fields:", dict(failed_fields.most_common(5)))
     print("split (sessions):", {key: len(value) for key, value in split_sessions.items()})
+    shared_agents = agents_in_more_than_one_split(rows)
+    print(f"agents in more than one split: {len(shared_agents)}")
+    if shared_agents:
+        print("  warning: test scores include agents the model saw in training")
     for name, accuracy in next_field_baselines(rows).items():
         print(f"  {name:38s} test next-field accuracy {accuracy:.2%}")
+    if not shared_agents:
+        print("  (B3 equals B2 here: no test agent appears in training)")
 
 
 def main():
