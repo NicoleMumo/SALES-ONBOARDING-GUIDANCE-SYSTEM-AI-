@@ -1,5 +1,6 @@
 package com.example.salesonboarding.validation
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,7 +60,7 @@ class ValidationRulesTest {
     }
 
     @Test fun everyKnownFieldHasAValidAndInvalidCase() {
-        assertTrue(KnownFields.all.size == 33)
+        assertEquals(34, KnownFields.all.size)
         KnownFields.all.forEach { field ->
             assertTrue(
                 "Expected ${field.fieldId} to have agent-facing instructions",

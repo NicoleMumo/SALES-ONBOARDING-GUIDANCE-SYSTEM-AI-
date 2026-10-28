@@ -352,7 +352,7 @@ class OnboardingFormControllerTest {
 
         assertFalse(controller.canContinue())
         assertEquals(
-            "Enter a valid Kenyan phone number (07XXXXXXXX or +2547XXXXXXXX).",
+            "Enter a valid Kenyan phone number (07XXXXXXXX, 01XXXXXXXX, +2547XXXXXXXX or +2541XXXXXXXX).",
             controller.guidanceFlow.value.correction?.message
         )
     }

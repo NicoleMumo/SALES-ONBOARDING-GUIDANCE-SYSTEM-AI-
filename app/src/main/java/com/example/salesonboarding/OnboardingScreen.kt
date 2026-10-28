@@ -1268,7 +1268,7 @@ private fun fieldGuidanceDetails(
         add("Format: name@example.com")
     }
     if (field.validationRules.any { it is KenyanPhoneFormat }) {
-        add("Format: 07XXXXXXXX or +2547XXXXXXXX")
+        add("Format: 07XXXXXXXX, 01XXXXXXXX, +2547XXXXXXXX or +2541XXXXXXXX")
     }
     field.validationRules.filterIsInstance<DateFormatAndMinimumAge>().firstOrNull()?.let { rule ->
         add("Format: YYYY-MM-DD (Minimum age: ${rule.minimumAge})")

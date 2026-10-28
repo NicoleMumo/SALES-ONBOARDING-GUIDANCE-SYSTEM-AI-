@@ -106,7 +106,8 @@ class AdminDataStoreTest {
 
     @Test
     fun disablingRequirednessAlsoRemovesNotBlankFromCatalogueField() {
-        val field = KnownFields.get("full_name")
+        // full_name is a locked compliance field, so use an unlocked one.
+        val field = KnownFields.get("email_address")
         val configuredField = FieldRuleConfiguration(
             overrides = mapOf(
                 field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
@@ -116,7 +117,21 @@ class AdminDataStoreTest {
         ).fieldFor(field)
 
         assertTrue(!configuredField.isRequired)
-        assertTrue(configuredField.validationRule.none { it == Required || it == NotBlank })
+        assertTrue(configuredField.validationRules.none { it == Required || it == NotBlank })
+    }
+
+    @Test
+    fun lockedComplianceFieldStaysRequiredWhenRemovalIsRequested() {
+        val field = KnownFields.get("full_name")
+        val configuredField = FieldRuleConfiguration(
+            overrides = mapOf(
+                field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                    removeRules = listOf(Required, NotBlank)
+                )
+            )
+        ).fieldFor(field)
+
+        assertTrue(configuredField.isRequired)
     }
 
     @Test

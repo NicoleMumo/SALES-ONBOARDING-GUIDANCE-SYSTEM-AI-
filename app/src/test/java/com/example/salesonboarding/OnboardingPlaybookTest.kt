@@ -56,7 +56,8 @@ class OnboardingPlaybookTest {
             "telecom",
             FieldRuleConfiguration(
                 overrides = mapOf(
-                    "full_name" to FieldRuleOverride(removeRules = listOf(Required))
+                    // full_name is locked; email_address can be made optional.
+                    "email_address" to FieldRuleOverride(removeRules = listOf(Required))
                 )
             )
         )
