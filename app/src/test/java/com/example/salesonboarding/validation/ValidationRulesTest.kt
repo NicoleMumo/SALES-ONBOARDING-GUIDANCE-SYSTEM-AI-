@@ -1,5 +1,6 @@
 package com.example.salesonboarding.validation
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -59,7 +60,7 @@ class ValidationRulesTest {
     }
 
     @Test fun everyKnownFieldHasAValidAndInvalidCase() {
-        assertTrue(KnownFields.all.size == 33)
+        assertEquals(34, KnownFields.all.size)
         KnownFields.all.forEach { field ->
             assertTrue(
                 "Expected ${field.fieldId} to have agent-facing instructions",
@@ -110,7 +111,7 @@ class ValidationRulesTest {
             fieldName = "Reference",
             fieldType = "text",
             isRequired = true,
-            validationRule = listOf(Required, RegexPattern("^REF-\\d{4}$"))
+            validationRules = listOf(Required, RegexPattern("^REF-\\d{4}$"))
         )
         val entry = FieldEntry("entry", "session", "admin_reference", "REF-1234")
         assertTrue(field.validate(entry).isValid)

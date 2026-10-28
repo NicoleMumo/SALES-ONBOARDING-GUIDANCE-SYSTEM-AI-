@@ -53,7 +53,7 @@ data class OnboardingAnalytics(
                 val started = session.startedAt
                 val finished = session.completedAt
                 if (started != null && finished != null && finished >= started) {
-                    (finished - started) / 60_000.0
+                    (finished.toDouble() - started.toDouble()) / 60_000.0
                 } else {
                     null
                 }
@@ -399,7 +399,7 @@ class FirebaseAdminDataStore(
                 } catch (error: IllegalArgumentException) {
                     onResult(
                         Result.failure(
-                            IllegalStateException("A saved custom field contains an unknown validation rule.", error)
+                            IllegalStateException("A saved custom field contains invalid configuration.", error)
                         )
                     )
                     return@addOnSuccessListener
@@ -416,6 +416,7 @@ class FirebaseAdminDataStore(
         onResult: (Result<Unit>) -> Unit
     ) {
         if (!isConfigured(onResult)) return
+        if (!isValidFieldId(fieldId, onResult)) return
         rules.child(fieldId).child("required").setValue(enabled)
             .addOnSuccessListener { onResult(Result.success(Unit)) }
             .addOnFailureListener { onResult(Result.failure(it)) }
@@ -431,6 +432,7 @@ class FirebaseAdminDataStore(
         onResult: (Result<Unit>) -> Unit
     ) {
         if (!isConfigured(onResult)) return
+        if (!isValidFieldId(fieldId, onResult)) return
         val ruleNames = rules.map(AdminRule::name)
         fields.child(fieldId).runTransaction(
             object : Transaction.Handler {
@@ -550,6 +552,19 @@ class FirebaseAdminDataStore(
         return false
     }
 
+    private fun <T> isValidFieldId(
+        fieldId: String,
+        onResult: (Result<T>) -> Unit
+    ): Boolean {
+        if (FormField.isValidId(fieldId)) return true
+        onResult(
+            Result.failure(
+                IllegalArgumentException("Field IDs must use lowercase letters, digits, and underscores.")
+            )
+        )
+        return false
+    }
+
     companion object {
         private const val INVITATION_ID_PREFIX = "invite_"
         private val COMPANY_ID_PATTERN = Regex("^[A-Za-z0-9_-]{3,64}$")
@@ -560,6 +575,7 @@ class FirebaseAdminDataStore(
 
     private fun DataSnapshot.toFormField(): FormField? {
         val fieldId = child("fieldId").getValue(String::class.java) ?: key ?: return null
+        require(FormField.isValidId(fieldId)) { "A saved custom field has an invalid ID." }
         val rules = child("rules").children.map {
             val ruleName = it.getValue(String::class.java)
                 ?: throw IllegalArgumentException("A saved custom-field rule is not a string.")
@@ -577,7 +593,7 @@ class FirebaseAdminDataStore(
                     it == AdminRule.NOT_BLANK ||
                     it == AdminRule.MUST_BE_TRUE
             },
-            validationRule = rules.toValidationRules() +
+            validationRules = rules.toValidationRules() +
                 if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
             description = child("description").getValue(String::class.java).orEmpty()
         )

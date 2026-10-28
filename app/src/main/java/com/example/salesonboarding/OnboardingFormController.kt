@@ -270,9 +270,13 @@ class OnboardingFormController(
             draftSaveStatus.value = DraftSaveStatus()
             sessionStore.completeSession(sessionId, entries, fields.map(FormField::fieldId), onResult)
         } else {
-            runCatching { entries.forEach(entryStore::save) }
-                .onSuccess { onResult(Result.success(Unit)) }
-                .onFailure { onResult(Result.failure(it)) }
+            val saveResult = try {
+                entries.forEach(entryStore::save)
+                Result.success(Unit)
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            onResult(saveResult)
         }
         return true
     }
@@ -357,7 +361,8 @@ class OnboardingFormController(
     private fun isRequired(field: FormField, state: LiveValidationState): Boolean =
         field.isRequired || field.validationRule.any { rule ->
             rule is RequiredIf && state.values[rule.dependsOnFieldId]
-                ?.equals(rule.expectedValue, ignoreCase = true) == true
+                ?.trim()
+                ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
         }
 
     private fun isValid(field: FormField, state: LiveValidationState): Boolean =
@@ -374,7 +379,6 @@ class OnboardingFormController(
 
     companion object {
         private const val DRAFT_SAVE_DEBOUNCE_MILLIS = 700L
-        private val MODEL_FIELD_IDS = KnownFields.all.mapTo(mutableSetOf()) { it.fieldId }
 
         val DEFAULT_FIELDS: List<FormField> = listOf(
             KnownFields.get("full_name"),

@@ -52,6 +52,10 @@ object LoginFormValidator {
     fun validate(email: String, password: String): String? =
         validateEmail(email) ?: if (password.isBlank()) "Enter your password." else null
 
+    fun validateCompanyId(companyId: String): String? =
+        if (COMPANY_ID_PATTERN.matches(companyId.trim())) null
+        else "Enter the company ID provided by your administrator."
+
     fun validateEmail(email: String): String? {
         if (email.isBlank()) return "Enter your email address."
         if (!EMAIL_PATTERN.matches(email.trim())) {
@@ -60,6 +64,7 @@ object LoginFormValidator {
         return null
     }
 
+    private val COMPANY_ID_PATTERN = Regex("^[A-Za-z0-9_-]{3,64}$")
     private val EMAIL_PATTERN = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
 }
 
@@ -209,14 +214,13 @@ fun UnifiedLoginScreen(
 
                     Button(
                         onClick = {
-                            val error = if (
-                                state.role == UserRole.SALES_AGENT &&
-                                !Regex("^[A-Za-z0-9_-]{3,64}$").matches(state.companyId.trim())
-                            ) {
-                                "Enter the company ID provided by your administrator."
+                            val companyIdError = if (state.role == UserRole.SALES_AGENT) {
+                                LoginFormValidator.validateCompanyId(state.companyId)
                             } else {
-                                LoginFormValidator.validate(state.email, state.password)
+                                null
                             }
+                            val error = companyIdError
+                                ?: LoginFormValidator.validate(state.email, state.password)
                             if (error == null) {
                                 state = state.copy(isSubmitting = true)
                                 onLogin(

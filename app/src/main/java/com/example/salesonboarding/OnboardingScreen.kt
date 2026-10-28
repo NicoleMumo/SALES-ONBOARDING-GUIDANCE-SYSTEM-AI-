@@ -76,6 +76,7 @@ import com.example.salesonboarding.validation.ValidationContext
 import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 import com.example.salesonboarding.validation.ValidationResult
 import kotlinx.coroutines.CoroutineScope
+import java.util.Locale
 
 @Composable
 fun OnboardingScreen(
@@ -281,12 +282,11 @@ fun OnboardingScreenContent(
     var visitedFieldIds by remember(playbook.id, playbook.version) {
         mutableStateOf(emptyList<String>())
     }
-    val completedCount = readiness.completedRequiredFieldCount
     val currentField = fields.firstOrNull { it.fieldId == activeFieldId }
         ?: fields.firstOrNull { it.fieldId !in visitedFieldIds }
         ?: fields.lastOrNull()
     val currentFieldRequired = currentField?.let { field ->
-        field.isRequired || field.validationRule.filterIsInstance<RequiredIf>().any { rule ->
+        field.isRequired || field.validationRules.filterIsInstance<RequiredIf>().any { rule ->
             state.values[rule.dependsOnFieldId]
                 ?.trim()
                 ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
@@ -298,9 +298,10 @@ fun OnboardingScreenContent(
 
     fun validateField(field: FormField): ValidationResult {
         val value = state.values[field.fieldId]
-        val required = field.isRequired || field.validationRule.any {
+        val required = field.isRequired || field.validationRules.any {
             it is RequiredIf && state.values[it.dependsOnFieldId]
-                ?.equals(it.expectedValue, ignoreCase = true) == true
+                ?.trim()
+                ?.equals(it.expectedValue.trim(), ignoreCase = true) == true
         }
         if (!required && value.isNullOrBlank()) return ValidationResult.valid
         return field.validate(
@@ -339,8 +340,8 @@ fun OnboardingScreenContent(
         ?: fields.take(currentFieldIndex.coerceAtLeast(0))
             .firstOrNull { it.fieldId !in visitedAfterCurrent }
     val nextField = correctionTarget ?: predictedTarget ?: incompleteTarget ?: orderedUnvisitedTarget
-    val progress = if (readiness.requiredFieldCount == 0) 1f
-    else completedCount.toFloat() / readiness.requiredFieldCount
+    val progress = if (fields.isEmpty()) 1f
+    else (currentFieldIndex + 1).coerceAtLeast(0).toFloat() / fields.size
 
     if (submitted) {
         OnboardingCompleteScreen(
@@ -426,92 +427,22 @@ fun OnboardingScreenContent(
             // 2. Modern, sleek progress header
             item {
                 ProgressHeader(
-                    title = playbook.title,
-                    completedCount = completedCount,
-                    requiredCount = readiness.requiredFieldCount,
+                    stepLabel = "Step ${currentFieldIndex.coerceAtLeast(0) + 1} of ${fields.size}",
                     progress = progress,
-                    isOnline = isOnline
+                    isOnline = isOnline,
+                    canGoBack = visitedFieldIds.isNotEmpty(),
+                    onBack = {
+                        val previousFieldId = visitedFieldIds.lastOrNull()
+                        if (previousFieldId != null) {
+                            visitedFieldIds = visitedFieldIds.dropLast(1)
+                            activeFieldId = previousFieldId
+                            onResumeFieldChange(previousFieldId)
+                        }
+                    }
                 )
             }
 
-            // 3. Prominent next-field guidance, styled by the kind of action needed
-            item {
-                val correction = guidance.correction
-                val suggestionTone = when {
-                    correctionTarget != null -> NextFieldSuggestionTone.ATTENTION
-                    predictedTarget != null && predictedTarget == nextField ->
-                        NextFieldSuggestionTone.RECOMMENDED
-                    nextField != null -> NextFieldSuggestionTone.NEXT
-                    canContinue -> NextFieldSuggestionTone.COMPLETE
-                    else -> null
-                }
-                if (suggestionTone != null) {
-                    val suggestedField = nextField
-                    val isRequired = suggestedField?.let { field ->
-                        field.isRequired || field.validationRule.any { rule ->
-                            rule is RequiredIf && state.values[rule.dependsOnFieldId]
-                                ?.trim()
-                                ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
-                        }
-                    } == true
-                    NextFieldSuggestionCard(
-                        field = suggestedField,
-                        tone = suggestionTone,
-                        isRequired = isRequired,
-                        detail = when (suggestionTone) {
-                            NextFieldSuggestionTone.ATTENTION ->
-                                correction?.message ?: "Review this field before continuing."
-                            NextFieldSuggestionTone.RECOMMENDED ->
-                                "The onboarding model recommends collecting this field next."
-                            NextFieldSuggestionTone.NEXT ->
-                                "This field still needs a valid answer."
-                            NextFieldSuggestionTone.COMPLETE ->
-                                "All required information is complete. Review your answers and finish."
-                        },
-                        onClick = suggestedField?.let { field ->
-                            {
-                                activeFieldId = field.fieldId
-                                onResumeFieldChange(field.fieldId)
-                            }
-                        }
-                    )
-                }
-            }
-
-            // 4. Completion Risk Coaching Tip (only appears when risk is elevated)
-            guidance.riskGuidance?.let { riskGuidance ->
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Text("💡", style = MaterialTheme.typography.titleMedium)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Agent Coaching Tip",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                                Text(
-                                    riskGuidance.message,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 5. Active Field Card (clean, focused, uncluttered)
+            // 3. One focused question at a time
             item {
                 currentField?.let { field ->
                     val error = currentFieldError
@@ -519,37 +450,32 @@ fun OnboardingScreenContent(
                         !state.values[field.fieldId].isNullOrBlank()
                     val formatHint = primaryFormatHint(field, state.values, fields)
 
-                    Card(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Title & Requirement Badge
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    field.fieldName,
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                RequirementBadge(required = currentFieldRequired)
-                            }
+                        Text(
+                            "Know your customer",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "What’s your ${field.fieldName.lowercase(Locale.ROOT)}?",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            field.fieldName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
                             // Description (only if meaningful)
                             val description = field.description.takeIf {
                                 it.isNotBlank() &&
-                                    !it.equals("Enter the ${field.fieldName.lowercase()}.", ignoreCase = true) &&
-                                    !it.equals("Enter or choose the ${field.fieldName.lowercase()} for this customer.", ignoreCase = true)
+                                    !it.equals("Enter the ${field.fieldName.lowercase(Locale.ROOT)}.", ignoreCase = true) &&
+                                    !it.equals("Enter or choose the ${field.fieldName.lowercase(Locale.ROOT)} for this customer.", ignoreCase = true)
                             }
                             if (description != null) {
                                 Text(
@@ -560,7 +486,7 @@ fun OnboardingScreenContent(
                             }
 
                             // Field Input controls
-                            val oneOfRule = field.validationRule.filterIsInstance<OneOf>().firstOrNull()
+                            val oneOfRule = field.validationRules.filterIsInstance<OneOf>().firstOrNull()
                             if (oneOfRule != null) {
                                 val choices = oneOfRule.choices.distinct()
                                 ChoiceField(
@@ -683,7 +609,7 @@ fun OnboardingScreenContent(
                                         }
                                     },
                                     keyboardOptions = KeyboardOptions(
-                                        keyboardType = when (field.fieldType.lowercase()) {
+                                        keyboardType = when (field.fieldType.lowercase(Locale.ROOT)) {
                                             "number" -> KeyboardType.Decimal
                                             "email" -> KeyboardType.Email
                                             "phone" -> KeyboardType.Phone
@@ -696,11 +622,43 @@ fun OnboardingScreenContent(
                                     DocumentOcrScanner()
                                 }
                             }
+                            if (nextField != null && nextField.fieldId != field.fieldId) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            activeFieldId = nextField.fieldId
+                                            onResumeFieldChange(nextField.fieldId)
+                                        },
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text("→", color = MaterialTheme.colorScheme.secondary)
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                "Up next",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                            Text(
+                                                nextField.fieldName,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
 
         // 6. Sticky Bottom Action Bar
         Surface(
@@ -714,15 +672,11 @@ fun OnboardingScreenContent(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (showDraftStatus) {
+                if (showDraftStatus &&
+                    (draftSaveStatus.errorMessage != null || draftSaveStatus.isSaving)
+                ) {
                     Text(
-                        text = when {
-                            draftSaveStatus.errorMessage != null -> draftSaveStatus.errorMessage
-                            draftSaveStatus.isSaving -> "Saving your draft…"
-                            draftSaveStatus.savedAtMillis != null ->
-                                "Draft saved. You can resume this session later."
-                            else -> "Your answers are saved as you go."
-                        },
+                        text = draftSaveStatus.errorMessage ?: "Saving your draft…",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (draftSaveStatus.errorMessage != null) {
                             MaterialTheme.colorScheme.error
@@ -741,116 +695,53 @@ fun OnboardingScreenContent(
                     )
                 }
 
-                // Subtitle indicating next step foresight without screen clutter
-                if (nextField != null && nextField.fieldId != currentField?.fieldId) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.secondaryContainer
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    "Suggested next:",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                                Text(
-                                    nextField.fieldName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
+                val isOptionalSkip = !currentFieldRequired &&
+                    state.values[currentField?.fieldId].isNullOrBlank() &&
+                    nextField != null
+                val isFieldSatisfied = currentFieldValidation?.isValid == true || isOptionalSkip
+
+                Button(
+                    onClick = {
+                        val field = currentField
+                        if (field != null && (currentFieldValidation?.isValid == true || isOptionalSkip)) {
+                            val next = nextField
+                            visitedFieldIds = if (next == null) {
+                                visitedAfterCurrent
+                            } else {
+                                visitedAfterCurrent.filterNot { it == next.fieldId }
+                            }
+                            if (next != null) {
+                                activeFieldId = next.fieldId
+                                onResumeFieldChange(next.fieldId)
+                            } else if (canContinue) {
+                                reviewing = true
                             }
                         }
-                        if (!currentFieldRequired && state.values[currentField?.fieldId].isNullOrBlank()) {
-                            Text(
-                                "Optional field",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                // Buttons
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            val previousFieldId = visitedFieldIds.lastOrNull()
-                            if (previousFieldId != null) {
-                                visitedFieldIds = visitedFieldIds.dropLast(1)
-                                activeFieldId = previousFieldId
-                                onResumeFieldChange(previousFieldId)
-                            }
-                        },
-                        enabled = visitedFieldIds.isNotEmpty() && !isSubmitting,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text("Back")
-                    }
-
-                    val isOptionalSkip = !currentFieldRequired &&
-                        state.values[currentField?.fieldId].isNullOrBlank() &&
-                        nextField != null
-
-                    val isFieldSatisfied = currentFieldValidation?.isValid == true || isOptionalSkip
-
-                    Button(
-                        onClick = {
-                            val field = currentField
-                            if (field != null && (currentFieldValidation?.isValid == true || isOptionalSkip)) {
-                                val next = nextField
-                                visitedFieldIds = if (next == null) {
-                                    visitedAfterCurrent
-                                } else {
-                                    visitedAfterCurrent.filterNot { it == next.fieldId }
-                                }
-                                if (next != null) {
-                                    activeFieldId = next.fieldId
-                                    onResumeFieldChange(next.fieldId)
-                                } else if (canContinue) {
-                                    reviewing = true
-                                }
-                            }
-                        },
-                        enabled = !isSubmitting && isFieldSatisfied && (nextField != null || canContinue),
-                        modifier = Modifier
-                            .weight(2f)
-                            .height(50.dp),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Saving...")
-                        } else {
-                            Text(
-                                when {
-                                    isOptionalSkip -> "Skip this field"
-                                    nextField != null -> "Continue"
-                                    canContinue -> "Review answers"
-                                    else -> "Review answers"
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                    },
+                    enabled = !isSubmitting && isFieldSatisfied && (nextField != null || canContinue),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Saving…")
+                    } else {
+                        Text(
+                            when {
+                                isOptionalSkip -> "Skip this field"
+                                nextField != null -> "Continue"
+                                else -> "Review answers"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
@@ -879,26 +770,34 @@ private fun OnboardingReviewContent(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onBackToForm,
+                    enabled = !isSubmitting,
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                ) {
+                    Text("Back", style = MaterialTheme.typography.labelSmall)
+                }
+                Text(
+                    "Final step",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
-                "Review customer details",
+                "Review your details",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                "Check the answers with the customer. Edit any field before saving this onboarding.",
+                "Check each item before you submit.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "${readiness.completedRequiredFieldCount} of ${readiness.requiredFieldCount} required fields complete",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = if (readiness.isReady) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.error
-                }
             )
         }
 
@@ -911,58 +810,36 @@ private fun OnboardingReviewContent(
         ) {
             items(fields, key = FormField::fieldId) { field ->
                 val answer = values[field.fieldId].orEmpty()
-                val isRequired = field.isRequired || field.validationRule
-                    .filterIsInstance<RequiredIf>()
-                    .any { rule ->
-                        values[rule.dependsOnFieldId]
-                            ?.trim()
-                            ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
-                    }
-                Card(
+                val isComplete = answer.isNotBlank()
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onEditField(field.fieldId) },
                     shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
+                    color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column(
+                        Text(
+                            if (isComplete) "✓" else "·",
+                            color = if (isComplete) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            field.fieldName,
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    field.fieldName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                RequirementBadge(isRequired)
-                            }
-                            Text(
-                                answer.ifBlank { "Not provided" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (answer.isBlank()) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
-                        }
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                         Text(
                             "Edit",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -988,167 +865,24 @@ private fun OnboardingReviewContent(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                Text(
-                    "Only validated answers will be submitted.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = onBackToForm,
-                        enabled = !isSubmitting,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                    ) {
-                        Text("Back to form")
+                Button(
+                    onClick = onSubmit,
+                    enabled = readiness.isReady && !isSubmitting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Saving…")
+                    } else {
+                        Text("Submit")
                     }
-                    Button(
-                        onClick = onSubmit,
-                        enabled = readiness.isReady && !isSubmitting,
-                        modifier = Modifier
-                            .weight(1.5f)
-                            .height(50.dp)
-                    ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Saving…")
-                        } else {
-                            Text("Confirm and save")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private enum class NextFieldSuggestionTone {
-    ATTENTION,
-    RECOMMENDED,
-    NEXT,
-    COMPLETE
-}
-
-@Composable
-private fun NextFieldSuggestionCard(
-    field: FormField?,
-    tone: NextFieldSuggestionTone,
-    isRequired: Boolean,
-    detail: String,
-    onClick: (() -> Unit)?
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val containerColor = when (tone) {
-        NextFieldSuggestionTone.ATTENTION -> colorScheme.errorContainer
-        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.secondaryContainer
-        NextFieldSuggestionTone.NEXT,
-        NextFieldSuggestionTone.COMPLETE -> colorScheme.primaryContainer
-    }
-    val contentColor = when (tone) {
-        NextFieldSuggestionTone.ATTENTION -> colorScheme.onErrorContainer
-        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.onSecondaryContainer
-        NextFieldSuggestionTone.NEXT,
-        NextFieldSuggestionTone.COMPLETE -> colorScheme.onPrimaryContainer
-    }
-    val accentColor = when (tone) {
-        NextFieldSuggestionTone.ATTENTION -> colorScheme.error
-        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.secondary
-        NextFieldSuggestionTone.NEXT,
-        NextFieldSuggestionTone.COMPLETE -> colorScheme.primary
-    }
-    val markerContentColor = when (tone) {
-        NextFieldSuggestionTone.ATTENTION -> colorScheme.onError
-        NextFieldSuggestionTone.RECOMMENDED -> colorScheme.onSecondary
-        NextFieldSuggestionTone.NEXT,
-        NextFieldSuggestionTone.COMPLETE -> colorScheme.onPrimary
-    }
-    val heading = when (tone) {
-        NextFieldSuggestionTone.ATTENTION -> "FIX THIS FIELD FIRST"
-        NextFieldSuggestionTone.RECOMMENDED -> "AI NEXT-FIELD SUGGESTION"
-        NextFieldSuggestionTone.NEXT -> "NEXT FIELD TO COMPLETE"
-        NextFieldSuggestionTone.COMPLETE -> "REQUIRED INFORMATION COMPLETE"
-    }
-    val marker = when (tone) {
-        NextFieldSuggestionTone.ATTENTION -> "!"
-        NextFieldSuggestionTone.RECOMMENDED -> "AI"
-        NextFieldSuggestionTone.NEXT -> "→"
-        NextFieldSuggestionTone.COMPLETE -> "✓"
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        border = BorderStroke(1.5.dp, accentColor.copy(alpha = 0.45f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                color = accentColor,
-                contentColor = markerContentColor
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        marker,
-                        style = if (tone == NextFieldSuggestionTone.RECOMMENDED) {
-                            MaterialTheme.typography.labelMedium
-                        } else {
-                            MaterialTheme.typography.titleMedium
-                        },
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    heading,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor
-                )
-                if (field != null) {
-                    Text(
-                        field.fieldName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = contentColor
-                    )
-                    Text(
-                        if (isRequired) "Required" else "Optional",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = contentColor.copy(alpha = 0.8f)
-                    )
-                }
-                Text(
-                    detail,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor
-                )
-                if (onClick != null) {
-                    Text(
-                        "Tap to open this field",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = contentColor
-                    )
                 }
             }
         }
@@ -1157,96 +891,50 @@ private fun NextFieldSuggestionCard(
 
 @Composable
 private fun ProgressHeader(
-    title: String,
-    completedCount: Int,
-    requiredCount: Int,
+    stepLabel: String,
     progress: Float,
-    isOnline: Boolean
+    isOnline: Boolean,
+    canGoBack: Boolean,
+    onBack: () -> Unit
 ) {
     val clamped = progress.coerceIn(0f, 1f)
-    val percentage = (clamped * 100).toInt()
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            OutlinedButton(
+                onClick = onBack,
+                enabled = canGoBack,
+                modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        "$completedCount of $requiredCount required fields completed",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ) {
-                    Text(
-                        "$percentage%",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Text("Back", style = MaterialTheme.typography.labelSmall)
             }
-
-            LinearProgressIndicator(
-                progress = { clamped },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            Text(
+                stepLabel,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
             if (!isOnline) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
-                ) {
-                    Text(
-                        "● Offline mode · Changes will sync when reconnected",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
+                Text(
+                    "Offline",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun RequirementBadge(required: Boolean) {
-    Surface(
-        shape = CircleShape,
-        color = if (required) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Text(
-            text = if (required) "Required" else "Optional",
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (required) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+        LinearProgressIndicator(
+            progress = { clamped },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(CircleShape),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
     }
 }
@@ -1307,7 +995,7 @@ private fun OnboardingCompleteScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    "Customer details were verified and stored in Firebase.",
+                    "Onboarding was completed and customer details were saved.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1504,7 +1192,7 @@ private fun ChoiceField(
             onExpandedChange = { expanded = it }
         ) {
             OutlinedTextField(
-                value = value.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                value = value.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) },
                 onValueChange = {},
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1543,13 +1231,13 @@ private fun ChoiceField(
 }
 
 private fun fieldPlaceholder(field: FormField): String = when {
-    field.validationRule.any { it is EmailFormat } -> "name@example.com"
-    field.validationRule.any { it is KenyanPhoneFormat } -> "0712 345 678 or +254..."
-    field.validationRule.any { it is DateFormatAndMinimumAge } -> "YYYY-MM-DD"
+    field.validationRules.any { it is EmailFormat } -> "name@example.com"
+    field.validationRules.any { it is KenyanPhoneFormat } -> "0712 345 678 or +254..."
+    field.validationRules.any { it is DateFormatAndMinimumAge } -> "YYYY-MM-DD"
     field.fieldId.contains("dob") || field.fieldId.contains("date_of_birth") -> "YYYY-MM-DD"
     field.fieldType.equals("number", ignoreCase = true) -> "e.g. 50000"
     field.fieldId.contains("address") -> "Street, building, or area"
-    else -> "Enter ${field.fieldName.lowercase()}"
+    else -> "Enter ${field.fieldName.lowercase(Locale.ROOT)}"
 }
 
 private fun primaryFormatHint(
@@ -1568,7 +1256,7 @@ private fun fieldGuidanceDetails(
     values: Map<String, String?>,
     fields: List<FormField>
 ): List<String> = buildList {
-    val choices = field.validationRule.filterIsInstance<OneOf>()
+    val choices = field.validationRules.filterIsInstance<OneOf>()
         .flatMap { it.choices }
         .distinct()
         .sorted()
@@ -1576,28 +1264,28 @@ private fun fieldGuidanceDetails(
         add("Available choices: ${choices.joinToString { it.toDisplayLabel() }}.")
     }
 
-    if (field.validationRule.any { it is EmailFormat }) {
+    if (field.validationRules.any { it is EmailFormat }) {
         add("Format: name@example.com")
     }
-    if (field.validationRule.any { it is KenyanPhoneFormat }) {
-        add("Format: 07XXXXXXXX or +2547XXXXXXXX")
+    if (field.validationRules.any { it is KenyanPhoneFormat }) {
+        add("Format: 07XXXXXXXX, 01XXXXXXXX, +2547XXXXXXXX or +2541XXXXXXXX")
     }
-    field.validationRule.filterIsInstance<DateFormatAndMinimumAge>().firstOrNull()?.let { rule ->
+    field.validationRules.filterIsInstance<DateFormatAndMinimumAge>().firstOrNull()?.let { rule ->
         add("Format: YYYY-MM-DD (Minimum age: ${rule.minimumAge})")
     }
-    if (field.validationRule.any { it is PositiveNumber }) {
+    if (field.validationRules.any { it is PositiveNumber }) {
         add("Must be a positive number greater than zero")
     }
-    field.validationRule.filterIsInstance<RegexPattern>()
+    field.validationRules.filterIsInstance<RegexPattern>()
         .map { it.message }
         .filter { it != "Enter a value in the required format." }
         .distinct()
         .forEach(::add)
 
-    field.validationRule.filterIsInstance<PatternByFieldValue>().forEach { rule ->
+    field.validationRules.filterIsInstance<PatternByFieldValue>().forEach { rule ->
         val dependencyName = fields.firstOrNull { it.fieldId == rule.dependsOnFieldId }
             ?.fieldName ?: rule.dependsOnFieldId.toDisplayLabel()
-        val selectedValue = values[rule.dependsOnFieldId]?.trim()?.lowercase()
+        val selectedValue = values[rule.dependsOnFieldId]?.trim()?.lowercase(Locale.ROOT)
         val selectedPattern = selectedValue?.let(rule.patternsByValue::get)
         val format = selectedPattern?.let(::describePattern)
         if (format != null) {
@@ -1606,11 +1294,11 @@ private fun fieldGuidanceDetails(
             add("Format depends on selected $dependencyName.")
         }
     }
-    if (field.validationRule.any { it is MustBeTrue }) {
+    if (field.validationRules.any { it is MustBeTrue }) {
         add("Confirm this item to continue.")
     }
 
-    field.validationRule.filterIsInstance<RequiredIf>()
+    field.validationRules.filterIsInstance<RequiredIf>()
         .groupBy { it.dependsOnFieldId }
         .forEach { (dependencyId, rules) ->
             val dependencyName = fields.firstOrNull { it.fieldId == dependencyId }
@@ -1632,11 +1320,11 @@ private fun fieldActionLabel(field: FormField): String = when (field.fieldId) {
     "terms_and_conditions_acceptance" -> "Customer has read and accepted the terms"
     "selfie_liveness_check" -> "Liveness verification check passed"
     "face_match_verification" -> "Face match identity check passed"
-    else -> "Confirm ${field.fieldName.lowercase()}"
+    else -> "Confirm ${field.fieldName.lowercase(Locale.ROOT)}"
 }
 
 private fun String.toDisplayLabel(): String =
-    replace('_', ' ').replaceFirstChar { it.uppercase() }
+    replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
 @Composable
 private fun rememberNetworkStatus(): Boolean {

@@ -1,6 +1,7 @@
 package com.example.salesonboarding.risk
 
 data class CompletionRiskFeatures(
+    /** Total observed time; the current calculator uses [longEventCount] for duration risk. */
     val elapsedMinutes: Double,
     val validationErrors: Int,
     val fieldRevisits: Int,
@@ -8,6 +9,7 @@ data class CompletionRiskFeatures(
     val longEventCount: Int = 0
 ) {
     init {
+        require(elapsedMinutes.isFinite()) { "Elapsed minutes must be finite." }
         require(elapsedMinutes >= 0) { "Elapsed minutes cannot be negative." }
         require(validationErrors >= 0) { "Validation errors cannot be negative." }
         require(fieldRevisits >= 0) { "Field revisits cannot be negative." }
@@ -28,7 +30,13 @@ data class CompletionRiskResult(
     val score: Double,
     val level: CompletionRiskLevel,
     val reasons: List<String>
-)
+) {
+    init {
+        require(score.isFinite() && score in 0.0..1.0) {
+            "Risk score must be finite and between 0 and 1."
+        }
+    }
+}
 
 object CompletionRiskCalculator {
     const val LONG_EVENT_THRESHOLD_MINUTES = 15.0

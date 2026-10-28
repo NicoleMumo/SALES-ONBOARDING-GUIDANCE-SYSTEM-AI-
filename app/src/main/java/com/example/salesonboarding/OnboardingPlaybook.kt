@@ -5,6 +5,8 @@ import com.example.salesonboarding.validation.FormField
 import com.example.salesonboarding.validation.KnownFields
 import com.example.salesonboarding.validation.NotBlank
 import com.example.salesonboarding.validation.Required
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.security.MessageDigest
 
 data class OnboardingPlaybook(
@@ -21,21 +23,41 @@ data class OnboardingPlaybook(
             industry: String,
             fields: List<FormField>
         ): OnboardingPlaybook {
-            val manifest = fields.joinToString("\n") { field ->
-                listOf(
-                    field.fieldId,
-                    field.fieldName,
-                    field.fieldType,
-                    field.isRequired.toString(),
-                    field.description,
-                    field.validationRule.joinToString("|")
-                ).joinToString("\u001f")
+            val fieldsSnapshot = fields.toList()
+            val fieldIds = fieldsSnapshot.map(FormField::fieldId)
+            require(fieldIds.all { FormField.isValidId(it) }) {
+                "Playbook field IDs must be valid database keys."
+            }
+            require(fieldIds.distinct().size == fieldIds.size) {
+                "Playbook field IDs must be unique."
+            }
+
+            val manifest = ByteArrayOutputStream().use { buffer ->
+                DataOutputStream(buffer).use { output ->
+                    output.writeInt(fieldsSnapshot.size)
+                    fieldsSnapshot.forEach { field ->
+                        val values = listOf(
+                            field.fieldId,
+                            field.fieldName,
+                            field.fieldType,
+                            field.isRequired.toString(),
+                            field.description
+                        ) + field.validationRules.map { it.toString() }
+                        output.writeInt(values.size)
+                        values.forEach { value ->
+                            val bytes = value.toByteArray(Charsets.UTF_8)
+                            output.writeInt(bytes.size)
+                            output.write(bytes)
+                        }
+                    }
+                }
+                buffer.toByteArray()
             }
             val digest = MessageDigest.getInstance("SHA-256")
-                .digest(manifest.toByteArray(Charsets.UTF_8))
-                .take(6)
+                .digest(manifest)
+                .take(12)
                 .joinToString("") { "%02x".format(it) }
-            return OnboardingPlaybook(id, title, industry, "v1-$digest", fields)
+            return OnboardingPlaybook(id, title, industry, "v1-$digest", fieldsSnapshot)
         }
     }
 }
@@ -124,7 +146,7 @@ object OnboardingPlaybooks {
                     fieldName = "Registered business name",
                     fieldType = "text",
                     isRequired = true,
-                    validationRule = listOf(Required, NotBlank),
+                    validationRules = listOf(Required, NotBlank),
                     description = "Enter the business name as shown on its registration documents."
                 )
             } else {
@@ -135,19 +157,19 @@ object OnboardingPlaybooks {
                 industry == "banking" && context == "business" && fieldId in BANKING_BUSINESS_REQUIRED_FIELDS ->
                     configuredField.copy(
                         isRequired = true,
-                        validationRule = configuredField.validationRule
+                        validationRules = configuredField.validationRules
                             .filterNot { it is com.example.salesonboarding.validation.RequiredIf } +
                             listOf(Required, NotBlank)
                     )
                 industry == "banking" && context == "business" && fieldId in BANKING_BUSINESS_OPTIONAL_FIELDS ->
                     configuredField.copy(
-                        validationRule = configuredField.validationRule
+                        validationRules = configuredField.validationRules
                             .filterNot { it is com.example.salesonboarding.validation.RequiredIf }
                     )
                 context != null && fieldId in setOf("phone_service_selection", "internet_service_selection") ->
                     configuredField.copy(
                         isRequired = true,
-                        validationRule = configuredField.validationRule
+                        validationRules = configuredField.validationRules
                             .filterNot { it is com.example.salesonboarding.validation.RequiredIf } +
                             listOf(Required, NotBlank)
                     )

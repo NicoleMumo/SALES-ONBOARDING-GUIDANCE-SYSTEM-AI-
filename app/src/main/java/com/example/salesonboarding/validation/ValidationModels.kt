@@ -1,8 +1,6 @@
 package com.example.salesonboarding.validation
 
-import java.util.Calendar
-import java.util.Locale
-import java.util.regex.Pattern
+// region Results
 
 data class ValidationResult(
     val isValid: Boolean,
@@ -21,6 +19,10 @@ data class ValidationResult(
     }
 }
 
+// endregion
+
+// region Entries & context
+
 data class FieldEntry(
     val entryId: String,
     val sessionId: String,
@@ -29,156 +31,90 @@ data class FieldEntry(
     val timestamp: Long = System.currentTimeMillis(),
     val isValid: Boolean? = null
 ) {
-    fun save(store: FieldEntryStore): FieldEntry {
-        store.save(this)
-        return this
-    }
+    // The answer is customer data, so keep it out of logs and crash reports.
+    override fun toString() = "FieldEntry(entryId=$entryId, fieldId=$fieldId, value=<redacted>)"
+
+    /** Copy with leading and trailing whitespace removed from the value. */
+    fun trimmed(): FieldEntry = copy(value = value?.trim())
+
+    /** Saves the trimmed entry, so stored values are clean, and returns it. */
+    fun save(store: FieldEntryStore): FieldEntry = trimmed().also(store::save)
 }
 
 fun interface FieldEntryStore {
     fun save(entry: FieldEntry)
 }
 
+/** The current answers in the form, so a rule can look at other fields. */
 data class ValidationContext(
     val values: Map<String, String?> = emptyMap()
 ) {
     operator fun get(fieldId: String): String? = values[fieldId]
+
+    // Answers are customer data, so only the field ids are printed.
+    override fun toString() = "ValidationContext(fields=${values.keys})"
+
+    /** Another field's answer, trimmed and lower-cased for case-insensitive comparison. */
+    fun normalizedValue(fieldId: String): String? = values[fieldId].normalized()
 }
+
+// endregion
+
+// region Form field
 
 data class FormField(
     val fieldId: String,
     val fieldName: String,
     val fieldType: String,
     val isRequired: Boolean,
-    val validationRule: List<ValidationRule>,
+    val validationRules: List<ValidationRule>,
     val description: String = ""
 ) {
-    fun validate(entry: FieldEntry, context: ValidationContext = ValidationContext()): ValidationResult {
+    /** Backward-compatibility alias for older callers still reading the legacy property name. */
+    @Deprecated(
+        message = "Use validationRules instead.",
+        replaceWith = ReplaceWith("validationRules")
+    )
+    val validationRule: List<ValidationRule>
+        get() = validationRules
+
+    // Required is applied automatically when isRequired is true.
+    private val effectiveRules: List<ValidationRule> =
+        if (isRequired) listOf(Required) + validationRules else validationRules
+
+    fun validate(
+        entry: FieldEntry,
+        context: ValidationContext = ValidationContext()
+    ): ValidationResult {
         require(entry.fieldId == fieldId) {
             "Entry field '${entry.fieldId}' does not match '$fieldId'"
         }
 
-        for (rule in validationRule) {
-            val error = rule.validate(entry.value, context)
-            if (error != null) return ValidationResult.invalid(error)
+        // Stray spaces (e.g. from keyboard autocomplete) should not fail a format check.
+        val value = entry.value?.trim()
+        val error = validateAnswer(value, context)
+        return error?.let(ValidationResult::invalid) ?: ValidationResult.valid
+    }
+
+    private fun validateAnswer(
+        value: String?,
+        context: ValidationContext
+    ): String? {
+        if (value != null && value.length > MAX_ANSWER_LENGTH) {
+            return "Answer is too long (maximum $MAX_ANSWER_LENGTH characters)."
         }
-        return ValidationResult.valid
+        return effectiveRules.firstNotNullOfOrNull { it.validate(value, context) }
     }
 
-}
+    companion object {
+        /** Upper limit for any single answer, to keep oversized input out of the database. */
+        const val MAX_ANSWER_LENGTH = 2_000
 
-sealed interface ValidationRule {
-    fun validate(value: String?, context: ValidationContext): String?
-}
+        private val ID_PATTERN = Regex("^[a-z][a-z0-9_]{0,63}$")
 
-data object Required : ValidationRule {
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank()) "Enter a value for this field." else null
-}
-
-data object NotBlank : ValidationRule {
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank()) "Enter a value; this field cannot be blank." else null
-}
-
-data class RegexPattern(
-    val pattern: String,
-    val message: String = "Enter a value in the required format."
-) : ValidationRule {
-    private val compiled = Pattern.compile(pattern)
-
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank() || compiled.matcher(value).matches()) null else message
-}
-
-data class PatternByFieldValue(
-    val dependsOnFieldId: String,
-    val patternsByValue: Map<String, String>,
-    val message: String = "Enter a value matching the selected option's format."
-) : ValidationRule {
-    override fun validate(value: String?, context: ValidationContext): String? {
-        if (value.isNullOrBlank()) return null
-        val selectedValue = context[dependsOnFieldId]?.trim()?.lowercase(Locale.ROOT)
-        if (selectedValue.isNullOrBlank()) return null
-        val pattern = patternsByValue[selectedValue] ?: return null
-        return if (Regex(pattern).matches(value)) null else message
+        /** Field ids become database keys, so only lower-case letters, digits and `_` are allowed. */
+        fun isValidId(fieldId: String): Boolean = ID_PATTERN.matches(fieldId)
     }
 }
 
-data object EmailFormat : ValidationRule {
-    private val pattern = Regex("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$")
-
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank() || pattern.matches(value)) null else "Enter a valid email address."
-}
-
-data object KenyanPhoneFormat : ValidationRule {
-    private val pattern = Regex("^(?:07\\d{8}|\\+2547\\d{8})$")
-
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank() || pattern.matches(value)) null
-        else "Enter a valid Kenyan phone number (07XXXXXXXX or +2547XXXXXXXX)."
-}
-
-data class DateFormatAndMinimumAge(
-    val minimumAge: Int
-) : ValidationRule {
-    private val pattern = Regex("^\\d{4}-\\d{2}-\\d{2}$")
-
-    override fun validate(value: String?, context: ValidationContext): String? {
-        if (value.isNullOrBlank()) return null
-        if (!pattern.matches(value)) return "Use the date format YYYY-MM-DD."
-        val parts = value.split('-').map(String::toInt)
-        val date = Calendar.getInstance().apply {
-            isLenient = false
-            set(parts[0], parts[1] - 1, parts[2], 0, 0, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        return try {
-            date.time
-            val today = Calendar.getInstance()
-            var age = today.get(Calendar.YEAR) - parts[0]
-            if (today.get(Calendar.DAY_OF_YEAR) < date.get(Calendar.DAY_OF_YEAR)) age--
-            if (age < minimumAge) "The customer must be at least $minimumAge years old." else null
-        } catch (_: IllegalArgumentException) {
-            "Enter a real calendar date."
-        }
-    }
-}
-
-data class OneOf(
-    val choices: Set<String>,
-    val message: String = "Choose one of the available options."
-) : ValidationRule {
-    private val normalizedChoices = choices.map { it.trim().lowercase(Locale.ROOT) }.toSet()
-
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value.isNullOrBlank() || value.trim().lowercase(Locale.ROOT) in normalizedChoices) null else message
-}
-
-data object PositiveNumber : ValidationRule {
-    override fun validate(value: String?, context: ValidationContext): String? {
-        if (value.isNullOrBlank()) return null
-        val number = value.toBigDecimalOrNull()
-        return if (number != null && number > java.math.BigDecimal.ZERO) null
-        else "Enter a number greater than zero."
-    }
-}
-
-data object MustBeTrue : ValidationRule {
-    override fun validate(value: String?, context: ValidationContext): String? =
-        if (value?.trim()?.lowercase(Locale.ROOT) in setOf("true", "yes", "pass", "passed")) null
-        else "Confirm this field to continue."
-}
-
-data class RequiredIf(
-    val dependsOnFieldId: String,
-    val expectedValue: String,
-    val message: String = "Enter a value because the selected option requires it."
-) : ValidationRule {
-    override fun validate(value: String?, context: ValidationContext): String? {
-        val actual = context[dependsOnFieldId]?.trim()?.lowercase(Locale.ROOT)
-        if (actual == expectedValue.trim().lowercase(Locale.ROOT) && value.isNullOrBlank()) return message
-        return null
-    }
-}
+// endregion

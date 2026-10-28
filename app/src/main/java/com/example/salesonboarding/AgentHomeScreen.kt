@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 
 @Composable
 fun AgentHomeScreen(
@@ -239,8 +240,8 @@ private fun WorkflowStep(number: String, title: String, detail: String) {
 }
 
 private fun String.displayIndustryName(): String =
-    when (lowercase()) {
+    when (lowercase(Locale.ROOT)) {
         "telecom" -> "Telecommunications"
         "banking" -> "Banking"
-        else -> replaceFirstChar(Char::uppercase)
+        else -> replaceFirstChar { it.titlecase(Locale.ROOT) }
     }

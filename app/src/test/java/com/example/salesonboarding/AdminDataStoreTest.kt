@@ -23,7 +23,7 @@ class AdminDataStoreTest {
             fieldName = "Loyalty number",
             fieldType = "number",
             isRequired = false,
-            validationRule = emptyList(),
+            validationRules = emptyList(),
             description = "Optional customer loyalty number."
         )
         val fields = FieldRuleConfiguration(customFields = listOf(customField))
@@ -49,7 +49,7 @@ class AdminDataStoreTest {
             description = "Select the customer type.",
             fieldType = "choice",
             isRequired = true,
-            validationRule = listOf(
+            validationRules = listOf(
                 Required,
                 NotBlank,
                 OneOf(setOf("Retail", "Wholesale"))
@@ -98,7 +98,7 @@ class AdminDataStoreTest {
             fieldName = "Business type",
             fieldType = "choice",
             isRequired = true,
-            validationRule = listOf(Required, OneOf(setOf("Retail", "Wholesale")))
+            validationRules = listOf(Required, OneOf(setOf("Retail", "Wholesale")))
         )
 
         assertTrue(field.validationRule.any { it == OneOf(setOf("Retail", "Wholesale")) })
@@ -106,7 +106,8 @@ class AdminDataStoreTest {
 
     @Test
     fun disablingRequirednessAlsoRemovesNotBlankFromCatalogueField() {
-        val field = KnownFields.get("full_name")
+        // full_name is a locked compliance field, so use an unlocked one.
+        val field = KnownFields.get("email_address")
         val configuredField = FieldRuleConfiguration(
             overrides = mapOf(
                 field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
@@ -116,7 +117,21 @@ class AdminDataStoreTest {
         ).fieldFor(field)
 
         assertTrue(!configuredField.isRequired)
-        assertTrue(configuredField.validationRule.none { it == Required || it == NotBlank })
+        assertTrue(configuredField.validationRules.none { it == Required || it == NotBlank })
+    }
+
+    @Test
+    fun lockedComplianceFieldStaysRequiredWhenRemovalIsRequested() {
+        val field = KnownFields.get("full_name")
+        val configuredField = FieldRuleConfiguration(
+            overrides = mapOf(
+                field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                    removeRules = listOf(Required, NotBlank)
+                )
+            )
+        ).fieldFor(field)
+
+        assertTrue(configuredField.isRequired)
     }
 
     @Test

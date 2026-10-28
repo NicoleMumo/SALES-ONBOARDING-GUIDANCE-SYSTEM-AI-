@@ -143,10 +143,13 @@ fun AccountRegistrationScreen(
                     Button(
                         onClick = {
                             val emailError = LoginFormValidator.validateEmail(email)
+                            val companyIdError = if (requiresCompanyId) {
+                                LoginFormValidator.validateCompanyId(companyId)
+                            } else {
+                                null
+                            }
                             val validationError = when {
-                                requiresCompanyId && !Regex("^[A-Za-z0-9_-]{3,64}$")
-                                    .matches(companyId.trim()) ->
-                                    "Enter the company ID provided by your administrator."
+                                companyIdError != null -> companyIdError
                                 emailError != null -> emailError
                                 password.length < MIN_PASSWORD_LENGTH ->
                                     "Use a password with at least $MIN_PASSWORD_LENGTH characters."

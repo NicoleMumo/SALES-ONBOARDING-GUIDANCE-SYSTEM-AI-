@@ -1,23 +1,20 @@
 package com.example.salesonboarding
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,16 +23,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
+import java.util.Locale
 
 private data class IndustryOption(
     val id: String,
-    val title: String,
-    val description: String
+    val title: String
 )
 
 object IndustrySelectionValidator {
@@ -74,13 +70,11 @@ fun IndustrySelectionScreen(
     val options = listOf(
         IndustryOption(
             id = "telecom",
-            title = "Telecommunications",
-            description = "Mobile, broadband, TV, IoT, and voice service sign-ups."
+            title = "Telecom"
         ),
         IndustryOption(
             id = "banking",
-            title = "Banking",
-            description = "Account onboarding, KYC checks, and financial onboarding flows."
+            title = "Banking"
         )
     )
 
@@ -88,156 +82,98 @@ fun IndustrySelectionScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
+            Text(
+                "SALESMESH",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    "STEP 1 OF 3",
-                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    "Let’s get you set up",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-            }
-            Text(
-                "New customer",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = "Choose an industry",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "We’ll guide you through the right steps for this customer.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (assignedIndustry == null) {
-            options.forEach { option ->
-                val isSelected = selectedIndustry == option.id
-                ElevatedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            border = BorderStroke(
-                                if (isSelected) 1.5.dp else 1.dp,
-                                if (isSelected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.outlineVariant
-                                }
-                            ),
-                            shape = MaterialTheme.shapes.medium
-                        ),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surface
-                        }
-                    ),
-                    onClick = {
-                        selectedIndustry = option.id
-                        selectedContext = null
-                        errorMessage = null
-                    }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = null
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = option.title,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = option.description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            Text(
-                text = "Company industry: ${if (assignedIndustry == "banking") "Banking" else "Telecommunications"}",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        if (selectedIndustry != null) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Choose the service or account type", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "This selects the fields and checks used for this customer.",
-                    style = MaterialTheme.typography.bodySmall,
+                    "Answer a few questions. We’ll guide you to the next step.",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IndustrySelectionValidator.contextsFor(selectedIndustry).forEach { context ->
-                    FilterChip(
-                        selected = selectedContext == context,
-                        onClick = { selectedContext = context; errorMessage = null },
-                        label = { Text(context.replaceFirstChar(Char::uppercase)) }
-                    )
-                }
-            }
-            val selectedContextValue = selectedContext
-            val selectedIndustryValue = selectedIndustry
-            if (selectedContextValue != null && selectedIndustryValue != null) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.secondaryContainer
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("What are you signing up for?", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        "Selected playbook: ${selectedContextValue.replaceFirstChar(Char::uppercase)} ${selectedIndustryValue.displayIndustryName()}",
-                        modifier = Modifier.padding(14.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    if (assignedIndustry == null) {
+                        options.forEach { option ->
+                            FilterChip(
+                                selected = selectedIndustry == option.id,
+                                onClick = {
+                                    if (selectedIndustry != option.id) selectedContext = null
+                                    selectedIndustry = option.id
+                                    errorMessage = null
+                                },
+                                label = { Text(option.title) }
+                            )
+                        }
+                    } else {
+                        FilterChip(
+                            selected = true,
+                            onClick = {},
+                            enabled = false,
+                            label = { Text(assignedIndustry.displayIndustryName()) }
+                        )
+                    }
                 }
+            }
+
+            if (selectedIndustry != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Account type", style = MaterialTheme.typography.labelLarge)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IndustrySelectionValidator.contextsFor(selectedIndustry).forEach { context ->
+                            FilterChip(
+                                selected = selectedContext == context,
+                                onClick = {
+                                    selectedContext = context
+                                    errorMessage = null
+                                },
+                                label = { Text(context.replaceFirstChar { it.titlecase(Locale.ROOT) }) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage.orEmpty(),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
 
-        if (errorMessage != null) {
-            Text(
-                text = errorMessage ?: "",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-
+        Text(
+            "Field suggestions are computed on this device.",
+            modifier = Modifier.padding(bottom = 8.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Button(
             onClick = {
                 val validationError = IndustrySelectionValidator.validate(selectedIndustry)
@@ -248,11 +184,13 @@ fun IndustrySelectionScreen(
                     errorMessage = validationError
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
             enabled = selectedIndustry != null && selectedContext != null,
             contentPadding = PaddingValues(vertical = 14.dp)
         ) {
-            Text("Continue to consent")
+            Text("Start")
         }
     }
 }
@@ -261,7 +199,7 @@ private fun String.displayIndustryName(): String =
     when (this) {
         "telecom" -> "Telecommunications"
         "banking" -> "Banking"
-        else -> replaceFirstChar(Char::uppercase)
+        else -> replaceFirstChar { it.titlecase(Locale.ROOT) }
     }
 
 @Preview(showBackground = true)

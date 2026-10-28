@@ -27,6 +27,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
 fun DocumentOcrScanner(
@@ -39,15 +40,26 @@ fun DocumentOcrScanner(
     var isScanning by remember { mutableStateOf(false) }
     var extractedText by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val isDisposed = remember(recognizer) { AtomicBoolean(false) }
 
     DisposableEffect(recognizer) {
-        onDispose { recognizer.close() }
+        onDispose {
+            isDisposed.set(true)
+            recognizer.close()
+        }
+    }
+
+    fun reportScanError(message: String) {
+        if (!isDisposed.get()) {
+            isScanning = false
+            errorMessage = message
+        }
     }
 
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
+        if (uri != null && !isDisposed.get()) {
             isScanning = true
             extractedText = ""
             errorMessage = null
@@ -55,20 +67,29 @@ fun DocumentOcrScanner(
                 val image = InputImage.fromFilePath(context, uri)
                 recognizer.process(image)
                     .addOnSuccessListener { result ->
-                        extractedText = result.text.trim()
-                        if (extractedText.isBlank()) {
-                            errorMessage = "No readable text found. Try a clear, well-lit document photo."
+                        if (!isDisposed.get()) {
+                            extractedText = result.text.trim()
+                            if (extractedText.isBlank()) {
+                                errorMessage = "No readable text found. Try a clear, well-lit document photo."
+                            }
                         }
                     }
                     .addOnFailureListener {
-                        errorMessage = "Could not read this image. Try a clearer document photo."
+                        if (!isDisposed.get()) {
+                            errorMessage = "Could not read this image. Try a clearer document photo."
+                        }
                     }
                     .addOnCompleteListener {
-                        isScanning = false
+                        if (!isDisposed.get()) {
+                            isScanning = false
+                        }
                     }
             } catch (_: IOException) {
-                isScanning = false
-                errorMessage = "Could not open this image. Choose another document photo."
+                reportScanError("Could not open this image. Choose another document photo.")
+            } catch (_: SecurityException) {
+                reportScanError("Could not access this image. Choose another document photo.")
+            } catch (_: IllegalArgumentException) {
+                reportScanError("This image could not be opened. Choose another document photo.")
             }
         }
     }
