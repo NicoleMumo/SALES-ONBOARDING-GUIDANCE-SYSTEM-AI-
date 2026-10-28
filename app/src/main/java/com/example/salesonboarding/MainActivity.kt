@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -61,7 +60,9 @@ class MainActivity : ComponentActivity() {
                     FirebaseAdminDataStore(database, companyId)
                 }
                 val sessionHistoryStore = remember(database, companyId) {
-                    FirebaseSessionHistoryStore(database, companyId)
+                    companyId.takeIf(COMPANY_ID_PATTERN::matches)?.let { tenantId ->
+                        FirebaseSessionHistoryStore(database, tenantId)
+                    }
                 }
                 fun loadFieldConfiguration(tenantId: String) {
                     val requestId = fieldConfigurationRequestId + 1
@@ -364,7 +365,12 @@ class MainActivity : ComponentActivity() {
                             },
                             modifier = Modifier.padding(innerPadding)
                         )
-                    } else if (showAgentHome && showAgentSessions && selectedIndustry == null) {
+                    } else if (
+                        showAgentHome &&
+                        showAgentSessions &&
+                        selectedIndustry == null &&
+                        sessionHistoryStore != null
+                    ) {
                         AgentSessionHistoryScreen(
                             agentUid = agentId,
                             store = sessionHistoryStore,
@@ -445,11 +451,15 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 val scope = rememberCoroutineScope()
-                                val store = remember {
+                                val store = remember(database, companyId) {
                                     FirebaseFieldEntryStore(database, companyId)
                                 }
                                 val predictorAttempt = remember {
-                                    runCatching { TfliteNextFieldPredictor(applicationContext.assets) }
+                                    try {
+                                        Result.success(TfliteNextFieldPredictor(applicationContext.assets))
+                                    } catch (error: Exception) {
+                                        Result.failure(error)
+                                    }
                                 }
                                 val predictor = predictorAttempt.getOrNull()
                                 DisposableEffect(predictor) {

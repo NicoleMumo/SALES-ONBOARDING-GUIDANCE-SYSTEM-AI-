@@ -2,6 +2,7 @@ package com.example.salesonboarding
 
 import com.example.salesonboarding.validation.FieldEntry
 import com.example.salesonboarding.validation.FieldEntryStore
+import com.example.salesonboarding.validation.FormField
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.MutableData
@@ -53,13 +54,14 @@ interface OnboardingSessionStore : FieldEntryStore {
         entries: List<FieldEntry>,
         onResult: (Result<Unit>) -> Unit
     ) {
-        try {
+        val result = try {
             entries.forEach(::save)
             markCompleted(sessionId)
-            onResult(Result.success(Unit))
+            Result.success(Unit)
         } catch (error: Exception) {
-            onResult(Result.failure(error))
+            Result.failure(error)
         }
+        onResult(result)
     }
     fun completeSession(
         sessionId: String,
@@ -73,12 +75,13 @@ interface OnboardingSessionStore : FieldEntryStore {
         resumeFieldId: String?,
         onResult: (Result<Unit>) -> Unit
     ) {
-        try {
+        val result = try {
             entries.filter { !it.value.isNullOrBlank() }.forEach(::save)
-            onResult(Result.success(Unit))
+            Result.success(Unit)
         } catch (error: Exception) {
-            onResult(Result.failure(error))
+            Result.failure(error)
         }
+        onResult(result)
     }
     fun getSession(sessionId: String, onResult: (Result<StoredOnboardingSession?>) -> Unit)
 }
@@ -88,21 +91,15 @@ class FirebaseFieldEntryStore(
     private val companyId: String
 ) : OnboardingSessionStore {
     init {
-        require(companyId.matches(Regex("^[A-Za-z0-9_-]{3,64}$"))) {
-            "A valid company ID is required to store onboarding sessions."
-        }
+        requireValidCompanyId(companyId)
     }
+
     private val sessions = database.child("companies").child(companyId).child("onboardingSessions")
 
     override fun save(entry: FieldEntry) {
-        val entryData = mapOf(
-            "entryId" to entry.entryId,
-            "sessionId" to entry.sessionId,
-            "fieldId" to entry.fieldId,
-            "value" to entry.value,
-            "timestamp" to entry.timestamp,
-            "isValid" to entry.isValid
-        )
+        requireValidSessionId(entry.sessionId)
+        requireValidFieldId(entry.fieldId)
+        val entryData = entry.toDatabaseValue()
 
         sessions
             .child(entry.sessionId)
@@ -130,6 +127,7 @@ class FirebaseFieldEntryStore(
         playbook: OnboardingPlaybook,
         agentEmail: String
     ) {
+        requireValidSessionId(sessionId)
         sessions.child(sessionId).updateChildren(
             mapOf(
                 "sessionId" to sessionId,
@@ -150,7 +148,7 @@ class FirebaseFieldEntryStore(
                         "fieldType" to field.fieldType,
                         "description" to field.description,
                         "isRequired" to field.isRequired,
-                        "rules" to field.validationRule.map { it.toString() }
+                        "rules" to field.validationRules.map { it.toString() }
                     )
                 }
             )
@@ -163,6 +161,8 @@ class FirebaseFieldEntryStore(
         isValid: Boolean,
         message: String?
     ) {
+        requireValidSessionId(sessionId)
+        requireValidFieldId(fieldId)
         sessions.child(sessionId).child("validation").child(fieldId).setValue(
             mapOf(
                 "fieldId" to fieldId,
@@ -174,6 +174,8 @@ class FirebaseFieldEntryStore(
     }
 
     override fun appendEvent(sessionId: String, type: String, fieldId: String?) {
+        requireValidSessionId(sessionId)
+        fieldId?.let(::requireValidFieldId)
         sessions.child(sessionId).child("events").push().setValue(
             mapOf(
                 "type" to type,
@@ -184,6 +186,7 @@ class FirebaseFieldEntryStore(
     }
 
     override fun markCompleted(sessionId: String) {
+        requireValidSessionId(sessionId)
         sessions.child(sessionId).updateChildren(
             mapOf(
                 "status" to "completed",
@@ -204,6 +207,9 @@ class FirebaseFieldEntryStore(
         fieldIds: List<String>,
         onResult: (Result<Unit>) -> Unit
     ) {
+        requireValidSessionId(sessionId)
+        requireEntriesBelongToSession(sessionId, entries)
+        fieldIds.forEach(::requireValidFieldId)
         val updates = mutableMapOf<String, Any?>(
             "status" to "completed",
             "completedAt" to System.currentTimeMillis(),
@@ -211,14 +217,7 @@ class FirebaseFieldEntryStore(
         )
         fieldIds.forEach { fieldId -> updates["entries/$fieldId"] = null }
         entries.forEach { entry ->
-            updates["entries/${entry.fieldId}"] = mapOf(
-                "entryId" to entry.entryId,
-                "sessionId" to entry.sessionId,
-                "fieldId" to entry.fieldId,
-                "value" to entry.value,
-                "timestamp" to entry.timestamp,
-                "isValid" to entry.isValid
-            )
+            updates["entries/${entry.fieldId}"] = entry.toDatabaseValue()
         }
         sessions.child(sessionId).updateChildren(updates)
             .addOnSuccessListener { onResult(Result.success(Unit)) }
@@ -231,6 +230,9 @@ class FirebaseFieldEntryStore(
         resumeFieldId: String?,
         onResult: (Result<Unit>) -> Unit
     ) {
+        requireValidSessionId(sessionId)
+        requireEntriesBelongToSession(sessionId, entries)
+        resumeFieldId?.let(::requireValidFieldId)
         val now = System.currentTimeMillis()
         sessions.child(sessionId).runTransaction(object : Transaction.Handler {
             override fun doTransaction(currentData: MutableData): Transaction.Result {
@@ -242,18 +244,7 @@ class FirebaseFieldEntryStore(
                 currentData.child("resumeFieldId").value = resumeFieldId
                 entries.forEach { entry ->
                     currentData.child("entries").child(entry.fieldId).value =
-                        if (entry.value.isNullOrBlank()) {
-                            null
-                        } else {
-                            mapOf(
-                                "entryId" to entry.entryId,
-                                "sessionId" to entry.sessionId,
-                                "fieldId" to entry.fieldId,
-                                "value" to entry.value,
-                                "timestamp" to entry.timestamp,
-                                "isValid" to entry.isValid
-                            )
-                        }
+                        if (entry.value.isNullOrBlank()) null else entry.toDatabaseValue()
                 }
                 return Transaction.success(currentData)
             }
@@ -282,6 +273,7 @@ class FirebaseFieldEntryStore(
         sessionId: String,
         onResult: (Result<StoredOnboardingSession?>) -> Unit
     ) {
+        requireValidSessionId(sessionId)
         sessions.child(sessionId).get()
             .addOnSuccessListener { snapshot ->
                 onResult(Result.success(snapshot.toStoredSession()))
@@ -299,10 +291,50 @@ class FirebaseFieldEntryStore(
         }
 }
 
+private fun requireValidCompanyId(companyId: String) {
+    require(companyId.matches(Regex("^[A-Za-z0-9_-]{3,64}$"))) {
+        "A valid company ID is required to store onboarding sessions."
+    }
+}
+
+private fun requireValidSessionId(sessionId: String) {
+    require(sessionId.matches(Regex("^[A-Za-z0-9_-]{1,128}$"))) {
+        "A valid session ID is required to store onboarding sessions."
+    }
+}
+
+private fun requireValidFieldId(fieldId: String) {
+    require(FormField.isValidId(fieldId)) {
+        "A valid field ID is required to store onboarding entries."
+    }
+}
+
+private fun requireEntriesBelongToSession(sessionId: String, entries: List<FieldEntry>) {
+    entries.forEach { entry ->
+        require(entry.sessionId == sessionId) {
+            "All entries must belong to the session being saved."
+        }
+        requireValidFieldId(entry.fieldId)
+    }
+}
+
+private fun FieldEntry.toDatabaseValue(): Map<String, Any?> = mapOf(
+    "entryId" to entryId,
+    "sessionId" to sessionId,
+    "fieldId" to fieldId,
+    "value" to value,
+    "timestamp" to timestamp,
+    "isValid" to isValid
+)
+
 class FirebaseSessionHistoryStore(
     database: DatabaseReference,
     companyId: String
 ) : SessionHistoryStore {
+    init {
+        requireValidCompanyId(companyId)
+    }
+
     private val sessions = database.child("companies").child(companyId).child("onboardingSessions")
 
     override fun loadAgentSessions(

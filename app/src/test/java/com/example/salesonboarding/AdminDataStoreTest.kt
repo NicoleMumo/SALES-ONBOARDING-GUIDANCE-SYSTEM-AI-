@@ -23,7 +23,7 @@ class AdminDataStoreTest {
             fieldName = "Loyalty number",
             fieldType = "number",
             isRequired = false,
-            validationRule = emptyList(),
+            validationRules = emptyList(),
             description = "Optional customer loyalty number."
         )
         val fields = FieldRuleConfiguration(customFields = listOf(customField))
@@ -49,7 +49,7 @@ class AdminDataStoreTest {
             description = "Select the customer type.",
             fieldType = "choice",
             isRequired = true,
-            validationRule = listOf(
+            validationRules = listOf(
                 Required,
                 NotBlank,
                 OneOf(setOf("Retail", "Wholesale"))
@@ -98,7 +98,7 @@ class AdminDataStoreTest {
             fieldName = "Business type",
             fieldType = "choice",
             isRequired = true,
-            validationRule = listOf(Required, OneOf(setOf("Retail", "Wholesale")))
+            validationRules = listOf(Required, OneOf(setOf("Retail", "Wholesale")))
         )
 
         assertTrue(field.validationRule.any { it == OneOf(setOf("Retail", "Wholesale")) })

@@ -166,7 +166,7 @@ class OnboardingFormControllerTest {
             fieldName = "Loyalty email",
             fieldType = "email",
             isRequired = true,
-            validationRule = listOf(Required, EmailFormat),
+            validationRules = listOf(Required, EmailFormat),
             description = "Email used for loyalty updates."
         )
         val modelHistories = mutableListOf<List<String>>()

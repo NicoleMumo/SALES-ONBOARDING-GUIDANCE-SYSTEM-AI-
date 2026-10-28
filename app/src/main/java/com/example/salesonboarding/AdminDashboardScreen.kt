@@ -1,5 +1,6 @@
 package com.example.salesonboarding
 
+import android.util.Patterns
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +29,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -50,19 +53,24 @@ fun AdminDashboardScreen(
     onCompanyIndustryChanged: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedSection by remember { mutableStateOf(AdminSection.AGENTS) }
-    var agents by remember { mutableStateOf<List<SalesAgentAccount>>(emptyList()) }
-    var analytics by remember { mutableStateOf<OnboardingAnalytics?>(null) }
-    var sessions by remember { mutableStateOf<List<StoredOnboardingSession>>(emptyList()) }
-    var configuration by remember { mutableStateOf(FieldRuleConfiguration()) }
-    var companyIndustry by remember { mutableStateOf<String?>(null) }
-    var isSavingCompanyIndustry by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var agentStatusMessage by remember { mutableStateOf<String?>(null) }
-    var isLoadingAnalytics by remember { mutableStateOf(false) }
-    var analyticsErrorMessage by remember { mutableStateOf<String?>(null) }
-    var isLoadingSessions by remember { mutableStateOf(false) }
-    var sessionsErrorMessage by remember { mutableStateOf<String?>(null) }
+    val activeCompanyId = rememberUpdatedState(companyId)
+    val activeStore = rememberUpdatedState(store)
+    fun isCurrentAdminScope(): Boolean =
+        activeCompanyId.value == companyId && activeStore.value === store
+
+    var selectedSection by remember(companyId, store) { mutableStateOf(AdminSection.AGENTS) }
+    var agents by remember(companyId, store) { mutableStateOf<List<SalesAgentAccount>>(emptyList()) }
+    var analytics by remember(companyId, store) { mutableStateOf<OnboardingAnalytics?>(null) }
+    var sessions by remember(companyId, store) { mutableStateOf<List<StoredOnboardingSession>>(emptyList()) }
+    var configuration by remember(companyId, store) { mutableStateOf(FieldRuleConfiguration()) }
+    var companyIndustry by remember(companyId, store) { mutableStateOf<String?>(null) }
+    var isSavingCompanyIndustry by remember(companyId, store) { mutableStateOf(false) }
+    var errorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
+    var agentStatusMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
+    var isLoadingAnalytics by remember(companyId, store) { mutableStateOf(false) }
+    var analyticsErrorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
+    var isLoadingSessions by remember(companyId, store) { mutableStateOf(false) }
+    var sessionsErrorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
 
     fun <T> handle(result: Result<T>, onSuccess: (T) -> Unit = {}) {
         result.onSuccess {
@@ -77,24 +85,33 @@ fun AdminDashboardScreen(
         isLoadingSessions = true
         sessionsErrorMessage = null
         store.loadSessions { result ->
+            if (!isCurrentAdminScope()) return@loadSessions
             isLoadingSessions = false
             result.onSuccess { sessions = it; sessionsErrorMessage = null }
                 .onFailure { sessionsErrorMessage = it.message ?: "Could not load onboarding sessions." }
         }
     }
 
-    LaunchedEffect(companyId) {
+    LaunchedEffect(companyId, store) {
         store.loadCompanyIndustry(companyId) {
+            if (!isCurrentAdminScope()) return@loadCompanyIndustry
             handle(it) { companyIndustry = it }
         }
-        store.observeAgents { handle(it) { agents = it } }
-        store.loadRuleConfiguration { handle(it) {
-            configuration = it
-            onConfigurationChanged(it)
-        } }
+        store.observeAgents {
+            if (!isCurrentAdminScope()) return@observeAgents
+            handle(it) { agents = it }
+        }
+        store.loadRuleConfiguration { result ->
+            if (!isCurrentAdminScope()) return@loadRuleConfiguration
+            handle(result) {
+                configuration = it
+                onConfigurationChanged(it)
+            }
+        }
         isLoadingAnalytics = true
         analyticsErrorMessage = null
         store.loadAnalytics {
+            if (!isCurrentAdminScope()) return@loadAnalytics
             isLoadingAnalytics = false
             it.onSuccess { analytics = it; analyticsErrorMessage = null }
                 .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
@@ -185,98 +202,117 @@ fun AdminDashboardScreen(
                 }
             }
 
-            when (selectedSection) {
-                AdminSection.COMPANY -> CompanySettingsSection(
-                    industry = companyIndustry,
-                    isSaving = isSavingCompanyIndustry,
-                    onSaveIndustry = { industry ->
-                        isSavingCompanyIndustry = true
-                        store.saveCompanyIndustry(industry) { result ->
-                            isSavingCompanyIndustry = false
-                            handle(result) {
-                                companyIndustry = industry
-                                onCompanyIndustryChanged(industry)
-                            }
-                        }
-                    }
-                )
-                AdminSection.AGENTS -> AgentAccountsSection(
-                    agents = agents,
-                    onAdd = { email, name, onComplete ->
-                        agentStatusMessage = null
-                        store.addAgent(email, name) {
-                            it.onSuccess {
-                                agentStatusMessage = "Invitation added. Share the company ID with the agent so they can register with this email, verify it, and join your company."
-                                store.observeAgents { refreshed -> handle(refreshed) { agents = it } }
-                                onComplete(Result.success(Unit))
-                            }.onFailure { error ->
-                                errorMessage = error.message ?: "Could not add the agent profile."
-                                onComplete(Result.failure(error))
-                            }
-                        }
-                    },
-                    onToggleActive = { agent ->
-                        store.setAgentActive(agent.id, !agent.isActive) {
-                            handle(it) {
-                                agents = agents.map { current ->
-                                    if (current.id == agent.id) current.copy(isActive = !agent.isActive) else current
+            key(companyId, store) {
+                when (selectedSection) {
+                    AdminSection.COMPANY -> CompanySettingsSection(
+                        industry = companyIndustry,
+                        isSaving = isSavingCompanyIndustry,
+                        onSaveIndustry = { industry ->
+                            isSavingCompanyIndustry = true
+                            store.saveCompanyIndustry(industry) { result ->
+                                if (!isCurrentAdminScope()) return@saveCompanyIndustry
+                                isSavingCompanyIndustry = false
+                                handle(result) {
+                                    companyIndustry = industry
+                                    onCompanyIndustryChanged(industry)
                                 }
                             }
                         }
-                    }
-                )
-                AdminSection.RULES -> RuleConfigurationSection(
-                    configuration = configuration,
-                    onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
-                        store.addCustomField(fieldId, name, description, type, rules, choices) {
-                            onComplete(it)
-                            handle(it) {
-                                val updatedConfiguration = configuration.withCustomField(
-                                    customField(fieldId, name, description, type, rules, choices)
-                                )
-                                configuration = updatedConfiguration
-                                onConfigurationChanged(updatedConfiguration)
+                    )
+                    AdminSection.AGENTS -> AgentAccountsSection(
+                        agents = agents,
+                        onAdd = { email, name, onComplete ->
+                            agentStatusMessage = null
+                            store.addAgent(email, name) {
+                                if (!isCurrentAdminScope()) return@addAgent
+                                it.onSuccess {
+                                    agentStatusMessage = "Invitation added. Share the company ID with the agent so they can register with this email, verify it, and join your company."
+                                    store.observeAgents { refreshed ->
+                                        if (!isCurrentAdminScope()) return@observeAgents
+                                        handle(refreshed) { agents = it }
+                                    }
+                                    onComplete(Result.success(Unit))
+                                }.onFailure { error ->
+                                    errorMessage = error.message ?: "Could not add the agent profile."
+                                    onComplete(Result.failure(error))
+                                }
                             }
-                        }
-                    },
-                    onRequiredChanged = { fieldId, enabled ->
-                        store.saveRequiredRule(fieldId, enabled) {
-                            handle(it) {
-                                store.loadRuleConfiguration { loaded ->
-                                    handle(loaded) {
-                                        configuration = it
-                                        onConfigurationChanged(it)
+                        },
+                        onToggleActive = { agent ->
+                            store.setAgentActive(agent.id, !agent.isActive) {
+                                if (!isCurrentAdminScope()) return@setAgentActive
+                                handle(it) {
+                                    agents = agents.map { current ->
+                                        if (current.id == agent.id) current.copy(isActive = !agent.isActive) else current
                                     }
                                 }
                             }
                         }
-                    }
-                )
-                AdminSection.ANALYTICS -> AnalyticsSection(
-                    analytics = analytics,
-                    agents = agents,
-                    isLoading = isLoadingAnalytics,
-                    errorMessage = analyticsErrorMessage,
-                    onRefresh = {
-                        isLoadingAnalytics = true
-                        analyticsErrorMessage = null
-                        store.loadAnalytics {
-                            isLoadingAnalytics = false
-                            it.onSuccess { analytics = it; analyticsErrorMessage = null }
-                                .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
-                            handle(it)
+                    )
+                    AdminSection.RULES -> RuleConfigurationSection(
+                        configuration = configuration,
+                        onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
+                            store.addCustomField(fieldId, name, description, type, rules, choices) {
+                                if (!isCurrentAdminScope()) {
+                                    onComplete(it)
+                                    return@addCustomField
+                                }
+                                onComplete(it)
+                                handle(it) {
+                                    val updatedConfiguration = configuration.withCustomField(
+                                        customField(fieldId, name, description, type, rules, choices)
+                                    )
+                                    configuration = updatedConfiguration
+                                    if (isCurrentAdminScope()) {
+                                        onConfigurationChanged(updatedConfiguration)
+                                    }
+                                }
+                            }
+                        },
+                        onRequiredChanged = { fieldId, enabled ->
+                            store.saveRequiredRule(fieldId, enabled) {
+                                if (!isCurrentAdminScope()) return@saveRequiredRule
+                                handle(it) {
+                                    store.loadRuleConfiguration { loaded ->
+                                        if (!isCurrentAdminScope()) return@loadRuleConfiguration
+                                        handle(loaded) {
+                                            configuration = it
+                                            if (isCurrentAdminScope()) {
+                                                onConfigurationChanged(it)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
-                )
-                AdminSection.SESSIONS -> SessionHistoryContent(
-                    title = "All client sessions",
-                    description = "Search and filter the organization’s onboarding records. Details are read-only.",
-                    sessions = sessions,
-                    agents = agents,
-                    isLoading = isLoadingSessions,
-                    errorMessage = sessionsErrorMessage,
-                    onRefresh = ::loadSessions
-                )
+                    )
+                    AdminSection.ANALYTICS -> AnalyticsSection(
+                        analytics = analytics,
+                        agents = agents,
+                        isLoading = isLoadingAnalytics,
+                        errorMessage = analyticsErrorMessage,
+                        onRefresh = {
+                            isLoadingAnalytics = true
+                            analyticsErrorMessage = null
+                            store.loadAnalytics {
+                                if (!isCurrentAdminScope()) return@loadAnalytics
+                                isLoadingAnalytics = false
+                                it.onSuccess { analytics = it; analyticsErrorMessage = null }
+                                    .onFailure { analyticsErrorMessage = it.message ?: "Could not load onboarding analytics." }
+                                handle(it)
+                            }
+                        }
+                    )
+                    AdminSection.SESSIONS -> SessionHistoryContent(
+                        title = "All client sessions",
+                        description = "Search and filter the organization’s onboarding records. Details are read-only.",
+                        sessions = sessions,
+                        agents = agents,
+                        isLoading = isLoadingSessions,
+                        errorMessage = sessionsErrorMessage,
+                        onRefresh = ::loadSessions
+                    )
+                }
             }
 
         }
@@ -364,6 +400,9 @@ private fun AgentAccountsSection(
         var name by remember { mutableStateOf("") }
         var isCreating by remember { mutableStateOf(false) }
         var creationError by remember { mutableStateOf<String?>(null) }
+        val normalizedEmail = email.trim()
+        val isValidEmail = normalizedEmail.length <= 254 &&
+            Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -390,11 +429,17 @@ private fun AgentAccountsSection(
                     singleLine = true
                 )
                 OutlinedTextField(
-                    email,
-                    { email = it },
-                    Modifier.fillMaxWidth(),
+                    value = email,
+                    onValueChange = { email = it.take(254) },
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text("Work email") },
-                    singleLine = true
+                    singleLine = true,
+                    isError = email.isNotBlank() && !isValidEmail,
+                    supportingText = {
+                        if (email.isNotBlank() && !isValidEmail) {
+                            Text("Enter a valid work email address.")
+                        }
+                    }
                 )
                 Button(
                     onClick = {
@@ -411,7 +456,7 @@ private fun AgentAccountsSection(
                             }
                         }
                     },
-                    enabled = !isCreating && email.contains("@") && name.isNotBlank(),
+                    enabled = !isCreating && isValidEmail && name.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(if (isCreating) "Adding agent..." else "Add agent")
@@ -620,10 +665,10 @@ private fun RuleConfigurationSection(
                 HorizontalDivider()
                 configuration.customFields.forEach { field ->
                     val ruleLabels = AdminRule.values()
-                        .filter { it in field.validationRule.toAdminRules(field.isRequired) }
+                        .filter { it in field.validationRules.toAdminRules(field.isRequired) }
                         .map(AdminRule::label)
                         .let { labels ->
-                            if (field.validationRule.any {
+                            if (field.validationRules.any {
                                     it is com.example.salesonboarding.validation.OneOf
                                 }) labels + "Approved choices" else labels
                         }
@@ -635,7 +680,7 @@ private fun RuleConfigurationSection(
                             "Rules: ${ruleLabels.joinToString().ifBlank { "None" }}",
                             style = MaterialTheme.typography.bodySmall
                         )
-                        field.validationRule.filterIsInstance<com.example.salesonboarding.validation.OneOf>()
+                        field.validationRules.filterIsInstance<com.example.salesonboarding.validation.OneOf>()
                             .flatMap { it.choices }
                             .takeIf { it.isNotEmpty() }
                             ?.let { choices ->
@@ -815,7 +860,7 @@ private fun customField(
     isRequired = rules.any {
         it == AdminRule.REQUIRED || it == AdminRule.NOT_BLANK || it == AdminRule.MUST_BE_TRUE
     },
-    validationRule = rules.toValidationRules() +
+    validationRules = rules.toValidationRules() +
         if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
     description = description
 )

@@ -110,7 +110,7 @@ class ValidationRulesTest {
             fieldName = "Reference",
             fieldType = "text",
             isRequired = true,
-            validationRule = listOf(Required, RegexPattern("^REF-\\d{4}$"))
+            validationRules = listOf(Required, RegexPattern("^REF-\\d{4}$"))
         )
         val entry = FieldEntry("entry", "session", "admin_reference", "REF-1234")
         assertTrue(field.validate(entry).isValid)
