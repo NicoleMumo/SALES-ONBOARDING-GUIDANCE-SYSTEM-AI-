@@ -524,4 +524,40 @@ class SessionConsistencyTest {
         assertEquals(0, report.sessionCount)
         assertEquals(0.0, report.followedStandardShare, 0.0)
     }
+
+    @Test
+    fun sessionsCheckedWhileTypingAreLeftOutAndCounted() {
+        // An old session: typing a date with pauses saved three "failed" checks.
+        val typedWithPauses = steps("a", "b", "b", "b", "b", "c", "d", failed = setOf(1, 2, 3))
+        val report = SessionConsistencyCalculator.report(
+            listOf(
+                ConsistencyInput("old", 0, order, typedWithPauses, checksEachAttempt = false),
+                ConsistencyInput("new", 0, order, steps("a", "b", "c", "d"))
+            )
+        )
+
+        assertEquals(1, report.sessionCount)
+        assertEquals(1, report.followedStandardCount)
+        assertEquals(1, report.earlierSessionsLeftOut)
+        assertEquals(listOf("new"), report.agents.map { it.agentId })
+    }
+
+    @Test
+    fun onlyEarlierSessionsGiveAnEmptyReportThatStillSaysHowManyWereLeftOut() {
+        val earlier = com.example.salesonboarding.OnboardingSessionMetrics(
+            status = "completed",
+            startedAt = 0,
+            completedAt = 60_000,
+            agentId = "agent",
+            playbookFieldIds = order,
+            steps = steps("a", "b", "c", "d"),
+            checksEachAttempt = false
+        )
+
+        val analytics = com.example.salesonboarding.OnboardingAnalytics.fromSessions(listOf(earlier))
+
+        assertEquals(0, analytics.consistency.sessionCount)
+        assertEquals(1, analytics.consistency.earlierSessionsLeftOut)
+        assertEquals(1, analytics.completedCount)
+    }
 }

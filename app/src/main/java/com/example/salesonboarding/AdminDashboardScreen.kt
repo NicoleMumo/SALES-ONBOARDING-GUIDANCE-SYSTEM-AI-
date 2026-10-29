@@ -838,8 +838,8 @@ private fun AnalyticsSection(
 
 /**
  * How closely completed sessions followed the standard process. Plain counts, not
- * a model; see `SessionConsistency.kt` for the definitions and where the limits
- * come from.
+ * a model; see the "Process consistency" region of `Insights.kt` for the definitions
+ * and where the limits come from.
  */
 @Composable
 private fun ConsistencySection(
@@ -857,11 +857,19 @@ private fun ConsistencySection(
             "most ${SessionConsistencyCalculator.MAX_STEPS_OUT_OF_PLACE} questions came out of " +
             "the standard order. Agents see a section's questions together and can answer them " +
             "in any order, so a few questions out of order is normal; a different order is not " +
-            "automatically wrong. Sessions saved before this version showed one question at a " +
-            "time, so their order was mostly set by the app.",
+            "automatically wrong.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+    if (report.earlierSessionsLeftOut > 0) {
+        Text(
+            "${report.earlierSessionsLeftOut} earlier completed sessions are not counted here: " +
+                "that version checked answers while they were being typed, so its saved checks " +
+                "cannot tell a real correction from a pause in typing.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
     if (report.sessionCount == 0) {
         Text(
             "No completed sessions with recorded steps yet.",

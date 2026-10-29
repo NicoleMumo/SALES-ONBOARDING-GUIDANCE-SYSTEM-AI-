@@ -362,9 +362,8 @@ object CompletionRiskGuidanceMapper {
  *
  * The form shows a section's questions together and the agent may answer them in
  * any order or move between sections, as the simulated agents could, so steps out
- * of place measure the agent again. Sessions saved before that redesign showed
- * one question at a time in an order the app picked, so their steps out of place
- * are mostly 0 or reflect the AI's suggestion, not the agent.
+ * of place measure the agent again. Sessions saved before that redesign are left
+ * out (see [ConsistencyInput.checksEachAttempt]).
  */
 data class RecordedStep(
     val fieldId: String,
@@ -388,7 +387,14 @@ data class ConsistencyInput(
     val agentId: String,
     val startedAt: Long?,
     val standardOrder: List<String>,
-    val steps: List<RecordedStep>
+    val steps: List<RecordedStep>,
+    /**
+     * False for sessions saved before answers were checked on leaving the box. Their
+     * saved checks include half-typed answers (one per pause in typing), and in that
+     * form a real correction looks the same as a pause, so neither the raw count nor a
+     * collapsed one is a fair number of corrections. They are left out of the report.
+     */
+    val checksEachAttempt: Boolean = true
 )
 
 data class FieldCount(val fieldId: String, val count: Int)
@@ -420,7 +426,9 @@ data class ConsistencyReport(
     val agents: List<AgentConsistency> = emptyList(),
     val mostMisplacedFields: List<FieldCount> = emptyList(),
     val mostFailedFields: List<FieldCount> = emptyList(),
-    val weekly: List<WeeklyConsistency> = emptyList()
+    val weekly: List<WeeklyConsistency> = emptyList(),
+    /** Completed sessions from before answers were checked on leaving the box; not counted. */
+    val earlierSessionsLeftOut: Int = 0
 ) {
     val followedStandardShare: Double
         get() = if (sessionCount == 0) 0.0 else followedStandardCount.toDouble() / sessionCount
@@ -482,10 +490,11 @@ object SessionConsistencyCalculator {
 
     /** Summary for the admin dashboard. Pass completed sessions only. */
     fun report(sessions: List<ConsistencyInput>): ConsistencyReport {
-        val scored = sessions
+        val (comparable, earlier) = sessions.partition { it.checksEachAttempt }
+        val scored = comparable
             .filter { it.steps.isNotEmpty() && it.standardOrder.isNotEmpty() }
             .map { it to forSession(it.steps, it.standardOrder) }
-        if (scored.isEmpty()) return ConsistencyReport()
+        if (scored.isEmpty()) return ConsistencyReport(earlierSessionsLeftOut = earlier.size)
 
         val agents = scored.groupBy { (input, _) -> input.agentId.ifBlank { "Unknown agent" } }
             .map { (agentId, agentSessions) ->
@@ -529,7 +538,8 @@ object SessionConsistencyCalculator {
             agents = agents,
             mostMisplacedFields = topFields(scored.flatMap { it.second.misplacedFieldIds }),
             mostFailedFields = topFields(scored.flatMap { it.second.failedFieldIds }),
-            weekly = weekly
+            weekly = weekly,
+            earlierSessionsLeftOut = earlier.size
         )
     }
 

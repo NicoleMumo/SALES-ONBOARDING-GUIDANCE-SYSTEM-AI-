@@ -87,7 +87,8 @@ data class OnboardingAnalytics(
                             agentId = session.agentId,
                             startedAt = session.startedAt,
                             standardOrder = session.playbookFieldIds,
-                            steps = session.steps
+                            steps = session.steps,
+                            checksEachAttempt = session.checksEachAttempt
                         )
                     }
                 ),
@@ -116,7 +117,9 @@ data class OnboardingSessionMetrics(
     val requiredFieldIds: List<String> = emptyList(),
     val fieldNames: Map<String, String> = emptyMap(),
     /** Answered steps in the order they happened, from the session's saved events. */
-    val steps: List<RecordedStep> = emptyList()
+    val steps: List<RecordedStep> = emptyList(),
+    /** False for sessions saved before answers were checked on leaving the box. */
+    val checksEachAttempt: Boolean = true
 )
 
 enum class AdminRule(val label: String) {
@@ -506,7 +509,9 @@ class FirebaseAdminDataStore(
                             val fieldName = field.child("fieldName").getValue(String::class.java)
                             if (fieldId != null && fieldName != null) fieldId to fieldName else null
                         }.toMap(),
-                        steps = session.child("events").children.mapNotNull(DataSnapshot::toRecordedStep)
+                        steps = session.child("events").children.mapNotNull(DataSnapshot::toRecordedStep),
+                        checksEachAttempt = session.child("answerChecks")
+                            .getValue(String::class.java) == ANSWER_CHECKS_ON_LEAVE
                     )
                 }
                 onResult(Result.success(OnboardingAnalytics.fromSessions(metrics)))
