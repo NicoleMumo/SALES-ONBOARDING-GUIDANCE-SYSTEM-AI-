@@ -20,5 +20,28 @@ training.
   Neither archive directory is a subproject of the active app.
 - `misc/` holds unreferenced temporary files retained for safekeeping.
 
+Moved here on 2026-10-29 (each file keeps the path it had before, without the
+`legacy/` prefix; `git log --follow` shows its history):
+
+- `src/demo.py` is a command-line demo of the next-field model. Nothing
+  referred to it.
+- `src/evaluate_next_field.py` was the next-field evaluation script. The
+  notebook's app-style test replaced it: it uses the same rows, the app's
+  allowed fields, and also measures the app's own fallback rule.
+- `src/evaluate_completion_risk.py` scored the old hand-set risk rule against
+  a threshold. `src/consistency/train_risk.py` replaced it: it trains the risk
+  model the app now uses and measures the hand-set rule on the same agents.
+- `tests/test_evaluation_baselines.py` tested only the two scripts above. It
+  imports them from their old `src/` paths, so it is kept as a record, not as
+  a working test.
+- `src/consistency/anomaly.py` and `data/anomaly_report.json` are the Isolation
+  Forest anomaly detector and its results. It failed the pass mark set before
+  any result was seen (67-74% of planted deviations caught against 80% needed,
+  and 10.5% of normal sessions flagged on one dataset against 10% allowed). On
+  sessions whose only fault was step order it caught 8-14%, while the plain
+  out-of-order count caught 97-98%. The app uses that plain count instead. The
+  script imports `features` and `playbooks` from `src/consistency/`, so it only
+  runs from that folder.
+
 The active project is organized around `app/`, `data/`, `docs/`, `notebooks/`,
 `src/`, and `tests/`.

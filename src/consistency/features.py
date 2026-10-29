@@ -1,4 +1,4 @@
-"""Session features for the risk and anomaly models, and the app's current rule.
+"""Session features for the risk model and the consistency score, and the app's current rule.
 
 Every feature here must be computable by the Android app at the moment it would
 warn the agent. The app holds, for each step so far, exactly four things (see
@@ -119,7 +119,7 @@ def app_rule_score(steps):
     return min(max(score, 0.0), 1.0)
 
 
-# --- Whole-session features, for the anomaly detector and the consistency score ---
+# --- Whole-session features, for the consistency score (and the retired anomaly detector) ---
 
 SESSION_FEATURE_NAMES = (
     "steps",
@@ -145,7 +145,7 @@ def out_of_order_steps(fields, expected):
 
     This plain count is the project's order-consistency measure. It is exact and
     explainable, and it detects a single misplaced step far better than the
-    anomaly detector does (see `anomaly.py`).
+    anomaly detector did (see `legacy/src/consistency/anomaly.py`).
     """
     rank = {name: position for position, name in enumerate(expected)}
     ranks, seen = [], set()
