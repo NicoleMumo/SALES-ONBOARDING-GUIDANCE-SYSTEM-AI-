@@ -285,7 +285,8 @@ class OnboardingFormControllerTest {
             agentId: String,
             industry: String,
             context: String,
-            playbook: OnboardingPlaybook
+            playbook: OnboardingPlaybook,
+            agentEmail: String
         ) {
             startedSession = SessionStart(
                 sessionId,

@@ -1320,8 +1320,6 @@ private fun describePattern(pattern: String): String? = when (pattern) {
 
 private fun fieldActionLabel(field: FormField): String = when (field.fieldId) {
     "terms_and_conditions_acceptance" -> "Customer has read and accepted the terms"
-    "selfie_liveness_check" -> "Liveness verification check passed"
-    "face_match_verification" -> "Face match identity check passed"
     else -> "Confirm ${field.fieldName.lowercase(Locale.ROOT)}"
 }
 

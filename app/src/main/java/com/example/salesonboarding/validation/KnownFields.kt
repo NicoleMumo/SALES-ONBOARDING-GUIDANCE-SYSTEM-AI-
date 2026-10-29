@@ -123,6 +123,12 @@ object KnownFields {
 
     // region Fields (alphabetical)
 
+    /**
+     * Every field the app can ask for. These must stay identical to `field_to_id` in
+     * `preprocessing_meta.json` (the fields the next-field model was trained on);
+     * `ValidationRulesTest` checks this. The model scores candidates by their description,
+     * so a field missing here could be recommended but never shown or validated.
+     */
     val all: List<FormField> = listOf(
         field(
             "assets", Type.NUMBER,
@@ -161,10 +167,6 @@ object KnownFields {
             "email_address", Type.EMAIL,
             "Enter an email address the customer can access.",
             rules = listOf(EmailFormat)
-        ),
-        mustBeTrue(
-            "face_match_verification",
-            "Record the result of your organization's face-match check."
         ),
         field(
             "full_name", Type.TEXT,
@@ -229,10 +231,6 @@ object KnownFields {
         ),
         yesNo("politically_exposed_person_status", "Record the answer given by the customer."),
         field("profession", Type.TEXT, "Enter the customer's job, trade, or occupation."),
-        mustBeTrue(
-            "selfie_liveness_check",
-            "Record the result of your organization's live-selfie check."
-        ),
         choice(
             Id.SERVICE_TYPE, "Choose the telecom service the customer is signing up for.",
             "mobile", "broadband", "tv", "iot", "landline"
@@ -264,14 +262,6 @@ object KnownFields {
     init {
         check(byId.size == all.size) { "KnownFields contains duplicate field ids" }
     }
-
-    /**
-     * Field ids the app can ask for. These must stay identical to `field_vocab`
-     * in `preprocessing_meta.json` (the 34 fields the next-field model was
-     * trained on). The model scores candidates by their description, so a field
-     * missing here can be recommended but never shown or validated.
-     */
-    val fieldIds: Set<String> get() = byId.keys
 
     /** The configured field, or null if [fieldId] is not in the catalogue. */
     fun find(

@@ -60,9 +60,9 @@ class AdminDataStoreTest {
         val configuredFields = updated.allFields(listOf(fullName))
 
         assertEquals(listOf("full_name", "business_type"), configuredFields.map { it.fieldId })
-        assertTrue(configuredFields.first().validationRule.none { it == Required || it == NotBlank })
+        assertTrue(configuredFields.first().validationRules.none { it == Required || it == NotBlank })
         assertEquals("Select the customer type.", configuredFields.last().description)
-        assertTrue(configuredFields.last().validationRule.contains(OneOf(setOf("Retail", "Wholesale"))))
+        assertTrue(configuredFields.last().validationRules.contains(OneOf(setOf("Retail", "Wholesale"))))
     }
 
     @Test
@@ -101,7 +101,7 @@ class AdminDataStoreTest {
             validationRules = listOf(Required, OneOf(setOf("Retail", "Wholesale")))
         )
 
-        assertTrue(field.validationRule.any { it == OneOf(setOf("Retail", "Wholesale")) })
+        assertTrue(field.validationRules.any { it == OneOf(setOf("Retail", "Wholesale")) })
     }
 
     @Test

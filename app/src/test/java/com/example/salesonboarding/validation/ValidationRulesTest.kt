@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class ValidationRulesTest {
     private fun rule(rule: ValidationRule, value: String?, context: ValidationContext = ValidationContext()) =
@@ -59,8 +60,19 @@ class ValidationRulesTest {
         assertFalse(rule(documentNumber, "AB1234567", context).isNullOrBlank())
     }
 
+    @Test fun catalogueHoldsExactlyTheFieldsTheModelWasTrainedOn() {
+        // Unit tests run from the app module, so the model's metadata is one folder up.
+        val metadata = File("../ml/models/preprocessing_meta.json").readText()
+        val vocabulary = Regex("\"field_vocab\"\\s*:\\s*\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
+            .find(metadata)?.groupValues?.get(1)
+            ?: error("field_vocab not found in preprocessing_meta.json")
+        val modelFields = Regex("\"([a-z_]+)\"").findAll(vocabulary).map { it.groupValues[1] }.toSet()
+
+        assertEquals(32, modelFields.size)
+        assertEquals(modelFields, KnownFields.all.map { it.fieldId }.toSet())
+    }
+
     @Test fun everyKnownFieldHasAValidAndInvalidCase() {
-        assertEquals(34, KnownFields.all.size)
         KnownFields.all.forEach { field ->
             assertTrue(
                 "Expected ${field.fieldId} to have agent-facing instructions",
@@ -82,7 +94,7 @@ class ValidationRulesTest {
                 "subscriber_type" -> "individual"
                 "contract_type" -> "prepaid"
                 "payment_method" -> "mobile_money"
-                "terms_and_conditions_acceptance", "selfie_liveness_check", "face_match_verification" -> "yes"
+                "terms_and_conditions_acceptance" -> "yes"
                 "paperless_billing_preference", "politically_exposed_person_status", "us_person_status" -> "no"
                 else -> "Provided value"
             }
@@ -96,7 +108,7 @@ class ValidationRulesTest {
             val entry = FieldEntry("entry", "session", field.fieldId, validValue)
             assertTrue("Expected ${field.fieldId} to accept its valid value", field.validate(entry, context).isValid)
             val isApplicable = field.isRequired ||
-                field.validationRule.any { it is RequiredIf && context[it.dependsOnFieldId]?.equals(it.expectedValue, ignoreCase = true) == true }
+                field.validationRules.any { it is RequiredIf && context[it.dependsOnFieldId]?.equals(it.expectedValue, ignoreCase = true) == true }
             if (isApplicable) {
                 assertFalse("Expected ${field.fieldId} to reject a blank value", field.validate(entry.copy(value = ""), context).isValid)
             } else {

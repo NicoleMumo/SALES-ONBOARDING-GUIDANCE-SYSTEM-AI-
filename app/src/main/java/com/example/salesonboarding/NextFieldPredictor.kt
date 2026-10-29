@@ -54,8 +54,8 @@ fun interface NextFieldPredictor {
  * Runs the exported next-field model. The model file and its metadata file must come from
  * the same export; this class refuses to start if they do not match.
  *
- * The model sees field history, industry, customer type, validation status and, for dynamic
- * scoring, candidate field descriptions. It never receives the customer's answer values.
+ * The model sees field history, industry, customer type, validation status and the candidate
+ * fields' descriptions. It never receives the customer's answer values.
  * History is left-padded by [historyTensors]. Calls are serialised because a TensorFlow Lite
  * interpreter is not thread-safe. After [close], predictions return null.
  */
@@ -83,10 +83,6 @@ class TfliteNextFieldPredictor(
     // region Model
 
     private val interpreter = Interpreter(loadAsset(assets, modelAsset))
-
-    private val hasDynamicCandidateScoring =
-        interpreter.inputTensorCount == DYNAMIC_INPUT_COUNT && descriptionVocab.isNotEmpty() &&
-                maxDescriptionLength > 0 && maxCandidates > 0
 
     /** Where each named input sits in the model, found by tensor name. */
     private val inputPositions: Map<String, Int> = findInputPositions()
@@ -133,18 +129,14 @@ class TfliteNextFieldPredictor(
         // An industry or customer type the model was not trained on cannot be scored.
         // Return null so the caller falls back to the rule-based order.
         if (industry !in industryToId || context !in contextToId) return null
+        // Too many candidates for one model call: skip the suggestion rather than guess.
+        if (candidates.size > maxCandidates) return null
 
-        return if (hasDynamicCandidateScoring) {
-            // Too many candidates for one model call: skip the suggestion rather than guess.
-            if (candidates.size > maxCandidates) null
-            else scoreDynamicCandidates(fieldHistory, industry, context, lastValidation, candidates, fieldCatalogue)
-        } else {
-            scoreWithFixedOutput(fieldHistory, industry, context, lastValidation, candidates)
-        }
+        return scoreCandidates(fieldHistory, industry, context, lastValidation, candidates, fieldCatalogue)
     }
 
-    /** Current export: scores the given candidates by comparing their descriptions. */
-    private fun scoreDynamicCandidates(
+    /** Scores the given candidates by comparing their descriptions. */
+    private fun scoreCandidates(
         fieldHistory: List<String>,
         industry: String,
         context: String,
@@ -181,43 +173,6 @@ class TfliteNextFieldPredictor(
 
         val best = candidates.indices.maxByOrNull { scores[it] } ?: return null
         return FieldPrediction(candidates[best].fieldId, scores[best])
-    }
-
-    /** Older export: one score per known field. Custom fields are estimated from similar known fields. */
-    private fun scoreWithFixedOutput(
-        fieldHistory: List<String>,
-        industry: String,
-        context: String,
-        lastValidation: String,
-        candidates: List<FormField>
-    ): FieldPrediction? {
-        val probabilities = predictProbabilities(fieldHistory, industry, context, lastValidation) ?: return null
-        val best = candidates
-            .map { it to (probabilities[it.fieldId] ?: estimateCustomFieldScore(it, probabilities)) }
-            .maxByOrNull { it.second } ?: return null
-        return if (best.second > 0f) FieldPrediction(best.first.fieldId, best.second) else null
-    }
-
-    private fun predictProbabilities(
-        fieldHistory: List<String>,
-        industry: String,
-        context: String,
-        lastValidation: String
-    ): Map<String, Float>? {
-        val (inputIds, attentionMask) = historyTensors(fieldHistory.mapNotNull(fieldToId::get))
-        val output = Array(1) { FloatArray(fieldToId.size) }
-        val ran = run(
-            mapOf(
-                "input_ids" to arrayOf(inputIds),
-                "attention_mask" to arrayOf(attentionMask),
-                "industry_id" to arrayOf(intArrayOf(industryToId.getValue(industry))),
-                "context_id" to arrayOf(intArrayOf(contextToId.getValue(context))),
-                "validation_id" to arrayOf(intArrayOf(validationToId[lastValidation] ?: 0))
-            ),
-            output
-        )
-        if (!ran || output[0].any { !it.isFinite() }) return null
-        return fieldToId.entries.associate { (fieldId, id) -> fieldId to output[0][id - 1] }
     }
 
     /** Runs the interpreter once, with inputs placed by name. Returns false if already closed. */
@@ -280,17 +235,6 @@ class TfliteNextFieldPredictor(
         }
     }
 
-    private fun estimateCustomFieldScore(candidate: FormField, probabilities: Map<String, Float>): Float {
-        val tokens = FieldTextSimilarity.tokens(candidate)
-        var score = 0f
-        for ((fieldId, probability) in probabilities) {
-            val known = knownFieldTokens[fieldId] ?: continue
-            val similarity = FieldTextSimilarity.cosine(tokens, known)
-            score += probability * similarity * similarity
-        }
-        return score
-    }
-
     // endregion
 
     // region Start-up checks
@@ -309,17 +253,20 @@ class TfliteNextFieldPredictor(
         check(fieldToId.values.sorted() == (1..fieldToId.size).toList()) {
             "Metadata field_to_id must give each field a unique id from 1 to ${fieldToId.size}"
         }
-        check(interpreter.inputTensorCount == LEGACY_INPUT_COUNT || hasDynamicCandidateScoring) {
-            "Model has ${interpreter.inputTensorCount} inputs but the metadata does not describe candidate scoring"
+        check(interpreter.inputTensorCount == INPUT_NAMES.size) {
+            "Model has ${interpreter.inputTensorCount} inputs; the app needs the ${INPUT_NAMES.size}-input " +
+                    "export that scores candidate descriptions"
+        }
+        check(descriptionVocab.isNotEmpty() && maxDescriptionLength > 0 && maxCandidates > 0) {
+            "Metadata does not describe candidate scoring"
         }
         val sequenceLength = interpreter.getInputTensor(inputPositions.getValue("input_ids")).shape().last()
         check(sequenceLength == maxLength) {
             "Model expects sequences of $sequenceLength but the metadata says $maxLength"
         }
         val outputSize = interpreter.getOutputTensor(0).shape().last()
-        val expectedOutputSize = if (hasDynamicCandidateScoring) maxCandidates else fieldToId.size
-        check(outputSize == expectedOutputSize) {
-            "Model output has $outputSize scores but the metadata expects $expectedOutputSize. " +
+        check(outputSize == maxCandidates) {
+            "Model output has $outputSize scores but the metadata expects $maxCandidates. " +
                     "Replace the model and metadata files together."
         }
     }
@@ -339,8 +286,6 @@ class TfliteNextFieldPredictor(
         const val MODEL_ASSET = "onboarding_model.tflite"
         const val METADATA_ASSET = "preprocessing_meta.json"
 
-        private const val LEGACY_INPUT_COUNT = 5
-        private const val DYNAMIC_INPUT_COUNT = 7
         private const val MAX_DESCRIPTION_CHARS = 500
         private const val MIN_HISTORY_SIMILARITY = 0.15f
 

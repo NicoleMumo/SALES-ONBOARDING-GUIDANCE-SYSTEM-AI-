@@ -43,6 +43,11 @@ Moved here on 2026-10-29 (each file keeps the path it had before, without the
   script imports the old `features` and `playbooks` modules, which are now part
   of `ml/consistency.py`, so it no longer runs as it is.
 
+- `app/removed-code.md` keeps pieces of Kotlin removed from files that are
+  still in use (an old model path, the selfie and face-match questions,
+  duplicate session-store functions, a deprecated alias), with the reason for
+  each.
+
 The active project is organized around `app/`, `ml/`, `docs/`, and `tests/`.
 `ml/` replaced the former `data/`, `notebooks/` and `src/` folders on
 2026-10-29.

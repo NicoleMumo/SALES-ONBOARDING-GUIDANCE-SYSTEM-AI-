@@ -369,7 +369,7 @@ class OnboardingFormController(
     }
 
     private fun isRequired(field: FormField, state: LiveValidationState): Boolean =
-        field.isRequired || field.validationRule.any { rule ->
+        field.isRequired || field.validationRules.any { rule ->
             rule is RequiredIf && state.values[rule.dependsOnFieldId]
                 ?.trim()
                 ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true

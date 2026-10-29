@@ -70,14 +70,6 @@ data class FormField(
     val validationRules: List<ValidationRule>,
     val description: String = ""
 ) {
-    /** Backward-compatibility alias for older callers still reading the legacy property name. */
-    @Deprecated(
-        message = "Use validationRules instead.",
-        replaceWith = ReplaceWith("validationRules")
-    )
-    val validationRule: List<ValidationRule>
-        get() = validationRules
-
     // Required is applied automatically when isRequired is true.
     private val effectiveRules: List<ValidationRule> =
         if (isRequired) listOf(Required) + validationRules else validationRules

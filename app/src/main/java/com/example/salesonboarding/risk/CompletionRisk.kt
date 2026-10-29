@@ -1,7 +1,10 @@
 package com.example.salesonboarding.risk
 
 data class CompletionRiskFeatures(
-    /** Total observed time; the current calculator uses [longEventCount] for duration risk. */
+    /**
+     * Minutes of the longest single step ([CompletionRiskScorer] passes the longest step, not
+     * the total). Not used in the score: the calculator counts long steps in [longEventCount].
+     */
     val elapsedMinutes: Double,
     val validationErrors: Int,
     val fieldRevisits: Int,
