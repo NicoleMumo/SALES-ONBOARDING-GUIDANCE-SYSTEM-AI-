@@ -1,19 +1,21 @@
 package com.example.salesonboarding
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -26,11 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+
+// region Agent's own sessions
 
 @Composable
 fun AgentSessionHistoryScreen(
@@ -55,31 +58,42 @@ fun AgentSessionHistoryScreen(
     }
 
     LaunchedEffect(agentUid, store) { refresh() }
-    SessionHistoryContent(
-        title = "My onboarded clients",
-        description = "Review completed sessions or continue a saved draft.",
-        sessions = sessions,
-        agents = emptyList(),
-        isLoading = isLoading,
-        errorMessage = errorMessage,
-        onRefresh = ::refresh,
+    AppScreen(
+        title = "My sessions",
+        subtitle = "Review completed sessions or continue a saved one.",
         onBack = onBack,
-        onResumeSession = onResumeSession,
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState())
-    )
+        modifier = modifier,
+        actions = {
+            IconButton(onClick = ::refresh, enabled = !isLoading) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+            }
+        }
+    ) {
+        SessionHistoryContent(
+            sessions = sessions,
+            agents = emptyList(),
+            isLoading = isLoading,
+            errorMessage = errorMessage,
+            onResumeSession = onResumeSession
+        )
+    }
 }
 
+// endregion
+
+// region Session list (agents and admins)
+
+/**
+ * Searchable, filterable session cards, newest first. Answers are shown read-only under
+ * "View answers"; [onResumeSession] adds a Resume button to unfinished sessions.
+ */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun SessionHistoryContent(
-    title: String,
-    description: String,
     sessions: List<StoredOnboardingSession>,
     agents: List<SalesAgentAccount>,
     isLoading: Boolean,
     errorMessage: String?,
-    onRefresh: () -> Unit,
-    modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null,
     onResumeSession: ((StoredOnboardingSession) -> Unit)? = null
 ) {
     var searchText by remember { mutableStateOf("") }
@@ -121,89 +135,45 @@ fun SessionHistoryContent(
             statusMatches && industryMatches && (search.isBlank() || search in searchableText)
         }
 
-    Column(
-        modifier = modifier.padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text(description, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (onBack != null) TextButton(onClick = onBack) { Text("Back") }
-            TextButton(onClick = onRefresh, enabled = !isLoading) {
-                Text(if (isLoading) "Refreshing..." else "Refresh")
-            }
-        }
-
+    Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
         OutlinedTextField(
             value = searchText,
             onValueChange = { searchText = it },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Search clients, contact details, agents, or session ID") },
-            singleLine = true
+            placeholder = { Text("Search names, contact details, agents or session ID") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            singleLine = true,
+            shape = MaterialTheme.shapes.medium
         )
-
-        Text("Status", style = MaterialTheme.typography.labelLarge)
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("all" to "All", "completed" to "Completed", "in_progress" to "In progress")
-                .forEach { (value, label) ->
-                    FilterChip(
-                        selected = selectedStatus == value,
-                        onClick = { selectedStatus = value },
-                        label = { Text(label) }
-                    )
-                }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            listOf("all" to "All", "completed" to "Completed", "in_progress" to "In progress").forEach { (value, label) ->
+                FilterChip(selected = selectedStatus == value, onClick = { selectedStatus = value }, label = { Text(label) })
+            }
+            listOf("banking" to "Banking", "telecom" to "Telecom").forEach { (value, label) ->
+                FilterChip(
+                    selected = selectedIndustry == value,
+                    onClick = { selectedIndustry = if (selectedIndustry == value) "all" else value },
+                    label = { Text(label) }
+                )
+            }
         }
-
-        Text("Industry", style = MaterialTheme.typography.labelLarge)
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("all" to "All", "banking" to "Banking", "telecom" to "Telecom")
-                .forEach { (value, label) ->
-                    FilterChip(
-                        selected = selectedIndustry == value,
-                        onClick = { selectedIndustry = value },
-                        label = { Text(label) }
-                    )
-                }
-        }
-
         Text(
             "${filteredSessions.size} of ${sessions.size} sessions · newest first",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        if (errorMessage != null) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Text(
-                    errorMessage,
-                    modifier = Modifier.padding(14.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        } else if (isLoading && sessions.isEmpty()) {
-            Text("Loading sessions...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else if (filteredSessions.isEmpty()) {
-            Text(
-                if (sessions.isEmpty()) "No onboarding sessions are available yet."
-                else "No sessions match this search and these filters.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        when {
+            errorMessage != null -> Banner(errorMessage, Tone.Negative)
+            isLoading && sessions.isEmpty() -> Text("Loading sessions…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            filteredSessions.isEmpty() -> EmptyState(
+                title = if (sessions.isEmpty()) "No sessions yet" else "Nothing matches",
+                message = if (sessions.isEmpty()) "Onboarding sessions will appear here."
+                else "Try a different search or filter.",
+                icon = Icons.AutoMirrored.Filled.List
             )
-        } else {
-            filteredSessions.forEach { session ->
-                SessionHistoryCard(
+            else -> filteredSessions.forEach { session ->
+                SessionCard(
                     session = session,
                     agentName = agents.firstOrNull {
                         it.email.equals(session.agentEmail, ignoreCase = true)
@@ -230,102 +200,76 @@ fun SessionHistoryContent(
 }
 
 @Composable
-private fun SessionHistoryCard(
+private fun SessionCard(
     session: StoredOnboardingSession,
     agentName: String?,
     expanded: Boolean,
     onResumeSession: (() -> Unit)?,
     onToggleDetails: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(session.customerLabel(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                listOf(session.industry.displayIndustry(), session.context.displayValue())
-                    .filter(String::isNotBlank).joinToString(" · ").ifBlank { "Onboarding session" },
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                "${session.status.displayStatus()} · ${session.startedAt.displayDateTime()}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (onResumeSession != null) {
+    val filledFieldIds = session.entries
+        .filter { !it.value.isNullOrBlank() && it.isValid != false }
+        .mapTo(mutableSetOf()) { it.fieldId }
+        .apply { addAll(session.validatedFieldIds) }
+    val totalFieldCount = session.fieldNames.size
+    val completed = session.status.equals("completed", ignoreCase = true)
+
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            Text(session.customerLabel(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            StatusPill(session.status.displayStatus(), if (completed) Tone.Positive else Tone.Neutral, showIcon = completed)
+        }
+        Text(
+            listOf(session.industry.displayIndustry(), session.context.displayValue(), session.startedAt.displayDateTime())
+                .filter(String::isNotBlank).joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            buildList {
+                if (totalFieldCount > 0) add("${filledFieldIds.size} of $totalFieldCount answered")
+                add("Agent: ${agentName?.takeIf(String::isNotBlank) ?: session.agentEmail.ifBlank { session.agentId.shortAgentId() }}")
+            }.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (onResumeSession != null) {
+            PrimaryButton("Continue this session", onClick = onResumeSession, icon = Icons.AutoMirrored.Filled.ArrowForward)
+        }
+        TextButton(onClick = onToggleDetails) {
+            Text(if (expanded) "Hide answers" else "View answers")
+        }
+        if (expanded) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (session.entries.isEmpty()) {
                 Text(
-                    "Your saved answers are ready to continue.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Button(
-                    onClick = onResumeSession,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Resume onboarding")
-                }
-            }
-            val filledFieldIds = session.entries
-                .filter { !it.value.isNullOrBlank() && it.isValid != false }
-                .mapTo(mutableSetOf()) { it.fieldId }
-                .apply { addAll(session.validatedFieldIds) }
-            val totalFieldCount = session.fieldNames.size
-            if (totalFieldCount > 0) {
-                Text(
-                    "Fields filled: ${filledFieldIds.size} / $totalFieldCount",
+                    "No answers saved yet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(
-                "Agent: ${agentName?.takeIf(String::isNotBlank) ?: session.agentEmail.ifBlank { session.agentId.shortAgentId() }}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TextButton(onClick = onToggleDetails) {
-                Text(if (expanded) "Hide session details" else "View session details")
-            }
-            if (expanded) {
-                HorizontalDivider()
-                Text("Session ID: ${session.sessionId}", style = MaterialTheme.typography.labelSmall)
-                if (totalFieldCount > 0) {
+            session.entries.sortedBy { session.fieldNames[it.fieldId] ?: it.fieldId }.forEach { entry ->
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
-                        "${filledFieldIds.size} of $totalFieldCount fields filled",
+                        session.fieldNames[entry.fieldId] ?: entry.fieldId.displayValue(),
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-                Text(
-                    "Agent account: ${session.agentEmail.ifBlank { session.agentId.ifBlank { "Unknown" } }}",
-                    style = MaterialTheme.typography.labelSmall
-                )
-                if (session.entries.isEmpty()) {
-                    Text(
-                        "Customer answers are not saved until the agent submits the session.",
-                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                } else {
-                    session.entries.sortedBy { session.fieldNames[it.fieldId] ?: it.fieldId }
-                        .forEach { entry ->
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text(
-                                    session.fieldNames[entry.fieldId] ?: entry.fieldId.displayValue(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(entry.value.orEmpty(), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
+                    Text(entry.value.orEmpty(), style = MaterialTheme.typography.bodyMedium)
                 }
             }
+            Text(
+                "Session ID ${session.sessionId} · agent account ${session.agentEmail.ifBlank { session.agentId.ifBlank { "unknown" } }}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
+
+// endregion
+
+// region Helpers
 
 private fun StoredOnboardingSession.customerLabel(): String {
     val preferredIds = listOf(
@@ -371,3 +315,5 @@ private fun String.shortAgentId(): String = if (isBlank()) "Unknown" else "${tak
 private fun Long?.displayDateTime(): String = this?.let {
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
 } ?: "Date unavailable"
+
+// endregion

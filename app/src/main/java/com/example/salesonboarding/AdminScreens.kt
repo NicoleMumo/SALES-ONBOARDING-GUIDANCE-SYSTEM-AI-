@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
@@ -25,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
@@ -198,20 +196,23 @@ fun AdminDashboardScreen(
                             }
                         }
                     )
-                    AdminSection.SESSIONS -> Column(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = Space.l, vertical = Space.m)
+                    AdminSection.SESSIONS -> AppScreen(
+                        title = "Sessions",
+                        subtitle = "The company's onboarding records. Answers are read-only.",
+                        actions = {
+                            IconButton(onClick = ::loadSessions, enabled = !isLoadingSessions) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                            }
+                            IconButton(onClick = onSignOut) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
+                            }
+                        }
                     ) {
                         SessionHistoryContent(
-                            title = "Client sessions",
-                            description = "Search and filter the company's onboarding records. Details are read-only.",
                             sessions = sessions,
                             agents = agents,
                             isLoading = isLoadingSessions,
-                            errorMessage = sessionsErrorMessage,
-                            onRefresh = ::loadSessions
+                            errorMessage = sessionsErrorMessage
                         )
                     }
                     AdminSection.QUESTIONS -> QuestionsPage(

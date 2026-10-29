@@ -1,6 +1,5 @@
 package com.example.salesonboarding
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -179,7 +178,7 @@ fun OnboardingForm(
             onSectionOpened(firstOpen.fieldId)
         }
     }
-    BackHandler(enabled = !submitted && page > 0) { goTo(page - 1) }
+    // The phone's Back button follows each page's back arrow (see AppScreen).
 
     when {
         submitted -> CompletionPage(

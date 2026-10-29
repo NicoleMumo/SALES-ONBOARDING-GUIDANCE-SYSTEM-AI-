@@ -1,6 +1,8 @@
 package com.example.salesonboarding
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -49,12 +51,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -235,6 +240,8 @@ fun AppScreen(
     bottomBar: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // The phone's Back button does what the header's back arrow does.
+    if (onBack != null) BackHandler(onBack = onBack)
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -302,6 +309,24 @@ fun ScreenHeader(
 // endregion
 
 // region Building blocks
+
+/** The SalesMesh mark (the launcher icon's artwork) on the app green. */
+@Composable
+fun AppMark(modifier: Modifier = Modifier, size: Dp = 56.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(size * 0.3f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onPrimary)
+        )
+    }
+}
 
 /** The main action on a screen. Shows a spinner instead of an icon while [isLoading]. */
 @Composable

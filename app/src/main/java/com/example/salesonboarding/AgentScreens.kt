@@ -1,32 +1,33 @@
 package com.example.salesonboarding
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountBox
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -51,83 +54,23 @@ fun AgentHomeScreen(
     companyIndustry: String? = null,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.primary
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            "SM",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "SalesMesh",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        "SALES WORKSPACE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            OutlinedButton(onClick = onSignOut) {
-                Text("Sign out")
+    AppScreen(
+        title = "SalesMesh",
+        subtitle = companyIndustry?.let { "${it.displayIndustryName()} onboarding" } ?: "Sales workspace",
+        modifier = modifier,
+        actions = {
+            IconButton(onClick = onSignOut) {
+                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
             }
         }
-
+    ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
-                ) {
-                    Text(
-                        "YOUR CUSTOMER WORKSPACE",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
+            Column(Modifier.padding(Space.xl), verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                AppMark(size = 48.dp)
                 Text(
                     "Make every first conversation count.",
                     style = MaterialTheme.typography.headlineSmall,
@@ -135,86 +78,30 @@ fun AgentHomeScreen(
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
-                    "Start a customer profile, get guided through the right questions, and review the details before saving.",
+                    "Choose the customer type, go through each section with the customer, then review and submit.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                if (companyIndustry != null) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
-                    ) {
-                        Text(
-                            "Company playbook · ${companyIndustry.displayIndustryName()}",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-                Spacer(Modifier.height(2.dp))
-                Button(
+                PrimaryButton(
+                    "Start customer onboarding",
                     onClick = onStartOnboarding,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 15.dp)
-                ) {
-                    Text(
-                        "Start customer onboarding",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
+                    icon = Icons.AutoMirrored.Filled.ArrowForward
+                )
             }
         }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        SectionCard(
+            title = "Your sessions",
+            subtitle = "Customers you have onboarded, and unfinished sessions you can continue."
         ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    "Your saved work",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "Find clients you have already onboarded and check their saved session details.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedButton(
-                    onClick = onViewSessions,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 13.dp)
-                ) {
-                    Text("View my onboarded clients")
-                }
-            }
+            SecondaryButton("View my sessions", onClick = onViewSessions, icon = Icons.AutoMirrored.Filled.List)
         }
-
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                "A clear process, every time",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            WorkflowStep(number = "1", title = "Choose the customer type", detail = "Open the matching industry and service playbook.")
-            WorkflowStep(number = "2", title = "Follow the guidance", detail = "Complete each field with validation and next-step suggestions.")
-            WorkflowStep(number = "3", title = "Review and save", detail = "Check the information before completing the customer session.")
+        SectionCard(title = "How it works") {
+            WorkflowStep(1, "Choose the customer type", "The right form opens for your company and the customer.")
+            WorkflowStep(2, "Go section by section", "Answers are checked when you leave a box. The AI suggests what to ask next.")
+            WorkflowStep(3, "Review and submit", "Check every answer with the customer before saving.")
         }
-
         Text(
             "Need help with your account? Contact your administrator.",
-            modifier = Modifier.padding(bottom = 8.dp),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -222,32 +109,21 @@ fun AgentHomeScreen(
 }
 
 @Composable
-private fun WorkflowStep(number: String, title: String, detail: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+private fun WorkflowStep(number: Int, title: String, detail: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.m)) {
         Surface(
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(28.dp),
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(number, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text("$number", style = MaterialTheme.typography.labelLarge)
             }
         }
-        Column(
-            modifier = Modifier.padding(top = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -262,11 +138,6 @@ private fun String.displayIndustryName(): String =
 // endregion
 
 // region Form choice
-
-private data class IndustryOption(
-    val id: String,
-    val title: String
-)
 
 object IndustrySelectionValidator {
     val supportedIndustries: Set<String> = setOf("telecom", "banking")
@@ -291,149 +162,113 @@ object IndustrySelectionValidator {
         else "Select a valid customer context."
 }
 
+/** What each customer type is called and means, for the agent. */
+private val CONTEXT_LABELS = mapOf(
+    "individual" to ("Individual" to "A person opening an account"),
+    "business" to ("Business" to "A company or organisation"),
+    "mobile" to ("Mobile" to "A mobile phone line"),
+    "broadband" to ("Broadband" to "Home or office internet"),
+    "tv" to ("TV" to "TV and streaming"),
+    "iot" to ("IoT" to "A SIM for a connected device"),
+    "landline" to ("Landline" to "A fixed phone line")
+)
+
 @Composable
 fun IndustrySelectionScreen(
     onIndustrySelected: (String, String) -> Unit,
     assignedIndustry: String? = null,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedIndustry by remember(assignedIndustry) { mutableStateOf(assignedIndustry) }
     var selectedContext by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val options = listOf(
-        IndustryOption(
-            id = "telecom",
-            title = "Telecom"
-        ),
-        IndustryOption(
-            id = "banking",
-            title = "Banking"
-        )
-    )
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 20.dp, vertical = 20.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
+    AppScreen(
+        title = "New customer",
+        subtitle = "Choose the form for this customer.",
+        onBack = onBack,
+        modifier = modifier,
+        bottomBar = {
             Text(
-                "SALESMESH",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
+                "Question suggestions are worked out on this phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "Let’s get you set up",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    "Answer a few questions. We’ll guide you to the next step.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("What are you signing up for?", style = MaterialTheme.typography.labelLarge)
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (assignedIndustry == null) {
-                        options.forEach { option ->
-                            FilterChip(
-                                selected = selectedIndustry == option.id,
-                                onClick = {
-                                    if (selectedIndustry != option.id) selectedContext = null
-                                    selectedIndustry = option.id
-                                    errorMessage = null
-                                },
-                                label = { Text(option.title) }
-                            )
-                        }
+            PrimaryButton(
+                "Continue",
+                onClick = {
+                    val validationError = IndustrySelectionValidator.validate(selectedIndustry)
+                        ?: IndustrySelectionValidator.validateContext(selectedIndustry, selectedContext)
+                    if (validationError == null) {
+                        onIndustrySelected(requireNotNull(selectedIndustry), requireNotNull(selectedContext))
                     } else {
-                        FilterChip(
-                            selected = true,
-                            onClick = {},
-                            enabled = false,
-                            label = { Text(assignedIndustry.displayIndustryName()) }
-                        )
+                        errorMessage = validationError
+                    }
+                },
+                enabled = selectedIndustry != null && selectedContext != null,
+                icon = Icons.AutoMirrored.Filled.ArrowForward
+            )
+        }
+    ) {
+        if (assignedIndustry == null) {
+            SectionCard(title = "Industry") {
+                listOf("banking" to "Banking", "telecom" to "Telecommunications").forEach { (id, label) ->
+                    OptionRow(label, null, selectedIndustry == id) {
+                        if (selectedIndustry != id) selectedContext = null
+                        selectedIndustry = id
+                        errorMessage = null
                     }
                 }
             }
-
-            if (selectedIndustry != null) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Account type", style = MaterialTheme.typography.labelLarge)
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IndustrySelectionValidator.contextsFor(selectedIndustry).forEach { context ->
-                            FilterChip(
-                                selected = selectedContext == context,
-                                onClick = {
-                                    selectedContext = context
-                                    errorMessage = null
-                                },
-                                label = { Text(context.replaceFirstChar { it.titlecase(Locale.ROOT) }) }
-                            )
-                        }
+        } else {
+            StatusPill("${assignedIndustry.displayIndustryName()} · set by your company", Tone.Neutral)
+        }
+        if (selectedIndustry != null) {
+            SectionCard(title = "Customer type") {
+                IndustrySelectionValidator.contextsFor(selectedIndustry).forEach { context ->
+                    val (label, detail) = CONTEXT_LABELS[context]
+                        ?: (context.replaceFirstChar { it.titlecase(Locale.ROOT) } to null)
+                    OptionRow(label, detail, selectedContext == context) {
+                        selectedContext = context
+                        errorMessage = null
                     }
                 }
-            }
-
-            if (errorMessage != null) {
-                Text(
-                    text = errorMessage.orEmpty(),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
             }
         }
+        errorMessage?.let { Banner(it, Tone.Negative) }
+    }
+}
 
-        Text(
-            "Field suggestions are computed on this device.",
-            modifier = Modifier.padding(bottom = 8.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Button(
-            onClick = {
-                val validationError = IndustrySelectionValidator.validate(selectedIndustry)
-                    ?: IndustrySelectionValidator.validateContext(selectedIndustry, selectedContext)
-                if (validationError == null) {
-                    onIndustrySelected(requireNotNull(selectedIndustry), requireNotNull(selectedContext))
-                } else {
-                    errorMessage = validationError
+@Composable
+private fun OptionRow(title: String, detail: String?, selected: Boolean, onSelect: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect),
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) scheme.primaryContainer else scheme.surface,
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) scheme.primary else scheme.outline)
+    ) {
+        Row(Modifier.padding(horizontal = Space.m, vertical = Space.s), verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected, onClick = null)
+            Column(Modifier.padding(start = Space.s)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = if (selected) scheme.onPrimaryContainer else scheme.onSurface)
+                detail?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant)
                 }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            enabled = selectedIndustry != null && selectedContext != null,
-            contentPadding = PaddingValues(vertical = 14.dp)
-        ) {
-            Text("Start")
+            }
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(name = "Form choice", showBackground = true)
 @Composable
-fun IndustrySelectionPreview() {
-    SalesOnboardingTheme {
-        IndustrySelectionScreen(onIndustrySelected = { _, _ -> })
+private fun IndustrySelectionPreview() {
+    SalesOnboardingTheme(darkTheme = false) {
+        IndustrySelectionScreen(onIndustrySelected = { _, _ -> }, assignedIndustry = "telecom", onBack = {})
     }
 }
 
@@ -448,129 +283,77 @@ fun OnboardingConsentScreen(
     modifier: Modifier = Modifier
 ) {
     var confirmed by remember { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+    AppScreen(
+        title = "Customer consent",
+        subtitle = "Check the customer agrees before you collect personal details.",
+        onBack = onBack,
+        modifier = modifier,
+        bottomBar = {
+            PrimaryButton(
+                "Start onboarding",
+                onClick = onConsent,
+                enabled = confirmed,
+                icon = Icons.AutoMirrored.Filled.ArrowForward
+            )
+        }
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                "Customer Consent",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+        SectionCard(title = "Tell the customer") {
+            ConsentPoint(
+                Icons.Filled.Info,
+                "Why we collect it",
+                "Information is collected to set up the customer account and follow your company's onboarding process."
             )
-            Text(
-                "Please verify customer permission before collecting personal details.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            HorizontalDivider(color = scheme.outlineVariant)
+            ConsentPoint(
+                Icons.Filled.AccountBox,
+                "Document photos",
+                "If you choose a document photo, text is read on this device to help with data entry. The photo and scan result are not uploaded or saved automatically."
+            )
+            HorizontalDivider(color = scheme.outlineVariant)
+            ConsentPoint(
+                Icons.Filled.Person,
+                "Customer rights",
+                "The customer may request review of their submitted details through authorized company channels."
+            )
+            HorizontalDivider(color = scheme.outlineVariant)
+            ConsentPoint(
+                Icons.Filled.Lock,
+                "Access and retention",
+                "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
             )
         }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                ConsentPoint(
-                    title = "Purpose of Collection",
-                    description = "Information is collected to set up the customer account and follow your company's onboarding process."
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ConsentPoint(
-                    title = "Document photos",
-                    description = "If you choose a document photo, text is read on this device to help with data entry. The photo and scan result are not uploaded or saved automatically."
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ConsentPoint(
-                    title = "Customer rights",
-                    description = "The customer may request review of their submitted details through authorized company channels."
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ConsentPoint(
-                    title = "Access and retention",
-                    description = "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
-                )
-            }
-        }
-
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { confirmed = !confirmed },
+                .heightIn(min = 56.dp)
+                .toggleable(value = confirmed, role = Role.Checkbox) { confirmed = it },
             shape = MaterialTheme.shapes.medium,
-            color = if (confirmed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            border = BorderStroke(
-                width = if (confirmed) 1.5.dp else 1.dp,
-                color = if (confirmed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-            )
+            color = if (confirmed) scheme.primaryContainer else scheme.surface,
+            border = BorderStroke(if (confirmed) 1.5.dp else 1.dp, if (confirmed) scheme.primary else scheme.outline)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Checkbox(
-                    checked = confirmed,
-                    onCheckedChange = null
-                )
+            Row(Modifier.padding(horizontal = Space.m, vertical = Space.s), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = confirmed, onCheckedChange = null)
                 Text(
                     "Customer has been informed and agreed to proceed",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (confirmed) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (confirmed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (confirmed) scheme.onPrimaryContainer else scheme.onSurface,
+                    modifier = Modifier.padding(start = Space.s)
                 )
-            }
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(
-                onClick = onConsent,
-                enabled = confirmed,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text("Start Onboarding", fontWeight = FontWeight.SemiBold)
-            }
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text("Back")
             }
         }
     }
 }
 
 @Composable
-private fun ConsentPoint(title: String, description: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun ConsentPoint(icon: ImageVector, title: String, description: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

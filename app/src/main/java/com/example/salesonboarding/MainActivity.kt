@@ -7,13 +7,9 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -210,6 +206,7 @@ class MainActivity : ComponentActivity() {
                                 onboardingSessionId = UUID.randomUUID().toString()
                             },
                             assignedIndustry = companyIndustry,
+                            onBack = { showAgentHome = true },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (!consentGiven) {
@@ -224,16 +221,11 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (onboardingSessionId != null) {
                         when {
-                            isLoadingFieldConfiguration -> Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(innerPadding),
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator()
-                                Text("Loading onboarding setup…")
-                                Text("This usually takes a few seconds.")
-                            }
+                            isLoadingFieldConfiguration -> LoadingState(
+                                "Loading onboarding setup…",
+                                Modifier.padding(innerPadding),
+                                detail = "This usually takes a few seconds."
+                            )
                             else -> {
                                 val playbook = remember(selectedIndustry, selectedContext, fieldRuleConfiguration) {
                                     OnboardingPlaybooks.forIndustry(

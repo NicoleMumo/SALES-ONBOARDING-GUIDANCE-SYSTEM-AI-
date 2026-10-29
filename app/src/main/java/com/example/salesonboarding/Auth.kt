@@ -1,25 +1,33 @@
 package com.example.salesonboarding
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,10 +37,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -89,226 +103,72 @@ fun UnifiedLoginScreen(
     modifier: Modifier = Modifier
 ) {
     var state by remember { mutableStateOf(LoginFormState(role = initialRole)) }
-    var passwordVisible by remember { mutableStateOf(false) }
+    val isAgent = state.role == UserRole.SALES_AGENT
+    val enabled = !state.isSubmitting
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 440.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(22.dp)
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                BrandMark()
-                Text(
-                    text = "SalesMesh",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Consistent customer onboarding, made simple.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+    fun submit() {
+        val error = (if (isAgent) LoginFormValidator.validateCompanyId(state.companyId) else null)
+            ?: LoginFormValidator.validate(state.email, state.password)
+        if (error != null) {
+            state = state.copy(errorMessage = error)
+            return
+        }
+        state = state.copy(isSubmitting = true, errorMessage = null)
+        onLogin(state.companyId.trim(), state.email.trim(), state.password, state.role) { result ->
+            result.onFailure { failure ->
+                state = state.copy(
+                    isSubmitting = false,
+                    errorMessage = failure.message ?: "Sign-in failed. Try again."
                 )
             }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = if (state.role == UserRole.SALES_AGENT) {
-                                "Sales agent login"
-                            } else {
-                                "Administrator login"
-                            },
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Sign in with your SalesMesh account.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        UserRole.values().forEach { role ->
-                            FilterChip(
-                                selected = state.role == role,
-                                onClick = {
-                                    state = state.copy(role = role, errorMessage = null)
-                                    onRoleSelected(role)
-                                },
-                                label = { Text(role.label) }
-                            )
-                        }
-                    }
-
-                    if (state.role == UserRole.SALES_AGENT) {
-                        OutlinedTextField(
-                            value = state.companyId,
-                            onValueChange = {
-                                state = state.copy(companyId = it.trim(), errorMessage = null)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Company ID") },
-                            singleLine = true,
-                            enabled = !state.isSubmitting
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = state.email,
-                        onValueChange = {
-                            state = state.copy(email = it, errorMessage = null)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Email address") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        enabled = !state.isSubmitting
-                    )
-
-                    OutlinedTextField(
-                        value = state.password,
-                        onValueChange = {
-                            state = state.copy(password = it, errorMessage = null)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Password") },
-                        singleLine = true,
-                        visualTransformation = if (passwordVisible) {
-                            VisualTransformation.None
-                        } else {
-                            PasswordVisualTransformation()
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            androidx.compose.material3.TextButton(
-                                onClick = { passwordVisible = !passwordVisible },
-                                enabled = !state.isSubmitting
-                            ) {
-                                Text(if (passwordVisible) "Hide" else "Show")
-                            }
-                        },
-                        isError = state.errorMessage != null,
-                        supportingText = state.errorMessage?.let { message ->
-                            { Text(message) }
-                        },
-                        enabled = !state.isSubmitting
-                    )
-
-                    Button(
-                        onClick = {
-                            val companyIdError = if (state.role == UserRole.SALES_AGENT) {
-                                LoginFormValidator.validateCompanyId(state.companyId)
-                            } else {
-                                null
-                            }
-                            val error = companyIdError
-                                ?: LoginFormValidator.validate(state.email, state.password)
-                            if (error == null) {
-                                state = state.copy(isSubmitting = true)
-                                onLogin(
-                                    state.companyId.trim(),
-                                    state.email.trim(),
-                                    state.password,
-                                    state.role
-                                ) { result ->
-                                    result.onFailure { failure ->
-                                        state = state.copy(
-                                            isSubmitting = false,
-                                            errorMessage = failure.message ?: "Sign-in failed. Try again."
-                                        )
-                                    }
-                                }
-                            } else {
-                                state = state.copy(errorMessage = error)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !state.isSubmitting,
-                        contentPadding = PaddingValues(vertical = 14.dp)
-                    ) {
-                        if (state.isSubmitting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.padding(vertical = 2.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("Sign in")
-                        }
-                    }
-
-                    if (state.role == UserRole.SALES_AGENT) {
-                        androidx.compose.material3.TextButton(
-                            onClick = onRegisterAgent,
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.isSubmitting
-                        ) {
-                            Text("Create an agent account")
-                        }
-                    } else {
-                        androidx.compose.material3.TextButton(
-                            onClick = onRegisterAdmin,
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.isSubmitting
-                        ) {
-                            Text("Register an administrator account")
-                        }
-                    }
-                }
-            }
-
-            Text(
-                text = if (state.role == UserRole.SALES_AGENT) {
-                    "Use the company ID and invited work email from your administrator."
-                } else {
-                    "Admin access is granted by your organization after registration."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
-}
-@Composable
-private fun BrandMark() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-        shape = MaterialTheme.shapes.large
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 17.dp, vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "SM",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
+
+    AuthFrame(modifier) {
+        Text("Sign in", style = MaterialTheme.typography.headlineSmall)
+        RoleToggle(state.role, enabled) { role ->
+            state = state.copy(role = role, errorMessage = null)
+            onRoleSelected(role)
+        }
+        if (isAgent) {
+            AuthTextField(
+                value = state.companyId,
+                onValueChange = { state = state.copy(companyId = it.trim(), errorMessage = null) },
+                label = "Company ID",
+                enabled = enabled
             )
         }
+        AuthTextField(
+            value = state.email,
+            onValueChange = { state = state.copy(email = it, errorMessage = null) },
+            label = "Email address",
+            enabled = enabled,
+            keyboardType = KeyboardType.Email
+        )
+        PasswordField(
+            value = state.password,
+            onValueChange = { state = state.copy(password = it, errorMessage = null) },
+            label = "Password",
+            enabled = enabled,
+            onDone = ::submit
+        )
+        state.errorMessage?.let { Banner(it, Tone.Negative) }
+        PrimaryButton("Sign in", onClick = ::submit, isLoading = state.isSubmitting)
+        TextButton(
+            onClick = if (isAgent) onRegisterAgent else onRegisterAdmin,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled
+        ) {
+            Text(if (isAgent) "Create an agent account" else "Register an administrator account")
+        }
+        Text(
+            if (isAgent) "Use the company ID and invited work email from your administrator."
+            else "Admin access is granted by your organization after registration.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -338,152 +198,218 @@ fun AccountRegistrationScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSubmitting by remember { mutableStateOf(false) }
     var registered by remember { mutableStateOf(false) }
+    BackHandler(enabled = !isSubmitting, onBack = onBackToSignIn)
 
-    Box(
+    fun submit() {
+        val companyIdError = if (requiresCompanyId) LoginFormValidator.validateCompanyId(companyId) else null
+        val validationError = when {
+            companyIdError != null -> companyIdError
+            LoginFormValidator.validateEmail(email) != null -> LoginFormValidator.validateEmail(email)
+            password.length < MIN_PASSWORD_LENGTH -> "Use a password with at least $MIN_PASSWORD_LENGTH characters."
+            password != confirmedPassword -> "The passwords do not match."
+            else -> null
+        }
+        if (validationError != null) {
+            errorMessage = validationError
+            return
+        }
+        isSubmitting = true
+        onRegister(companyId.trim(), email.trim(), password) { result ->
+            isSubmitting = false
+            result.onSuccess {
+                registered = true
+                errorMessage = null
+            }.onFailure {
+                errorMessage = it.message ?: "Could not create the account. Try again."
+            }
+        }
+    }
+
+    AuthFrame(modifier) {
+        if (registered) {
+            Text("Registration complete", style = MaterialTheme.typography.headlineSmall)
+            Banner(completionMessage, Tone.Positive)
+            PrimaryButton("Back to sign in", onClick = onBackToSignIn)
+            return@AuthFrame
+        }
+        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Text(instructions, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (requiresCompanyId) {
+            AuthTextField(
+                value = companyId,
+                onValueChange = { companyId = it.trim(); errorMessage = null },
+                label = "Company ID",
+                enabled = !isSubmitting
+            )
+        }
+        AuthTextField(
+            value = email,
+            onValueChange = { email = it; errorMessage = null },
+            label = "Email address",
+            enabled = !isSubmitting,
+            keyboardType = KeyboardType.Email
+        )
+        PasswordField(
+            value = password,
+            onValueChange = { password = it; errorMessage = null },
+            label = "Choose a password (at least $MIN_PASSWORD_LENGTH characters)",
+            enabled = !isSubmitting,
+            imeAction = ImeAction.Next
+        )
+        PasswordField(
+            value = confirmedPassword,
+            onValueChange = { confirmedPassword = it; errorMessage = null },
+            label = "Confirm password",
+            enabled = !isSubmitting,
+            onDone = ::submit
+        )
+        errorMessage?.let { Banner(it, Tone.Negative) }
+        PrimaryButton("Create account", onClick = ::submit, isLoading = isSubmitting)
+        TextButton(onClick = onBackToSignIn, modifier = Modifier.fillMaxWidth(), enabled = !isSubmitting) {
+            Text("Back to sign in")
+        }
+    }
+}
+
+private const val MIN_PASSWORD_LENGTH = 8
+
+// endregion
+
+// region Shared parts of the sign-in screens
+
+/** The brand header and one card, scrollable and kept above the keyboard. */
+@Composable
+private fun AuthFrame(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = Space.l, vertical = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Space.xl)
     ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            AppMark(size = 64.dp)
+            Text("SalesMesh", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Consistent customer onboarding, made simple.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 440.dp)
-                .padding(horizontal = 24.dp, vertical = 28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                .widthIn(max = 440.dp),
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(
+                modifier = Modifier.padding(Space.xl),
+                verticalArrangement = Arrangement.spacedBy(Space.l),
+                content = content
+            )
+        }
+    }
+}
+
+/** Two large options: sales agent or administrator. */
+@Composable
+private fun RoleToggle(selected: UserRole, enabled: Boolean, onSelect: (UserRole) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+        UserRole.entries.forEach { role ->
+            val isSelected = role == selected
+            Surface(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .selectable(selected = isSelected, enabled = enabled, role = Role.RadioButton) { onSelect(role) },
+                shape = MaterialTheme.shapes.medium,
+                color = if (isSelected) scheme.primaryContainer else scheme.surface,
+                border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, if (isSelected) scheme.primary else scheme.outline)
             ) {
-                Text(
-                    text = if (registered) "Registration complete" else title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                if (registered) {
-                    Text(completionMessage, style = MaterialTheme.typography.bodyMedium)
-                    Button(
-                        onClick = onBackToSignIn,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 14.dp)
-                    ) {
-                        Text("Back to sign in")
-                    }
-                } else {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(Space.m)) {
                     Text(
-                        instructions,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        role.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isSelected) scheme.onPrimaryContainer else scheme.onSurface
                     )
-
-                    if (requiresCompanyId) {
-                        OutlinedTextField(
-                            value = companyId,
-                            onValueChange = { companyId = it.trim(); errorMessage = null },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Company ID") },
-                            singleLine = true,
-                            enabled = !isSubmitting
-                        )
-                    }
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it; errorMessage = null },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Email address") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        enabled = !isSubmitting
-                    )
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it; errorMessage = null },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Choose a password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        enabled = !isSubmitting
-                    )
-                    OutlinedTextField(
-                        value = confirmedPassword,
-                        onValueChange = { confirmedPassword = it; errorMessage = null },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Confirm password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        enabled = !isSubmitting
-                    )
-
-                    errorMessage?.let { message ->
-                        Text(message, color = MaterialTheme.colorScheme.error)
-                    }
-
-                    Button(
-                        onClick = {
-                            val emailError = LoginFormValidator.validateEmail(email)
-                            val companyIdError = if (requiresCompanyId) {
-                                LoginFormValidator.validateCompanyId(companyId)
-                            } else {
-                                null
-                            }
-                            val validationError = when {
-                                companyIdError != null -> companyIdError
-                                emailError != null -> emailError
-                                password.length < MIN_PASSWORD_LENGTH ->
-                                    "Use a password with at least $MIN_PASSWORD_LENGTH characters."
-                                password != confirmedPassword -> "The passwords do not match."
-                                else -> null
-                            }
-                            if (validationError != null) {
-                                errorMessage = validationError
-                            } else {
-                                isSubmitting = true
-                                onRegister(companyId.trim(), email.trim(), password) { result ->
-                                    isSubmitting = false
-                                    result.onSuccess {
-                                        registered = true
-                                        errorMessage = null
-                                    }.onFailure {
-                                        errorMessage = it.message ?: "Could not create the account. Try again."
-                                    }
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isSubmitting,
-                        contentPadding = PaddingValues(vertical = 14.dp)
-                    ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.padding(vertical = 2.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("Create account")
-                        }
-                    }
-
-                    TextButton(
-                        onClick = onBackToSignIn,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isSubmitting
-                    ) {
-                        Text("Back to sign in")
-                    }
                 }
             }
         }
     }
 }
 
-private const val MIN_PASSWORD_LENGTH = 8
+@Composable
+private fun AuthTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    enabled: Boolean,
+    keyboardType: KeyboardType = KeyboardType.Text
+) {
+    val focusManager = LocalFocusManager.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        enabled = enabled,
+        shape = MaterialTheme.shapes.medium,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+    )
+}
+
+/** A password box with Show/Hide. The keyboard's Done key runs [onDone] (sign in, create account). */
+@Composable
+private fun PasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    enabled: Boolean,
+    imeAction: ImeAction = ImeAction.Done,
+    onDone: () -> Unit = {}
+) {
+    val focusManager = LocalFocusManager.current
+    var visible by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        enabled = enabled,
+        shape = MaterialTheme.shapes.medium,
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction),
+        keyboardActions = KeyboardActions(
+            onNext = { focusManager.moveFocus(FocusDirection.Down) },
+            onDone = {
+                focusManager.clearFocus()
+                onDone()
+            }
+        ),
+        trailingIcon = {
+            TextButton(onClick = { visible = !visible }, enabled = enabled) {
+                Text(if (visible) "Hide" else "Show")
+            }
+        }
+    )
+}
+
+@Preview(name = "Sign in", showBackground = true, heightDp = 900)
+@Composable
+private fun SignInPreview() {
+    SalesOnboardingTheme(darkTheme = false) {
+        UnifiedLoginScreen(onLogin = { _, _, _, _, _ -> }, onRegisterAdmin = {}, onRegisterAgent = {})
+    }
+}
 
 // endregion
 
