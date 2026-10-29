@@ -1,8 +1,6 @@
 package com.example.salesonboarding
 
 import android.content.res.AssetManager
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KnownFields
 import org.json.JSONObject
 import org.tensorflow.lite.Interpreter
 import java.io.Closeable

@@ -1,20 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.consistency.ConsistencyInput
-import com.example.salesonboarding.consistency.ConsistencyReport
-import com.example.salesonboarding.consistency.RecordedStep
-import com.example.salesonboarding.consistency.SessionConsistencyCalculator
-import com.example.salesonboarding.validation.FieldRuleConfiguration
-import com.example.salesonboarding.validation.FieldRuleOverride
-import com.example.salesonboarding.validation.EmailFormat
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KenyanPhoneFormat
-import com.example.salesonboarding.validation.MustBeTrue
-import com.example.salesonboarding.validation.NotBlank
-import com.example.salesonboarding.validation.OneOf
-import com.example.salesonboarding.validation.PositiveNumber
-import com.example.salesonboarding.validation.Required
-import com.example.salesonboarding.validation.DateFormatAndMinimumAge
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseReference

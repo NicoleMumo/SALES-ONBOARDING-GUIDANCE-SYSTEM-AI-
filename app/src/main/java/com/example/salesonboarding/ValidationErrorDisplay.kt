@@ -1,4 +1,4 @@
-package com.example.salesonboarding.validation
+package com.example.salesonboarding
 
 data class ValidationErrorDisplay(
     val fieldId: String,

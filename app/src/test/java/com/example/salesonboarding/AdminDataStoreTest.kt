@@ -1,16 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.validation.DateFormatAndMinimumAge
-import com.example.salesonboarding.validation.EmailFormat
-import com.example.salesonboarding.validation.FieldRuleConfiguration
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KenyanPhoneFormat
-import com.example.salesonboarding.validation.KnownFields
-import com.example.salesonboarding.validation.MustBeTrue
-import com.example.salesonboarding.validation.NotBlank
-import com.example.salesonboarding.validation.OneOf
-import com.example.salesonboarding.validation.PositiveNumber
-import com.example.salesonboarding.validation.Required
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,7 +27,7 @@ class AdminDataStoreTest {
         val fullName = KnownFields.get("full_name")
         val initialConfiguration = FieldRuleConfiguration(
             overrides = mapOf(
-                fullName.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                fullName.fieldId to FieldRuleOverride(
                     removeRules = listOf(Required, NotBlank)
                 )
             )
@@ -110,7 +99,7 @@ class AdminDataStoreTest {
         val field = KnownFields.get("email_address")
         val configuredField = FieldRuleConfiguration(
             overrides = mapOf(
-                field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                field.fieldId to FieldRuleOverride(
                     removeRules = listOf(Required, NotBlank)
                 )
             )
@@ -125,7 +114,7 @@ class AdminDataStoreTest {
         val field = KnownFields.get("full_name")
         val configuredField = FieldRuleConfiguration(
             overrides = mapOf(
-                field.fieldId to com.example.salesonboarding.validation.FieldRuleOverride(
+                field.fieldId to FieldRuleOverride(
                     removeRules = listOf(Required, NotBlank)
                 )
             )

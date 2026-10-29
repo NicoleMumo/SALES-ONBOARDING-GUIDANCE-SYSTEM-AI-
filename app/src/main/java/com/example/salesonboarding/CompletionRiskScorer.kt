@@ -1,4 +1,4 @@
-package com.example.salesonboarding.risk
+package com.example.salesonboarding
 
 data class CompletionRiskEvent(
     val durationMinutes: Double,

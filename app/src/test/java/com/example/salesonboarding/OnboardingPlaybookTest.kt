@@ -1,9 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.validation.FieldRuleConfiguration
-import com.example.salesonboarding.validation.FieldRuleOverride
-import com.example.salesonboarding.validation.KnownFields
-import com.example.salesonboarding.validation.Required
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals

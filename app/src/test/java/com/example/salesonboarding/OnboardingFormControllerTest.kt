@@ -8,14 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.example.salesonboarding.validation.FieldEntry
-import com.example.salesonboarding.risk.CompletionRiskEvent
-import com.example.salesonboarding.risk.CompletionRiskLevel
-import com.example.salesonboarding.validation.KnownFields
-import com.example.salesonboarding.validation.EmailFormat
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.Required
-import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingFormControllerTest {

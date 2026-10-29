@@ -1,10 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.validation.FieldRuleConfiguration
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KnownFields
-import com.example.salesonboarding.validation.NotBlank
-import com.example.salesonboarding.validation.Required
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.security.MessageDigest
@@ -158,19 +153,19 @@ object OnboardingPlaybooks {
                     configuredField.copy(
                         isRequired = true,
                         validationRules = configuredField.validationRules
-                            .filterNot { it is com.example.salesonboarding.validation.RequiredIf } +
+                            .filterNot { it is RequiredIf } +
                             listOf(Required, NotBlank)
                     )
                 industry == "banking" && context == "business" && fieldId in BANKING_BUSINESS_OPTIONAL_FIELDS ->
                     configuredField.copy(
                         validationRules = configuredField.validationRules
-                            .filterNot { it is com.example.salesonboarding.validation.RequiredIf }
+                            .filterNot { it is RequiredIf }
                     )
                 context != null && fieldId in setOf("phone_service_selection", "internet_service_selection") ->
                     configuredField.copy(
                         isRequired = true,
                         validationRules = configuredField.validationRules
-                            .filterNot { it is com.example.salesonboarding.validation.RequiredIf } +
+                            .filterNot { it is RequiredIf } +
                             listOf(Required, NotBlank)
                     )
                 else -> configuredField

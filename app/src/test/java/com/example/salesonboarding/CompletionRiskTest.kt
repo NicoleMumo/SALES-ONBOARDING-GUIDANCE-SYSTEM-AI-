@@ -1,4 +1,4 @@
-package com.example.salesonboarding.risk
+package com.example.salesonboarding
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

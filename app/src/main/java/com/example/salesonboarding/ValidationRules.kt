@@ -1,4 +1,4 @@
-package com.example.salesonboarding.validation
+package com.example.salesonboarding
 
 import java.math.BigDecimal
 import java.util.Calendar

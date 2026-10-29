@@ -1,4 +1,4 @@
-package com.example.salesonboarding.validation
+package com.example.salesonboarding
 
 /**
  * An admin's changes to one field, as a delta over the catalogue defaults.

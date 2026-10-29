@@ -1,8 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.risk.CompletionRiskEvent
-import com.example.salesonboarding.risk.CompletionRiskScorer
-import com.example.salesonboarding.risk.TrainedCompletionRiskModel
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test

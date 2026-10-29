@@ -1,4 +1,4 @@
-package com.example.salesonboarding.ui.theme
+package com.example.salesonboarding
 
 import android.os.Build
 import androidx.compose.foundation.shape.RoundedCornerShape

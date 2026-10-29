@@ -58,23 +58,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
-import com.example.salesonboarding.validation.DateFormatAndMinimumAge
-import com.example.salesonboarding.validation.EmailFormat
-import com.example.salesonboarding.validation.FieldEntry
-import com.example.salesonboarding.validation.FieldEntryStore
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KenyanPhoneFormat
-import com.example.salesonboarding.validation.LiveValidationState
-import com.example.salesonboarding.validation.MustBeTrue
-import com.example.salesonboarding.validation.OneOf
-import com.example.salesonboarding.validation.PatternByFieldValue
-import com.example.salesonboarding.validation.PositiveNumber
-import com.example.salesonboarding.validation.RegexPattern
-import com.example.salesonboarding.validation.RequiredIf
-import com.example.salesonboarding.validation.ValidationContext
-import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
-import com.example.salesonboarding.validation.ValidationResult
 import kotlinx.coroutines.CoroutineScope
 import java.util.Locale
 
@@ -1104,7 +1087,7 @@ fun rememberOnboardingController(
     initialValues: Map<String, String?> = emptyMap(),
     initialResumeFieldId: String? = null,
     isResumingSession: Boolean = false,
-    riskModel: com.example.salesonboarding.risk.TrainedCompletionRiskModel? = null
+    riskModel: TrainedCompletionRiskModel? = null
 ): OnboardingFormController = remember(
     sessionId, scope, entryStore, predictor, industry, context,
     agentUid, fields, playbook, initialModelUnavailable, agentEmail,
@@ -1374,7 +1357,7 @@ fun OnboardingScreenPreview() {
     SalesOnboardingTheme {
         val playbook = OnboardingPlaybooks.forIndustry(
             "telecom",
-            com.example.salesonboarding.validation.FieldRuleConfiguration()
+            FieldRuleConfiguration()
         )
         OnboardingScreenContent(
             playbook = playbook,

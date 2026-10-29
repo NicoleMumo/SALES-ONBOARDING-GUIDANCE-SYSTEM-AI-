@@ -1,4 +1,4 @@
-package com.example.salesonboarding.consistency
+package com.example.salesonboarding
 
 /**
  * How consistently onboarding sessions follow the standard process.

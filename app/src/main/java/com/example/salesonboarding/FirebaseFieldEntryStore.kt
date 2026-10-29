@@ -1,8 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.validation.FieldEntry
-import com.example.salesonboarding.validation.FieldEntryStore
-import com.example.salesonboarding.validation.FormField
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.MutableData

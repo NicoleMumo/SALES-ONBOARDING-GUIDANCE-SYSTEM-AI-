@@ -1,6 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.validation.KnownFields
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent

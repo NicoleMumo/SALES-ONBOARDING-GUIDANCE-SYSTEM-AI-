@@ -39,12 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.salesonboarding.consistency.ConsistencyReport
-import com.example.salesonboarding.consistency.SessionConsistencyCalculator
-import com.example.salesonboarding.validation.FieldRuleConfiguration
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KnownFields
-import com.example.salesonboarding.validation.OneOf
 import java.util.Locale
 
 @Composable
@@ -672,7 +666,7 @@ private fun RuleConfigurationSection(
                         .map(AdminRule::label)
                         .let { labels ->
                             if (field.validationRules.any {
-                                    it is com.example.salesonboarding.validation.OneOf
+                                    it is OneOf
                                 }) labels + "Approved choices" else labels
                         }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -683,7 +677,7 @@ private fun RuleConfigurationSection(
                             "Rules: ${ruleLabels.joinToString().ifBlank { "None" }}",
                             style = MaterialTheme.typography.bodySmall
                         )
-                        field.validationRules.filterIsInstance<com.example.salesonboarding.validation.OneOf>()
+                        field.validationRules.filterIsInstance<OneOf>()
                             .flatMap { it.choices }
                             .takeIf { it.isNotEmpty() }
                             ?.let { choices ->
@@ -695,7 +689,7 @@ private fun RuleConfigurationSection(
                     }
                 }
                 KnownFields.all.forEach { field ->
-                    val required = configuration.rulesFor(field).any { it is com.example.salesonboarding.validation.Required }
+                    val required = configuration.rulesFor(field).any { it is Required }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(field.fieldName, Modifier.weight(1f))
                         Switch(
@@ -977,16 +971,16 @@ private fun ConsistencySection(
     }
 }
 
-private fun List<com.example.salesonboarding.validation.ValidationRule>.toAdminRules(
+private fun List<ValidationRule>.toAdminRules(
     required: Boolean
 ): Set<AdminRule> = buildSet {
     if (required) add(AdminRule.REQUIRED)
-    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.NotBlank }) add(AdminRule.NOT_BLANK)
-    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.EmailFormat }) add(AdminRule.EMAIL)
-    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.KenyanPhoneFormat }) add(AdminRule.PHONE)
-    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.PositiveNumber }) add(AdminRule.POSITIVE_NUMBER)
-    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.MustBeTrue }) add(AdminRule.MUST_BE_TRUE)
-    if (this@toAdminRules.any { it is com.example.salesonboarding.validation.DateFormatAndMinimumAge }) add(AdminRule.DATE)
+    if (this@toAdminRules.any { it is NotBlank }) add(AdminRule.NOT_BLANK)
+    if (this@toAdminRules.any { it is EmailFormat }) add(AdminRule.EMAIL)
+    if (this@toAdminRules.any { it is KenyanPhoneFormat }) add(AdminRule.PHONE)
+    if (this@toAdminRules.any { it is PositiveNumber }) add(AdminRule.POSITIVE_NUMBER)
+    if (this@toAdminRules.any { it is MustBeTrue }) add(AdminRule.MUST_BE_TRUE)
+    if (this@toAdminRules.any { it is DateFormatAndMinimumAge }) add(AdminRule.DATE)
 }
 
 private fun customField(

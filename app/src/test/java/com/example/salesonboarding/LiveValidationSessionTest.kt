@@ -1,4 +1,4 @@
-package com.example.salesonboarding.validation
+package com.example.salesonboarding
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy

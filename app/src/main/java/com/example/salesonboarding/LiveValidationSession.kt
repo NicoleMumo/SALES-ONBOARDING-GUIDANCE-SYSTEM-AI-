@@ -1,4 +1,4 @@
-package com.example.salesonboarding.validation
+package com.example.salesonboarding
 
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope

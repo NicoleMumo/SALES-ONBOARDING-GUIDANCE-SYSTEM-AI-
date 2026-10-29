@@ -16,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
@@ -25,8 +24,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.google.firebase.auth.FirebaseAuth
-import com.example.salesonboarding.risk.TrainedCompletionRiskModel
-import com.example.salesonboarding.validation.FieldRuleConfiguration
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {

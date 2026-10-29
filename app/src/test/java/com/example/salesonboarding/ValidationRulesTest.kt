@@ -1,4 +1,4 @@
-package com.example.salesonboarding.validation
+package com.example.salesonboarding
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
