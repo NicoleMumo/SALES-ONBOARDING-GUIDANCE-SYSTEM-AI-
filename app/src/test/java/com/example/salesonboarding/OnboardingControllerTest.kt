@@ -442,3 +442,218 @@ class OnboardingFormControllerTest {
         )
     }
 }
+
+class OnboardingFormControllerRiskTest {
+
+    private val trainedModel = requireNotNull(
+        TrainedCompletionRiskModel.fromParts(
+            featureNames = TrainedCompletionRiskModel.FEATURE_NAMES,
+            weights = listOf(
+                0.029819, 0.31253, 0.190293, -0.028253, 0.015226, 0.024499,
+                0.056975, -0.033293, -1.070033, 0.127716, -0.020178, -0.02873,
+                -0.49848, 1.319212
+            ),
+            intercept = 1.120239,
+            mediumRiskThreshold = 0.6086,
+            highRiskThreshold = 0.7112
+        )
+    )
+
+    private val events = listOf(
+        CompletionRiskEvent(5.0, false, false, 10.0),
+        CompletionRiskEvent(6.0, false, true, 10.0)
+    )
+
+    @Test
+    fun usesTheTrainedModelWhenItIsAvailable() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            industry = "banking",
+            context = "business",
+            riskModel = trainedModel
+        )
+
+        events.forEach(controller::recordRiskEvent)
+
+        val expected = trainedModel.score(events, isBanking = true, isBusiness = true)!!.score
+        assertEquals(expected, controller.riskFlow.value!!.score, 1e-12)
+    }
+
+    @Test
+    fun fallsBackToTheHandSetRuleWithoutAModel() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        events.forEach(controller::recordRiskEvent)
+
+        assertEquals(CompletionRiskScorer.score(events).score, controller.riskFlow.value!!.score, 1e-12)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class NextFieldPredictorTest {
+    @Test
+    fun validAnswersAreSentToThePredictorAndRecommendationIsPublished() = runTest {
+        var receivedHistory: List<String>? = null
+        var receivedValidation: String? = null
+        val predictor = NextFieldPredictor { history, _, _, validation ->
+            if (validation == "passed") {
+                receivedHistory = history
+                receivedValidation = validation
+                FieldPrediction("mobile_phone_number", 0.8f)
+            } else {
+                null
+            }
+        }
+        val controller = OnboardingFormController(
+            sessionId = "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address"),
+                KnownFields.get("mobile_phone_number")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = predictor
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateField("email_address", "agent@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals(listOf("full_name", "email_address"), receivedHistory)
+        assertEquals("passed", receivedValidation)
+        assertEquals("mobile_phone_number", controller.guidanceFlow.value.prediction?.fieldId)
+        assertTrue(controller.guidanceFlow.value.prediction?.confidence == 0.8f)
+    }
+
+    @Test
+    fun telecomAndBankingWorkflowsPassTheirSelectedIndustryToGuidance() = runTest {
+        val receivedIndustries = mutableListOf<String>()
+        val predictor = NextFieldPredictor { _, industry, context, validation ->
+            assertEquals("individual", context)
+            if (validation == "passed") {
+                receivedIndustries += industry
+                FieldPrediction("email_address", 0.7f)
+            } else {
+                null
+            }
+        }
+
+        listOf("telecom", "banking").forEach { industry ->
+            val controller = OnboardingFormController(
+                sessionId = "session-$industry",
+                fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
+                scope = backgroundScope,
+                entryStore = InMemoryFieldEntryStore(),
+                predictor = predictor,
+                industry = industry,
+                context = "individual"
+            )
+
+            controller.updateField("full_name", "Jane Wanjiku")
+            advanceTimeBy(300)
+            runCurrent()
+
+            assertEquals("email_address", controller.guidanceFlow.value.prediction?.fieldId)
+            assertEquals(0.7f, controller.guidanceFlow.value.prediction?.confidence)
+            assertEquals(industry, receivedIndustries.last())
+        }
+
+        assertEquals(listOf("telecom", "banking"), receivedIndustries)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class LiveValidationSessionTest {
+    @Test
+    fun fieldIsValidatedAfterItsValueChanges() = runTest {
+        val validation = LiveValidationSession(
+            sessionId = "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            debounceMillis = 300
+        )
+
+        validation.updateField("email_address", "invalid")
+        assertTrue(validation.stateFlow.value.results.isEmpty())
+
+        advanceTimeBy(300)
+        runCurrent()
+        assertFalse(validation.stateFlow.value.results.getValue("email_address").isValid)
+    }
+
+    @Test
+    fun changingADependencyRevalidatesOnlyDependentFields() = runTest {
+        val fields = listOf(
+            KnownFields.get("service_type"),
+            KnownFields.get("phone_service_selection"),
+            KnownFields.get("email_address")
+        )
+        val validation = LiveValidationSession("session", fields, scope = backgroundScope)
+
+        validation.updateField("phone_service_selection", "")
+        validation.updateField("email_address", "valid@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+        assertTrue(validation.stateFlow.value.results.getValue("email_address").isValid)
+
+        validation.updateField("service_type", "mobile")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(validation.stateFlow.value.results.getValue("phone_service_selection").isValid)
+        assertEquals(true, validation.stateFlow.value.results.getValue("email_address").isValid)
+    }
+
+    @Test
+    fun unrelatedFieldDoesNotChangeWhenAnotherFieldIsEdited() = runTest {
+        val fields = listOf(
+            KnownFields.get("email_address"),
+            KnownFields.get("profession")
+        )
+        val validation = LiveValidationSession("session", fields, scope = backgroundScope)
+
+        validation.updateField("email_address", "invalid")
+        advanceTimeBy(300)
+        runCurrent()
+        val emailResult = validation.stateFlow.value.results.getValue("email_address")
+
+        validation.updateField("profession", "Engineer")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals(emailResult, validation.stateFlow.value.results.getValue("email_address"))
+    }
+
+    @Test
+    fun adminRuleOverridesAreUsedByLiveValidation() = runTest {
+        val configuration = FieldRuleConfiguration(
+            mapOf(
+                "profession" to FieldRuleOverride(
+                    addRules = listOf(RegexPattern("^[A-Z].*")),
+                    removeRules = listOf(NotBlank)
+                )
+            )
+        )
+        val validation = LiveValidationSession(
+            sessionId = "session",
+            fields = listOf(KnownFields.get("profession")),
+            configuration = configuration,
+            scope = backgroundScope
+        )
+
+        validation.updateField("profession", "engineer")
+        advanceTimeBy(300)
+        runCurrent()
+        assertFalse(validation.stateFlow.value.results.getValue("profession").isValid)
+    }
+}
