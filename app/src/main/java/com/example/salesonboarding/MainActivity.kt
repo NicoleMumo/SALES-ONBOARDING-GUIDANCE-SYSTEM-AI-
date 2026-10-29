@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 var signedIn by remember { mutableStateOf(false) }
                 var showAdminRegistration by remember { mutableStateOf(false) }
                 var showAgentRegistration by remember { mutableStateOf(false) }
-                var loginRole by remember { mutableStateOf(UserRole.SALES_AGENT) }
+                var loginRole by remember { mutableStateOf(UserRole.ADMIN) }
                 var selectedRole by remember { mutableStateOf<UserRole?>(null) }
                 var agentId by remember { mutableStateOf("") }
                 var companyId by remember { mutableStateOf("") }
@@ -152,7 +152,9 @@ class MainActivity : ComponentActivity() {
                             },
                             initialRole = loginRole,
                             onRoleSelected = { loginRole = it },
-                            modifier = Modifier.padding(innerPadding)
+                            // Full screen: the photo runs under the status bar and the
+                            // sheet pads the system bars itself.
+                            modifier = Modifier
                         )
                     } else if (selectedRole == UserRole.ADMIN) {
                         AdminDashboardScreen(

@@ -48,6 +48,10 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,8 +59,12 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.content.res.ResourcesCompat
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -146,6 +154,94 @@ private val ChartGreenDark = Color(0xFF2FA97C)
 fun chartMarkColor(): Color =
     if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) ChartGreenDark else ChartGreenLight
 
+/**
+ * Colours of the sign-in screen, which has its own look (photo, cream sheet). Every text
+ * pair is at least 6:1. Each theme is one instance; add another (for example a dark
+ * "lime and violet" one) and provide it in [SalesOnboardingTheme].
+ */
+@Immutable
+data class SignInColors(
+    /** Behind everything, seen above the photo and around the sheet. */
+    val window: Color,
+    /** Laid over the photo. */
+    val photoTint: Color,
+    /** Main text, icons, outlines, the logo square and the selected role. */
+    val ink: Color,
+    /** Text and fills on [ink]: the selected role's text. */
+    val onInk: Color,
+    /** Icon badges, the logo letters and the arrow square. */
+    val accent: Color,
+    val sheet: Color,
+    val field: Color,
+    val fieldBorder: Color,
+    val fieldLabel: Color,
+    /** The Sign in button, the Register link and error text. */
+    val action: Color,
+    val onAction: Color,
+    /** The Show/Hide button's fill. */
+    val subtleFill: Color
+) {
+    companion object {
+        val CreamAndTeal = SignInColors(
+            window = Color(0xFF1C4747),
+            photoTint = Color(0xFF1C4747).copy(alpha = 0.14f),
+            ink = Color(0xFF123636),
+            onInk = Color(0xFFFEFFE0),
+            accent = Color(0xFFD0E86E),
+            sheet = Color(0xFFFEFFE0),
+            field = Color(0xFFFFFFFF),
+            fieldBorder = Color(0xFF123636).copy(alpha = 0.16f),
+            fieldLabel = Color(0xFF4A6663),
+            action = Color(0xFFB5185F),
+            onAction = Color(0xFFFFFFFF),
+            subtleFill = Color(0xFF123636).copy(alpha = 0.08f)
+        )
+    }
+}
+
+val LocalSignInColors = staticCompositionLocalOf { SignInColors.CreamAndTeal }
+
+// endregion
+
+// region Fonts
+
+/**
+ * Fonts bundled in res/font (SIL Open Font License; the licences are in assets/licenses):
+ * Cormorant Garamond Bold for the "SalesMesh" wordmark, Jost 400/500/600 for the rest of
+ * the sign-in screen. If a font file cannot be read, a system serif and sans-serif are used.
+ */
+@Immutable
+data class SignInFonts(val wordmark: FontFamily, val text: FontFamily)
+
+@Composable
+fun rememberSignInFonts(): SignInFonts {
+    val context = LocalContext.current
+    return remember(context) {
+        fun loads(id: Int) = try {
+            ResourcesCompat.getFont(context, id) != null
+        } catch (_: RuntimeException) {
+            false
+        }
+        val jost = listOf(R.font.jost_regular, R.font.jost_medium, R.font.jost_semibold)
+        SignInFonts(
+            wordmark = if (loads(R.font.cormorant_garamond_bold)) {
+                FontFamily(Font(R.font.cormorant_garamond_bold, FontWeight.Bold))
+            } else {
+                FontFamily.Serif
+            },
+            text = if (jost.all(::loads)) {
+                FontFamily(
+                    Font(R.font.jost_regular, FontWeight.Normal),
+                    Font(R.font.jost_medium, FontWeight.Medium),
+                    Font(R.font.jost_semibold, FontWeight.SemiBold)
+                )
+            } else {
+                FontFamily.SansSerif
+            }
+        )
+    }
+}
+
 // endregion
 
 // region Type, shapes and spacing
@@ -195,12 +291,15 @@ fun SalesOnboardingTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content
-    )
+    // The sign-in screen has one look for now, in light and dark mode.
+    CompositionLocalProvider(LocalSignInColors provides SignInColors.CreamAndTeal) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content
+        )
+    }
 }
 
 /** What a message or label means. Each tone always uses the same colours. */
