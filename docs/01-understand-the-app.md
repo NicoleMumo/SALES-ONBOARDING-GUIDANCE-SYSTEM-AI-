@@ -52,7 +52,9 @@ See [02 - Connect Firebase](02-connect-firebase.md) for setup and access checks.
 | `OnboardingForm.kt` | The agent's form: sections with a step bar, review and finish pages. |
 | `FormQuestions.kt` | Each kind of question input, format hints, and the ID photo reader. |
 | `FirebaseFieldEntryStore.kt` | Saves sessions and answers to Firebase. |
-| `AdminDataStore.kt` and `AdminDashboardScreen.kt` | Admin settings, agent invitations, and team insights. |
+| `AdminDataStore.kt` | Reads and saves admin data: agents, question rules, company industry, and the numbers for the overview. |
+| `AdminScreens.kt` | The admin's pages (Agents, Sessions, Questions, Company) behind a bottom navigation bar. |
+| `AdminOverview.kt` | The admin overview: headline numbers and charts, each with a short caption. |
 | `SessionHistoryScreen.kt` | Shows saved session history. |
 | `Ui.kt` | Colours and theme. |
 

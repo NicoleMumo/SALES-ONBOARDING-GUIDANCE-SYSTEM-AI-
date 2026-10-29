@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -127,6 +128,18 @@ private val DarkColors = darkColorScheme(
     outline = Color(0xFF5E6A65),
     outlineVariant = Color(0xFF333D39)
 )
+
+// Chart marks (bars, lines, meter fill) use their own green, one step off the app green:
+// as a chart mark the button green reads slightly grey in light mode (OKLCH chroma 0.094,
+// floor 0.10) and too pale in dark mode (lightness 0.79, band 0.48-0.67). Both of these
+// pass the dataviz checks (lightness band, chroma floor, contrast >= 3:1) on the card surface.
+private val ChartGreenLight = Color(0xFF0E7C57)
+private val ChartGreenDark = Color(0xFF2FA97C)
+
+/** The colour for chart marks in the current mode. Text never uses it (it uses text colours). */
+@Composable
+fun chartMarkColor(): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) ChartGreenDark else ChartGreenLight
 
 // endregion
 
