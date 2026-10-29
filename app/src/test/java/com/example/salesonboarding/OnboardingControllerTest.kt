@@ -9,8 +9,78 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** Types an answer and leaves the box, as the form does. */
+internal fun OnboardingFormController.answer(fieldId: String, value: String) {
+    updateField(fieldId, value)
+    checkField(fieldId)
+}
+
+/** Types an answer and leaves the box, as the form does. */
+internal fun LiveValidationSession.answer(fieldId: String, value: String?) {
+    updateField(fieldId, value)
+    checkField(fieldId)
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingFormControllerTest {
+    @Test
+    fun typingSavesNoCheckAndLeavingTheBoxSavesExactlyOne() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("date_of_birth")),
+            scope = backgroundScope,
+            entryStore = store
+        )
+
+        listOf("2", "20", "2000", "2000-0", "2000-01", "2000-01-1", "2000-01-15").forEach {
+            controller.updateField("date_of_birth", it)
+            runCurrent()
+        }
+        assertTrue(store.events.isEmpty())
+
+        controller.checkField("date_of_birth")
+        runCurrent()
+
+        assertEquals(listOf(SessionEvent("field_validation_passed", "date_of_birth")), store.events)
+    }
+
+    @Test
+    fun riskInputsAreMeasuredLikeTheTrainingData() = runTest {
+        // Training: a step's time is the whole step, and progress is answers passed out of
+        // all the form's questions. So each answer is timed from the previous check (or
+        // from opening the form), not from its first keystroke.
+        var now = 0L
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address"),
+                KnownFields.get("profession")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            nowMillis = { now }
+        )
+        runCurrent()
+
+        now = 100_000 // the agent asks, then starts typing 100 s after the form opened
+        controller.updateField("full_name", "Jane Wanjiku")
+        now = 120_000
+        controller.checkField("full_name")
+        runCurrent()
+        now = 170_000
+        controller.updateField("email_address", "jane@example.com")
+        now = 180_000
+        controller.checkField("email_address")
+        runCurrent()
+
+        val events = controller.riskEvents
+        assertEquals(listOf(2.0, 1.0), events.map { it.durationMinutes })
+        assertEquals(100.0 / 3, events[0].progressPercent, 1e-9)
+        assertEquals(200.0 / 3, events[1].progressPercent, 1e-9)
+    }
+
     @Test
     fun continueIsDisabledForInvalidAndEmptyRequiredFields() = runTest {
         val store = InMemoryFieldEntryStore()
@@ -24,8 +94,7 @@ class OnboardingFormControllerTest {
             entryStore = store
         )
 
-        controller.updateField("email_address", "bad")
-        advanceTimeBy(300)
+        controller.answer("email_address", "bad")
         runCurrent()
 
         assertFalse(controller.canContinue())
@@ -48,9 +117,8 @@ class OnboardingFormControllerTest {
             entryStore = store
         )
 
-        controller.updateField("email_address", "agent@example.com")
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
+        controller.answer("email_address", "agent@example.com")
+        controller.answer("full_name", "Jane Wanjiku")
         runCurrent()
 
         assertTrue(ValidationErrorDisplayMapper.forState(controller.stateFlow.value).isEmpty())
@@ -76,9 +144,8 @@ class OnboardingFormControllerTest {
             agentId = "agent@example.com"
         )
 
-        controller.updateField("full_name", "Jane Wanjiku")
-        controller.updateField("email_address", "jane@example.com")
-        advanceTimeBy(300)
+        controller.answer("full_name", "Jane Wanjiku")
+        controller.answer("email_address", "jane@example.com")
         runCurrent()
 
         assertTrue(controller.canContinue())
@@ -172,12 +239,11 @@ class OnboardingFormControllerTest {
                 null
             }
         )
+        runCurrent() // the form opens and asks for a first suggestion before anything is typed
 
-        controller.updateField("loyalty_email", "customer@example.com")
-        advanceTimeBy(300)
+        controller.answer("loyalty_email", "customer@example.com")
         runCurrent()
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
+        controller.answer("full_name", "Jane Wanjiku")
         runCurrent()
 
         assertTrue(controller.canContinue())
@@ -197,8 +263,7 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
+        controller.answer("full_name", "Jane Wanjiku")
         runCurrent()
 
         val readiness = controller.readiness()
@@ -218,8 +283,7 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("email_address", "bad")
-        advanceTimeBy(300)
+        controller.answer("email_address", "bad")
         runCurrent()
 
         assertEquals("email_address", controller.guidanceFlow.value.correction?.fieldId)
@@ -318,8 +382,7 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("email_address", "")
-        advanceTimeBy(300)
+        controller.answer("email_address", "")
         runCurrent()
 
         assertFalse(controller.canContinue())
@@ -339,8 +402,7 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("mobile_phone_number", "071234567")
-        advanceTimeBy(300)
+        controller.answer("mobile_phone_number", "071234567")
         runCurrent()
 
         assertFalse(controller.canContinue())
@@ -362,9 +424,8 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("service_type", "mobile")
-        controller.updateField("phone_service_selection", "")
-        advanceTimeBy(300)
+        controller.answer("service_type", "mobile")
+        controller.answer("phone_service_selection", "")
         runCurrent()
 
         assertFalse(controller.canContinue())
@@ -414,8 +475,7 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
+        controller.answer("full_name", "Jane Wanjiku")
         runCurrent()
 
         assertEquals("email_address", controller.guidanceFlow.value.nextFieldId)
@@ -431,8 +491,7 @@ class OnboardingFormControllerTest {
             entryStore = InMemoryFieldEntryStore()
         )
 
-        controller.updateField("email_address", "agent@example.com")
-        advanceTimeBy(300)
+        controller.answer("email_address", "agent@example.com")
         runCurrent()
 
         assertTrue(controller.guidanceFlow.value.isComplete)
@@ -522,11 +581,9 @@ class NextFieldPredictorTest {
             predictor = predictor
         )
 
-        controller.updateField("full_name", "Jane Wanjiku")
-        advanceTimeBy(300)
+        controller.answer("full_name", "Jane Wanjiku")
         runCurrent()
-        controller.updateField("email_address", "agent@example.com")
-        advanceTimeBy(300)
+        controller.answer("email_address", "agent@example.com")
         runCurrent()
 
         assertEquals(listOf("full_name", "email_address"), receivedHistory)
@@ -559,8 +616,7 @@ class NextFieldPredictorTest {
                 context = "individual"
             )
 
-            controller.updateField("full_name", "Jane Wanjiku")
-            advanceTimeBy(300)
+            controller.answer("full_name", "Jane Wanjiku")
             runCurrent()
 
             assertEquals("email_address", controller.guidanceFlow.value.prediction?.fieldId)
@@ -575,20 +631,73 @@ class NextFieldPredictorTest {
 @OptIn(ExperimentalCoroutinesApi::class)
 class LiveValidationSessionTest {
     @Test
-    fun fieldIsValidatedAfterItsValueChanges() = runTest {
+    fun typingDoesNotCheckTheAnswerLeavingTheBoxDoes() {
         val validation = LiveValidationSession(
             sessionId = "session",
-            fields = listOf(KnownFields.get("email_address")),
-            scope = backgroundScope,
-            debounceMillis = 300
+            fields = listOf(KnownFields.get("email_address"))
         )
 
-        validation.updateField("email_address", "invalid")
+        validation.updateField("email_address", "agent@")
+        validation.updateField("email_address", "agent@exam")
         assertTrue(validation.stateFlow.value.results.isEmpty())
 
-        advanceTimeBy(300)
-        runCurrent()
+        validation.checkField("email_address")
         assertFalse(validation.stateFlow.value.results.getValue("email_address").isValid)
+    }
+
+    @Test
+    fun manyKeystrokesThenLeavingTheBoxIsOneAttempt() {
+        val validation = LiveValidationSession("session", listOf(KnownFields.get("date_of_birth")))
+
+        "2000-01-15".indices.forEach { end ->
+            validation.updateField("date_of_birth", "2000-01-15".substring(0, end + 1))
+        }
+        validation.checkField("date_of_birth")
+
+        val attempts = validation.stateFlow.value.interactionHistory
+        assertEquals(1, attempts.size)
+        assertEquals(true, attempts.single().validationPassed)
+    }
+
+    @Test
+    fun leavingAnUnchangedAnswerRecordsNothing() {
+        val validation = LiveValidationSession("session", listOf(KnownFields.get("email_address")))
+
+        validation.answer("email_address", "agent@example.com")
+        validation.checkField("email_address")
+        validation.checkField("email_address")
+
+        assertEquals(1, validation.stateFlow.value.interactionHistory.size)
+    }
+
+    @Test
+    fun correctingAWrongAnswerIsASecondAttempt() {
+        val validation = LiveValidationSession("session", listOf(KnownFields.get("email_address")))
+
+        validation.answer("email_address", "agent@example")
+        validation.answer("email_address", "agent@example.com")
+
+        assertEquals(
+            listOf(false, true),
+            validation.stateFlow.value.interactionHistory.map { it.validationPassed }
+        )
+    }
+
+    @Test
+    fun checkPendingFieldsChecksEveryUncheckedAnswerOnce() {
+        val validation = LiveValidationSession(
+            "session",
+            listOf(KnownFields.get("full_name"), KnownFields.get("email_address"))
+        )
+
+        validation.updateField("full_name", "Jane Wanjiku")
+        validation.updateField("email_address", "bad")
+        validation.checkPendingFields()
+        validation.checkPendingFields()
+
+        val attempts = validation.stateFlow.value.interactionHistory
+        assertEquals(listOf("full_name", "email_address"), attempts.map { it.fieldId })
+        assertEquals(listOf(true, false), attempts.map { it.validationPassed })
     }
 
     @Test
@@ -598,16 +707,14 @@ class LiveValidationSessionTest {
             KnownFields.get("phone_service_selection"),
             KnownFields.get("email_address")
         )
-        val validation = LiveValidationSession("session", fields, scope = backgroundScope)
+        val validation = LiveValidationSession("session", fields)
 
-        validation.updateField("phone_service_selection", "")
-        validation.updateField("email_address", "valid@example.com")
-        advanceTimeBy(300)
+        validation.answer("phone_service_selection", "")
+        validation.answer("email_address", "valid@example.com")
         runCurrent()
         assertTrue(validation.stateFlow.value.results.getValue("email_address").isValid)
 
-        validation.updateField("service_type", "mobile")
-        advanceTimeBy(300)
+        validation.answer("service_type", "mobile")
         runCurrent()
 
         assertFalse(validation.stateFlow.value.results.getValue("phone_service_selection").isValid)
@@ -620,15 +727,13 @@ class LiveValidationSessionTest {
             KnownFields.get("email_address"),
             KnownFields.get("profession")
         )
-        val validation = LiveValidationSession("session", fields, scope = backgroundScope)
+        val validation = LiveValidationSession("session", fields)
 
-        validation.updateField("email_address", "invalid")
-        advanceTimeBy(300)
+        validation.answer("email_address", "invalid")
         runCurrent()
         val emailResult = validation.stateFlow.value.results.getValue("email_address")
 
-        validation.updateField("profession", "Engineer")
-        advanceTimeBy(300)
+        validation.answer("profession", "Engineer")
         runCurrent()
 
         assertEquals(emailResult, validation.stateFlow.value.results.getValue("email_address"))
@@ -647,12 +752,10 @@ class LiveValidationSessionTest {
         val validation = LiveValidationSession(
             sessionId = "session",
             fields = listOf(KnownFields.get("profession")),
-            configuration = configuration,
-            scope = backgroundScope
+            configuration = configuration
         )
 
-        validation.updateField("profession", "engineer")
-        advanceTimeBy(300)
+        validation.answer("profession", "engineer")
         runCurrent()
         assertFalse(validation.stateFlow.value.results.getValue("profession").isValid)
     }

@@ -324,6 +324,11 @@ class TrainedCompletionRiskModelTest {
         assertNull("too few weights", build(weights = shippedWeights.dropLast(1)))
         assertNull("thresholds the wrong way round", build(medium = 0.9, high = 0.1))
         assertNull("a weight that is not a number", build(weights = shippedWeights.dropLast(1) + Double.NaN))
+        // A NaN threshold would make every step HIGH, since `score < NaN` is never true.
+        assertNull("a medium threshold that is not a number", build(medium = Double.NaN))
+        assertNull("a high threshold that is not a number", build(high = Double.NaN))
+        assertNull("a threshold at or below 0", build(medium = 0.0))
+        assertNull("a threshold at or above 1", build(high = 1.5))
     }
 
     @Test
@@ -523,5 +528,42 @@ class SessionConsistencyTest {
 
         assertEquals(0, report.sessionCount)
         assertEquals(0.0, report.followedStandardShare, 0.0)
+        assertEquals("both are reported as not counted, not silently dropped", 2, report.sessionsWithoutChecks)
+    }
+
+    @Test
+    fun sessionsCheckedWhileTypingAreLeftOutAndCounted() {
+        // An old session: typing a date with pauses saved three "failed" checks.
+        val typedWithPauses = steps("a", "b", "b", "b", "b", "c", "d", failed = setOf(1, 2, 3))
+        val report = SessionConsistencyCalculator.report(
+            listOf(
+                ConsistencyInput("old", 0, order, typedWithPauses, checksEachAttempt = false),
+                ConsistencyInput("new", 0, order, steps("a", "b", "c", "d"))
+            )
+        )
+
+        assertEquals(1, report.sessionCount)
+        assertEquals(1, report.followedStandardCount)
+        assertEquals(1, report.earlierSessionsLeftOut)
+        assertEquals(listOf("new"), report.agents.map { it.agentId })
+    }
+
+    @Test
+    fun onlyEarlierSessionsGiveAnEmptyReportThatStillSaysHowManyWereLeftOut() {
+        val earlier = com.example.salesonboarding.OnboardingSessionMetrics(
+            status = "completed",
+            startedAt = 0,
+            completedAt = 60_000,
+            agentId = "agent",
+            playbookFieldIds = order,
+            steps = steps("a", "b", "c", "d"),
+            checksEachAttempt = false
+        )
+
+        val analytics = com.example.salesonboarding.OnboardingAnalytics.fromSessions(listOf(earlier))
+
+        assertEquals(0, analytics.consistency.sessionCount)
+        assertEquals(1, analytics.consistency.earlierSessionsLeftOut)
+        assertEquals(1, analytics.completedCount)
     }
 }

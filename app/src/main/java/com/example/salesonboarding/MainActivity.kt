@@ -7,13 +7,9 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -35,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 var signedIn by remember { mutableStateOf(false) }
                 var showAdminRegistration by remember { mutableStateOf(false) }
                 var showAgentRegistration by remember { mutableStateOf(false) }
-                var loginRole by remember { mutableStateOf(UserRole.SALES_AGENT) }
+                var loginRole by remember { mutableStateOf(UserRole.ADMIN) }
                 var selectedRole by remember { mutableStateOf<UserRole?>(null) }
                 var agentId by remember { mutableStateOf("") }
                 var companyId by remember { mutableStateOf("") }
@@ -156,7 +152,9 @@ class MainActivity : ComponentActivity() {
                             },
                             initialRole = loginRole,
                             onRoleSelected = { loginRole = it },
-                            modifier = Modifier.padding(innerPadding)
+                            // Full screen: the photo runs under the status bar and the
+                            // sheet pads the system bars itself.
+                            modifier = Modifier
                         )
                     } else if (selectedRole == UserRole.ADMIN) {
                         AdminDashboardScreen(
@@ -210,6 +208,7 @@ class MainActivity : ComponentActivity() {
                                 onboardingSessionId = UUID.randomUUID().toString()
                             },
                             assignedIndustry = companyIndustry,
+                            onBack = { showAgentHome = true },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (!consentGiven) {
@@ -224,16 +223,11 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (onboardingSessionId != null) {
                         when {
-                            isLoadingFieldConfiguration -> Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(innerPadding),
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                CircularProgressIndicator()
-                                Text("Loading onboarding setup…")
-                                Text("This usually takes a few seconds.")
-                            }
+                            isLoadingFieldConfiguration -> LoadingState(
+                                "Loading onboarding setup…",
+                                Modifier.padding(innerPadding),
+                                detail = "This usually takes a few seconds."
+                            )
                             else -> {
                                 val playbook = remember(selectedIndustry, selectedContext, fieldRuleConfiguration) {
                                     OnboardingPlaybooks.forIndustry(

@@ -6,13 +6,16 @@
     <application
         android:name=".SalesMeshApplication"
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.SalesOnboarding">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.SalesOnboarding">
+            android:theme="@style/Theme.SalesOnboarding"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

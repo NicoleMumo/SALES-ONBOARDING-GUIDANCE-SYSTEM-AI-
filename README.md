@@ -1,104 +1,94 @@
 # SalesMesh
 
-SalesMesh is an Android app that helps sales agents onboard customers for
-banking and telecom services. The app checks form answers and suggests which
-field to complete next. Company admins manage agents, forms, and sessions.
+SalesMesh is an Android app for companies whose sales agents sign up customers
+in the field, for bank accounts or telecom services in Kenya. Onboarding done by
+many agents tends to be inconsistent: questions are skipped, asked in different
+orders, or answered wrongly. SalesMesh gives every agent the company's standard
+form, checks each answer, suggests the next question with an on-device AI model,
+warns when a customer may give up, and shows admins how consistently the team
+follows the process.
 
-## Before you start
+## Status
 
-- The app uses Kotlin, Jetpack Compose, Firebase, and TensorFlow Lite.
-- The identification-document screen can read printed text from a selected
-  photo on the device. OCR does not verify document authenticity or save the
-  photo or extracted text.
-- Identity checks are manual. The app has no paid KYC service, selfie,
-  liveness, face-match, sanctions, or automated approval feature.
-- The training data is simulated. It does not come from real customers.
-- The model's results come from simulated data only. They do not show how well
-  it works with real agents or customers.
-- Firebase access rules and privacy plans still need testing before real
-  customer data can be used.
-- Agent email verification is turned off for testing.
+- **Simulated data only.** The models were trained and tested on simulated
+  sessions, never on real customers or agents. Their results show the methods
+  work on a realistic simulation, not how well they work in the field.
+- **Not ready for real customer data.** The Firebase access rules still need to
+  be tested and deployed, agent email verification is turned off for testing,
+  and there is no data-retention plan yet.
+- **Identity checks are manual.** The app reads text from a document photo to
+  help typing, but it does no KYC, selfie, liveness or face-match check and
+  approves no one.
 
-## Build and test
+## What it does
 
-1. Open this folder in Android Studio and sync Gradle.
-2. Set up Firebase using [02 - Connect Firebase](docs/02-connect-firebase.md).
-   Add your own `app/google-services.json`; it is not included in this project.
-3. In PowerShell, build the app:
+**For agents:** sign in to their company; choose the customer type; record the
+customer's consent; fill in the form section by section, with each answer
+checked when they leave the box; see the AI's "Suggested next" question and a
+warning if the customer may not finish; review every answer; submit. Unfinished
+sessions are saved as drafts and can be continued later.
+
+**For admins:** an overview of how the team is doing (share of sessions that
+followed the standard, finishing rate, time, the most corrected questions,
+agents compared, a weekly trend); invite and manage agents; read all sessions;
+add company questions and choose which questions are required; set the company's
+industry.
+
+## Results (simulated data, agents never seen in training)
+
+| What | Result |
+| --- | --- |
+| Next-question suggestion | Transformer **95.0%** right, against 86.5% for the app's rule without AI and 93.0% for a lookup table (best possible 97.9%) |
+| Risk warning | Trained model ROC-AUC **0.71 to 0.74** on three datasets, against 0.55 to 0.59 for the old hand-set rule (0.5 is guessing) |
+| Consistency measure | Plain counting (at most 2 corrected answers, at most 2 questions out of order); an anomaly-detection model was tried and failed its pass mark |
+
+The details, limits and how each result was tested are in
+[03 - AI, data and results](docs/03-ai-data-and-results.md).
+
+## Quick start
+
+1. Open this folder in Android Studio (JDK 17) and let Gradle sync.
+2. Connect your own Firebase project and save its `google-services.json` as
+   `app/google-services.json` (not included). See
+   [01 - Set up and run](docs/01-set-up-and-run.md).
+3. Build and test from PowerShell:
 
    ```powershell
    .\gradlew.bat :app:assembleDebug
-   ```
-
-4. Run the Android unit tests:
-
-   ```powershell
    .\gradlew.bat :app:testDebugUnitTest
+   python -m unittest discover -s tests
    ```
 
-Do not add Firebase service-account keys or real customer data to this
+Never add Firebase service-account keys or real customer data to this
 repository.
 
-## Main folders
+## Project layout
 
 | Folder or file | What it contains |
 | --- | --- |
-| `app/` | Android app, tests, and model files used by the app. |
-| `ml/` | Simulated training data (`dataset.py`), the next-field model's layers, the risk model and consistency measure (`consistency.py`), and the training notebook. |
-| `ml/models/` | Model files and settings the app loads. |
+| `app/` | The Android app (Kotlin, Jetpack Compose, Firebase, TensorFlow Lite) and its tests. |
+| `ml/` | The simulated-data generator and checker (`dataset.py`), the next-question model's layers (`next_field_model.py`), the risk model and consistency measure (`consistency.py`), and the training notebook. |
+| `ml/models/` | The model files the app loads (copied into the app by the build). |
+| `ml/data/` | Generated datasets (local only, not in Git). |
 | `tests/` | Python tests. |
-| `database.rules.json` | Firebase database access rules. These still need to be tested and deployed. |
-| `docs/` | Five current guides listed below. |
-| `legacy/` | Older files kept for reference. |
+| `docs/` | The three guides below. |
+| `database.rules.json` | Firebase database access rules (still to be tested and deployed). |
+| `database.rules.test.js`, `package.json` | An early rules test for an older database layout; needs rewriting. |
+| `legacy/` | Earlier and replaced files, kept with notes on why ([legacy/README.md](legacy/README.md)). |
 
-## Create training data
+## Guides
 
-Run these commands from the project folder:
+1. [01 - Set up and run](docs/01-set-up-and-run.md): Firebase, the first admin
+   and agent, building, testing, and the access checks to do before real data.
+2. [02 - How the app works](docs/02-how-the-app-works.md): the agent's session,
+   the admin's pages, the consistency measure, what is saved, and where things
+   are in the code.
+3. [03 - AI, data and results](docs/03-ai-data-and-results.md): the simulated
+   data, the two models and the rejected one, all results, retraining, and what
+   is not yet shown.
 
-```powershell
-python ml/dataset.py generate --sessions 8000 --seed 2026
-python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
-```
+## Credits
 
-The generated CSV is local and is not committed to Git. Run the notebook
-`ml/onboarding_transformer.ipynb` in Colab or a Python 3.11 environment
-to train and test the model.
-
-Upload the whole CSV (about 34 MB) and wait for the upload to finish. The
-notebook stops with a message if the file is cut off.
-
-## How well the model works
-
-The model suggests the next field. It was tested on simulated sessions from
-agents it never saw in training, using only the fields the app allows at each
-step (16,533 steps):
-
-| Method | Right next field |
-| --- | --- |
-| App's own rule, no AI: first unfinished required field | 86.5% |
-| Lookup table on the previous field and last check | 93.0% |
-| Transformer model | **95.0%** |
-| Best possible (the right field was an allowed choice) | 97.9% |
-
-On the same steps the model was right and the app's rule wrong 1,449 times,
-and the reverse 41 times. Two full runs gave 95.0% and 95.2%, so read the
-model score as "about 95%". These numbers are from simulated data. They do
-not show real-world accuracy. See
-[04 - Training data and AI](docs/04-training-data-and-ai.md) for the details.
-
-## Current guides
-
-Read these in order:
-
-1. [01 - Understand the app](docs/01-understand-the-app.md) — what the app
-   does and how its main parts work.
-2. [02 - Connect Firebase](docs/02-connect-firebase.md) — connect Firebase
-   and prepare accounts.
-3. [03 - Forms and saved data](docs/03-forms-and-saved-data.md) — form rules,
-   answer checks, and saved sessions.
-4. [04 - Training data and AI](docs/04-training-data-and-ai.md) — training
-   data, predictions, model tests, and speed checks.
-5. [05 - Testing and next steps](docs/05-testing-and-next-steps.md) — what is
-   done and what still needs testing.
-
-Older notes are kept in [legacy](legacy/README.md).
+- Sign-in photo: "Minimalist wooden desk and laptop with empty chair", Kaboompics.
+- Fonts: Jost and Cormorant Garamond, SIL Open Font License 1.1 (licence texts
+  in `app/src/main/assets/licenses/`).

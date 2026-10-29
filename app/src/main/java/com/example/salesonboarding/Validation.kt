@@ -113,6 +113,18 @@ data class FormField(
     }
 }
 
+/**
+ * Whether the question must be answered, given the current [values]: always-required
+ * fields, and fields a [RequiredIf] rule switches on (compared like the rule itself:
+ * trimmed, ignoring case).
+ */
+fun FormField.isRequiredFor(values: Map<String, String?>): Boolean =
+    isRequired || validationRules.any { rule ->
+        rule is RequiredIf && values[rule.dependsOnFieldId]
+            ?.trim()
+            ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
+    }
+
 // endregion
 
 // region Helpers

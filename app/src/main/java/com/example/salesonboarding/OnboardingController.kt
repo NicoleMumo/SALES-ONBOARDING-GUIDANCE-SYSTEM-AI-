@@ -1,6 +1,5 @@
 package com.example.salesonboarding
 
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -10,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// region Answer checking while the agent types
+// region Answer checking
 
 data class LiveValidationState(
     val values: Map<String, String?> = emptyMap(),
@@ -32,18 +31,19 @@ data class FieldInteraction(
 )
 
 /**
- * Tracks the answers in one onboarding form and checks them as the agent types.
+ * Tracks the answers in one onboarding form and checks each one when the agent has
+ * finished with it.
  *
- * Values are published immediately; validation waits [debounceMillis] after the last
- * change to a field, so it does not run on every keystroke. All state changes go through
+ * [updateField] only records what was typed, so a half-typed answer is never marked
+ * wrong. [checkField] checks it, when the agent leaves the box, picks a choice, or moves
+ * on. Each check of a changed answer is one attempt in [LiveValidationState.interactionHistory];
+ * checking an answer that has not changed records nothing. All state changes go through
  * [MutableStateFlow.update], so concurrent calls cannot overwrite each other.
  */
 class LiveValidationSession(
     private val sessionId: String,
     fields: List<FormField> = KnownFields.all,
     configuration: FieldRuleConfiguration = FieldRuleConfiguration(),
-    private val scope: CoroutineScope,
-    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS,
     initialValues: Map<String, String?> = emptyMap(),
     private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
@@ -59,7 +59,6 @@ class LiveValidationSession(
             }
         }
 
-    private val validationJobs = ConcurrentHashMap<String, Job>()
     private val state = MutableStateFlow(LiveValidationState())
 
     val stateFlow: StateFlow<LiveValidationState> = state.asStateFlow()
@@ -79,10 +78,10 @@ class LiveValidationSession(
     }
 
     /**
-     * Records a new value for [fieldId] and schedules its check. The returned job
-     * completes once that check has run, or is cancelled if the field changes again first.
+     * Records a new value for [fieldId] without checking it. Any earlier result for it, and
+     * for fields whose rules read it, is cleared until [checkField] runs.
      */
-    fun updateField(fieldId: String, value: String?): Job {
+    fun updateField(fieldId: String, value: String?) {
         require(fieldsById.containsKey(fieldId)) { "Unknown field: $fieldId" }
         val affectedIds = affectedBy(fieldId)
         val startedAt = nowMillis()
@@ -95,34 +94,33 @@ class LiveValidationSession(
                 interactionHistory = current.interactionHistory.withInteractionFor(fieldId, startedAt)
             )
         }
-
-        validationJobs[fieldId]?.cancel()
-        val job = scope.launch {
-            delay(debounceMillis)
-            revalidate(fieldId)
-        }
-        validationJobs[fieldId] = job
-        job.invokeOnCompletion { validationJobs.remove(fieldId, job) }
-        return job
     }
 
-    /** Cancels checks that are still waiting out the debounce delay. */
-    fun cancelPendingValidation() {
-        validationJobs.values.forEach(Job::cancel)
-        validationJobs.clear()
-    }
-
-    private fun revalidate(changedFieldId: String) {
+    /**
+     * Checks [fieldId] (and the fields whose rules read it) if it changed since its last
+     * check, and records the attempt. Does nothing for an unchanged answer.
+     */
+    fun checkField(fieldId: String) {
+        require(fieldsById.containsKey(fieldId)) { "Unknown field: $fieldId" }
         val validatedAt = nowMillis()
         state.update { current ->
-            val results = validate(affectedBy(changedFieldId), current.values)
-            val changedPassed = results.getValue(changedFieldId).isValid
+            if (!current.interactionHistory.hasOpenInteraction(fieldId)) return@update current
+            val results = validate(affectedBy(fieldId), current.values)
             current.copy(
                 results = current.results + results,
-                interactionHistory =
-                    current.interactionHistory.withValidation(changedFieldId, changedPassed, validatedAt)
+                interactionHistory = current.interactionHistory
+                    .withValidation(fieldId, results.getValue(fieldId).isValid, validatedAt)
             )
         }
+    }
+
+    /** Checks every answer that changed since it was last checked, in the order they were started. */
+    fun checkPendingFields() {
+        stateFlow.value.interactionHistory
+            .filter { it.validationPassed == null }
+            .map(FieldInteraction::fieldId)
+            .distinct()
+            .forEach(::checkField)
     }
 
     /** The changed field plus every field whose rules depend on it. */
@@ -154,20 +152,20 @@ class LiveValidationSession(
     }
 
     companion object {
-        const val DEFAULT_DEBOUNCE_MILLIS = 300L
         private const val CHECK_FAILED_MESSAGE = "This field could not be checked. Try again."
     }
 }
 
-/** Adds a new interaction unless the agent is still on the same, not yet validated, field. */
+/** True while [fieldId] has a change that has not been checked yet. */
+private fun List<FieldInteraction>.hasOpenInteraction(fieldId: String): Boolean =
+    any { it.fieldId == fieldId && it.validationPassed == null }
+
+/** Starts a new attempt at [fieldId] unless one is already open, so one attempt is one check. */
 private fun List<FieldInteraction>.withInteractionFor(
     fieldId: String,
     startedAtMillis: Long
-): List<FieldInteraction> {
-    val last = lastOrNull()
-    val stillOpen = last != null && last.fieldId == fieldId && last.validationPassed == null
-    return if (stillOpen) this else this + FieldInteraction(fieldId, startedAtMillis)
-}
+): List<FieldInteraction> =
+    if (hasOpenInteraction(fieldId)) this else this + FieldInteraction(fieldId, startedAtMillis)
 
 /** Records the check result on the most recent interaction with [fieldId]. */
 private fun List<FieldInteraction>.withValidation(
@@ -235,8 +233,12 @@ class OnboardingFormController(
      * The trained abandonment-risk model. When null (file missing or refused),
      * the older hand-set rule in [CompletionRiskScorer] is used instead.
      */
-    private val riskModel: TrainedCompletionRiskModel? = null
+    private val riskModel: TrainedCompletionRiskModel? = null,
+    private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
+    /** When the form opened: the first answer's time is counted from here. */
+    private val openedAtMillis = nowMillis()
+
     val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
         id = "$industry-standard-onboarding",
         title = "$industry onboarding",
@@ -249,8 +251,8 @@ class OnboardingFormController(
     private val session = LiveValidationSession(
         sessionId = sessionId,
         fields = fields,
-        scope = scope,
-        initialValues = initialValues
+        initialValues = initialValues,
+        nowMillis = nowMillis
     )
 
     val stateFlow: StateFlow<LiveValidationState> = session.stateFlow
@@ -295,17 +297,18 @@ class OnboardingFormController(
                     val validatedAt = interaction.validatedAtMillis
                     val passed = interaction.validationPassed
                     if (validatedAt != null && passed != null && processedRiskInteractions.add(index)) {
-                        val durationMinutes =
-                            (validatedAt - interaction.startedAtMillis).coerceAtLeast(0) / 60_000.0
                         val wasRevisited = state.interactionHistory
                             .take(index)
                             .any { it.fieldId == interaction.fieldId }
+                        // The risk model was trained on simulated steps whose time is the whole
+                        // step (asking, answering, typing) and whose progress is answers passed
+                        // out of all the form's questions, so the app measures both the same way.
                         recordRiskEvent(
                             CompletionRiskEvent(
-                                durationMinutes = durationMinutes,
+                                durationMinutes = stepMinutes(state, validatedAt),
                                 validationPassed = passed,
                                 isRevisit = wasRevisited,
-                                progressPercent = readiness(state).scorePercent.toDouble()
+                                progressPercent = answeredPercent(state)
                             )
                         )
                         sessionStore?.appendEvent(
@@ -365,11 +368,18 @@ class OnboardingFormController(
         }
     }
 
+    /** Records what the agent typed or chose. It is checked by [checkField], not here. */
     fun updateField(fieldId: String, value: String) {
         session.updateField(fieldId, value)
         hasDraftChanges = true
         scheduleDraftSave()
     }
+
+    /** Checks [fieldId] once the agent has finished with it (left the box, picked a choice). */
+    fun checkField(fieldId: String) = session.checkField(fieldId)
+
+    /** Checks every changed answer not yet checked, e.g. before changing section or reviewing. */
+    fun checkPendingFields() = session.checkPendingFields()
 
     fun setResumeField(fieldId: String) {
         if (fields.none { it.fieldId == fieldId }) return
@@ -531,11 +541,24 @@ class OnboardingFormController(
     }
 
     private fun isRequired(field: FormField, state: LiveValidationState): Boolean =
-        field.isRequired || field.validationRules.any { rule ->
-            rule is RequiredIf && state.values[rule.dependsOnFieldId]
-                ?.trim()
-                ?.equals(rule.expectedValue.trim(), ignoreCase = true) == true
-        }
+        field.isRequiredFor(state.values)
+
+    /** Minutes since the previous checked answer (or since the form opened), up to this check. */
+    private fun stepMinutes(state: LiveValidationState, validatedAt: Long): Double {
+        val previousCheck = state.interactionHistory
+            .mapNotNull { it.validatedAtMillis }
+            .filter { it < validatedAt }
+            .maxOrNull() ?: openedAtMillis
+        return (validatedAt - previousCheck).coerceAtLeast(0) / 60_000.0
+    }
+
+    /** Questions answered correctly, out of all the form's questions, as a percentage. */
+    private fun answeredPercent(state: LiveValidationState): Double =
+        if (fields.isEmpty()) 0.0 else fields.count { isValid(it, state) } * 100.0 / fields.size
+
+    /** The risk inputs recorded so far, one per checked answer. */
+    val riskEvents: List<CompletionRiskEvent>
+        get() = currentRiskEvents
 
     private fun isValid(field: FormField, state: LiveValidationState): Boolean =
         !state.values[field.fieldId].isNullOrBlank() &&
