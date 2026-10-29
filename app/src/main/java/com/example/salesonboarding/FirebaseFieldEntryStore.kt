@@ -1,8 +1,5 @@
 package com.example.salesonboarding
 
-import com.example.salesonboarding.validation.FieldEntry
-import com.example.salesonboarding.validation.FieldEntryStore
-import com.example.salesonboarding.validation.FormField
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.MutableData
@@ -34,24 +31,22 @@ interface OnboardingSessionStore : FieldEntryStore {
         agentId: String,
         industry: String,
         context: String,
-        playbook: OnboardingPlaybook
-    )
-    fun startSession(
-        sessionId: String,
-        agentId: String,
-        industry: String,
-        context: String,
         playbook: OnboardingPlaybook,
         agentEmail: String
-    ) {
-        startSession(sessionId, agentId, industry, context, playbook)
-    }
+    )
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
     fun appendEvent(sessionId: String, type: String, fieldId: String?)
     fun markCompleted(sessionId: String)
+
+    /**
+     * Saves the final answers and marks the session completed. [fieldIds] lists every field
+     * of the form, so a store can clear saved answers that were removed before submitting.
+     * This default saves each entry and ignores [fieldIds].
+     */
     fun completeSession(
         sessionId: String,
         entries: List<FieldEntry>,
+        fieldIds: List<String>,
         onResult: (Result<Unit>) -> Unit
     ) {
         val result = try {
@@ -63,12 +58,6 @@ interface OnboardingSessionStore : FieldEntryStore {
         }
         onResult(result)
     }
-    fun completeSession(
-        sessionId: String,
-        entries: List<FieldEntry>,
-        fieldIds: List<String>,
-        onResult: (Result<Unit>) -> Unit
-    ) = completeSession(sessionId, entries, onResult)
     fun saveDraft(
         sessionId: String,
         entries: List<FieldEntry>,
@@ -110,14 +99,6 @@ class FirebaseFieldEntryStore(
                 "Could not save field '${entry.fieldId}' for session '${entry.sessionId}'."
             )
     }
-
-    override fun startSession(
-        sessionId: String,
-        agentId: String,
-        industry: String,
-        context: String,
-        playbook: OnboardingPlaybook
-    ) = startSession(sessionId, agentId, industry, context, playbook, "")
 
     override fun startSession(
         sessionId: String,
@@ -194,12 +175,6 @@ class FirebaseFieldEntryStore(
             )
         ).reportFailure("Could not mark onboarding session '$sessionId' as completed.")
     }
-
-    override fun completeSession(
-        sessionId: String,
-        entries: List<FieldEntry>,
-        onResult: (Result<Unit>) -> Unit
-    ) = completeSession(sessionId, entries, entries.map(FieldEntry::fieldId), onResult)
 
     override fun completeSession(
         sessionId: String,
@@ -291,8 +266,11 @@ class FirebaseFieldEntryStore(
         }
 }
 
+/** Company ids become database path segments: 3 to 64 letters, digits, `_` or `-`. */
+internal val COMPANY_ID_PATTERN = Regex("^[A-Za-z0-9_-]{3,64}$")
+
 private fun requireValidCompanyId(companyId: String) {
-    require(companyId.matches(Regex("^[A-Za-z0-9_-]{3,64}$"))) {
+    require(COMPANY_ID_PATTERN.matches(companyId)) {
         "A valid company ID is required to store onboarding sessions."
     }
 }

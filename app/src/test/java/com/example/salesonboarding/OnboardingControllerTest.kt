@@ -1,0 +1,659 @@
+package com.example.salesonboarding
+
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class OnboardingFormControllerTest {
+    @Test
+    fun continueIsDisabledForInvalidAndEmptyRequiredFields() = runTest {
+        val store = InMemoryFieldEntryStore()
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("email_address"),
+                KnownFields.get("full_name")
+            ),
+            scope = backgroundScope,
+            entryStore = store
+        )
+
+        controller.updateField("email_address", "bad")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals(
+            "Enter a valid email address.",
+            ValidationErrorDisplayMapper.forState(controller.stateFlow.value).single().message
+        )
+    }
+
+    @Test
+    fun fixingAllRequiredFieldsEnablesContinueAndSavesEntries() = runTest {
+        val store = InMemoryFieldEntryStore()
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("email_address"),
+                KnownFields.get("full_name")
+            ),
+            scope = backgroundScope,
+            entryStore = store
+        )
+
+        controller.updateField("email_address", "agent@example.com")
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(ValidationErrorDisplayMapper.forState(controller.stateFlow.value).isEmpty())
+        assertTrue(controller.canContinue())
+        assertTrue(controller.submit())
+        assertEquals(setOf("email_address", "full_name"), store.savedEntries.map { it.fieldId }.toSet())
+    }
+
+    @Test
+    fun successfulOnboardingRecordsTheCompleteSessionLifecycle() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val fields = listOf(
+            KnownFields.get("full_name"),
+            KnownFields.get("email_address")
+        )
+        val controller = OnboardingFormController(
+            sessionId = "successful-session",
+            fields = fields,
+            scope = backgroundScope,
+            entryStore = store,
+            industry = "telecom",
+            context = "individual",
+            agentId = "agent@example.com"
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        controller.updateField("email_address", "jane@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(controller.canContinue())
+        assertTrue(controller.submit())
+        assertEquals(
+            SessionStart(
+                "successful-session",
+                "agent@example.com",
+                "telecom",
+                "individual",
+                "telecom-standard-onboarding",
+                controller.playbook.version,
+                fields.map { it.fieldId }
+            ),
+            store.startedSession
+        )
+        assertEquals(setOf("full_name", "email_address"), store.validatedFields)
+        assertEquals(setOf("full_name", "email_address"), store.savedEntries.map { it.fieldId }.toSet())
+        assertTrue(store.events.any { it.type == "field_validation_passed" && it.fieldId == "full_name" })
+        assertTrue(store.events.any { it.type == "field_validation_passed" && it.fieldId == "email_address" })
+        assertEquals("successful-session", store.completedSessionId)
+    }
+
+    @Test
+    fun draftAutosavesAnswersAndTheFieldToResume() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            sessionId = "draft-session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address")
+            ),
+            scope = backgroundScope,
+            entryStore = store
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        controller.setResumeField("email_address")
+        advanceTimeBy(700)
+        runCurrent()
+
+        assertEquals("Jane Wanjiku", store.savedDraftEntries.single {
+            it.fieldId == "full_name"
+        }.value)
+        assertEquals("email_address", store.savedDraftResumeFieldId)
+        assertFalse(controller.draftSaveStatusFlow.value.isSaving)
+        assertEquals(null, controller.draftSaveStatusFlow.value.errorMessage)
+    }
+
+    @Test
+    fun resumedSessionRestoresAnswersWithoutStartingANewSession() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            sessionId = "existing-draft",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address")
+            ),
+            scope = backgroundScope,
+            entryStore = store,
+            initialValues = mapOf("full_name" to "Jane Wanjiku"),
+            initialResumeFieldId = "email_address",
+            isResumingSession = true
+        )
+        runCurrent()
+
+        assertEquals("Jane Wanjiku", controller.stateFlow.value.values["full_name"])
+        assertEquals("email_address", controller.resumeFieldId)
+        assertEquals(null, store.startedSession)
+        assertEquals(1, controller.readiness().completedRequiredFieldCount)
+    }
+
+    @Test
+    fun customFieldValidationWorksAndPreservesHistoryForDynamicModelScoring() = runTest {
+        val customField = FormField(
+            fieldId = "loyalty_email",
+            fieldName = "Loyalty email",
+            fieldType = "email",
+            isRequired = true,
+            validationRules = listOf(Required, EmailFormat),
+            description = "Email used for loyalty updates."
+        )
+        val modelHistories = mutableListOf<List<String>>()
+        val controller = OnboardingFormController(
+            sessionId = "custom-field-session",
+            fields = listOf(customField, KnownFields.get("full_name")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = NextFieldPredictor { history, _, _, _ ->
+                modelHistories += history
+                null
+            }
+        )
+
+        controller.updateField("loyalty_email", "customer@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(controller.canContinue())
+        assertEquals(listOf(emptyList(), listOf("loyalty_email")), modelHistories)
+    }
+
+    @Test
+    fun readinessNamesMissingFieldsAndCalculatesRequiredCompletion() = runTest {
+        val fields = listOf(
+            KnownFields.get("full_name"),
+            KnownFields.get("email_address")
+        )
+        val controller = OnboardingFormController(
+            sessionId = "readiness-session",
+            fields = fields,
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        val readiness = controller.readiness()
+        assertEquals(2, readiness.requiredFieldCount)
+        assertEquals(1, readiness.completedRequiredFieldCount)
+        assertEquals(listOf("Email address"), readiness.incompleteRequiredFields)
+        assertEquals(50, readiness.scorePercent)
+        assertFalse(readiness.isReady)
+    }
+
+    @Test
+    fun guidanceTellsAgentToCorrectAnInvalidField() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("email_address", "bad")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals("email_address", controller.guidanceFlow.value.correction?.fieldId)
+        assertEquals(
+            "Correct Email address: Enter a valid email address.",
+            controller.guidanceFlow.value.message
+        )
+    }
+
+    private data class SessionStart(
+        val sessionId: String,
+        val agentId: String,
+        val industry: String,
+        val context: String,
+        val playbookId: String,
+        val playbookVersion: String,
+        val fieldIds: List<String>
+    )
+
+    private data class SessionEvent(
+        val type: String,
+        val fieldId: String?
+    )
+
+    private class RecordingOnboardingSessionStore : OnboardingSessionStore {
+        var startedSession: SessionStart? = null
+        var completedSessionId: String? = null
+        var savedDraftEntries: List<FieldEntry> = emptyList()
+        var savedDraftResumeFieldId: String? = null
+        val validatedFields = mutableSetOf<String>()
+        val events = mutableListOf<SessionEvent>()
+        private val entries = mutableListOf<FieldEntry>()
+
+        val savedEntries: List<FieldEntry>
+            get() = entries.toList()
+
+        override fun save(entry: FieldEntry) {
+            entries.removeAll { it.fieldId == entry.fieldId }
+            entries += entry
+        }
+
+        override fun saveDraft(
+            sessionId: String,
+            entries: List<FieldEntry>,
+            resumeFieldId: String?,
+            onResult: (Result<Unit>) -> Unit
+        ) {
+            savedDraftEntries = entries
+            savedDraftResumeFieldId = resumeFieldId
+            onResult(Result.success(Unit))
+        }
+
+        override fun startSession(
+            sessionId: String,
+            agentId: String,
+            industry: String,
+            context: String,
+            playbook: OnboardingPlaybook,
+            agentEmail: String
+        ) {
+            startedSession = SessionStart(
+                sessionId,
+                agentId,
+                industry,
+                context,
+                playbook.id,
+                playbook.version,
+                playbook.fields.map { it.fieldId }
+            )
+        }
+
+        override fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?) {
+            if (isValid) validatedFields += fieldId
+        }
+
+        override fun appendEvent(sessionId: String, type: String, fieldId: String?) {
+            events += SessionEvent(type, fieldId)
+        }
+
+        override fun markCompleted(sessionId: String) {
+            completedSessionId = sessionId
+        }
+
+        override fun getSession(
+            sessionId: String,
+            onResult: (Result<StoredOnboardingSession?>) -> Unit
+        ) = error("Retrieval is not part of this controller test")
+    }
+
+    @Test
+    fun missingRequiredFieldProducesGuidance() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("email_address", "")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals("email_address", controller.guidanceFlow.value.correction?.fieldId)
+        assertEquals(
+            "Correct Email address: Enter a value for this field.",
+            controller.guidanceFlow.value.message
+        )
+    }
+
+    @Test
+    fun malformedPhoneNumberProducesFormatGuidance() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("mobile_phone_number")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("mobile_phone_number", "071234567")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals(
+            "Enter a valid Kenyan phone number (07XXXXXXXX, 01XXXXXXXX, +2547XXXXXXXX or +2541XXXXXXXX).",
+            controller.guidanceFlow.value.correction?.message
+        )
+    }
+
+    @Test
+    fun dependentRequiredFieldProducesGuidanceWhenServiceTypeNeedsIt() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("service_type"),
+                KnownFields.get("phone_service_selection")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("service_type", "mobile")
+        controller.updateField("phone_service_selection", "")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(controller.canContinue())
+        assertEquals(
+            "phone_service_selection",
+            controller.guidanceFlow.value.correction?.fieldId
+        )
+        assertEquals(
+            "Correct Phone service selection: Enter a value because the selected option requires it.",
+            controller.guidanceFlow.value.message
+        )
+    }
+
+    @Test
+    fun difficultSessionPublishesHighRiskGuidanceAfterRepeatedErrors() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.recordRiskEvent(
+            CompletionRiskEvent(16.0, validationPassed = false, isRevisit = true, progressPercent = 25.0)
+        )
+        controller.recordRiskEvent(
+            CompletionRiskEvent(2.0, validationPassed = false, isRevisit = true, progressPercent = 25.0)
+        )
+        runCurrent()
+
+        assertEquals(CompletionRiskLevel.HIGH, controller.riskFlow.value?.level)
+        assertEquals(
+            "Pause and help the customer complete the remaining information.",
+            controller.guidanceFlow.value.riskGuidance?.message
+        )
+    }
+
+    @Test
+    fun guidanceTellsAgentWhichRequiredFieldToCollectNext() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals("email_address", controller.guidanceFlow.value.nextFieldId)
+        assertEquals("Collect Email address next.", controller.guidanceFlow.value.message)
+    }
+
+    @Test
+    fun guidanceConfirmsWhenAllRequiredFieldsAreComplete() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        controller.updateField("email_address", "agent@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertTrue(controller.guidanceFlow.value.isComplete)
+        assertEquals(
+            "All required information is complete. You can continue.",
+            controller.guidanceFlow.value.message
+        )
+    }
+}
+
+class OnboardingFormControllerRiskTest {
+
+    private val trainedModel = requireNotNull(
+        TrainedCompletionRiskModel.fromParts(
+            featureNames = TrainedCompletionRiskModel.FEATURE_NAMES,
+            weights = listOf(
+                0.029819, 0.31253, 0.190293, -0.028253, 0.015226, 0.024499,
+                0.056975, -0.033293, -1.070033, 0.127716, -0.020178, -0.02873,
+                -0.49848, 1.319212
+            ),
+            intercept = 1.120239,
+            mediumRiskThreshold = 0.6086,
+            highRiskThreshold = 0.7112
+        )
+    )
+
+    private val events = listOf(
+        CompletionRiskEvent(5.0, false, false, 10.0),
+        CompletionRiskEvent(6.0, false, true, 10.0)
+    )
+
+    @Test
+    fun usesTheTrainedModelWhenItIsAvailable() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            industry = "banking",
+            context = "business",
+            riskModel = trainedModel
+        )
+
+        events.forEach(controller::recordRiskEvent)
+
+        val expected = trainedModel.score(events, isBanking = true, isBusiness = true)!!.score
+        assertEquals(expected, controller.riskFlow.value!!.score, 1e-12)
+    }
+
+    @Test
+    fun fallsBackToTheHandSetRuleWithoutAModel() = runTest {
+        val controller = OnboardingFormController(
+            "session",
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore()
+        )
+
+        events.forEach(controller::recordRiskEvent)
+
+        assertEquals(CompletionRiskScorer.score(events).score, controller.riskFlow.value!!.score, 1e-12)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class NextFieldPredictorTest {
+    @Test
+    fun validAnswersAreSentToThePredictorAndRecommendationIsPublished() = runTest {
+        var receivedHistory: List<String>? = null
+        var receivedValidation: String? = null
+        val predictor = NextFieldPredictor { history, _, _, validation ->
+            if (validation == "passed") {
+                receivedHistory = history
+                receivedValidation = validation
+                FieldPrediction("mobile_phone_number", 0.8f)
+            } else {
+                null
+            }
+        }
+        val controller = OnboardingFormController(
+            sessionId = "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address"),
+                KnownFields.get("mobile_phone_number")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = predictor
+        )
+
+        controller.updateField("full_name", "Jane Wanjiku")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateField("email_address", "agent@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals(listOf("full_name", "email_address"), receivedHistory)
+        assertEquals("passed", receivedValidation)
+        assertEquals("mobile_phone_number", controller.guidanceFlow.value.prediction?.fieldId)
+        assertTrue(controller.guidanceFlow.value.prediction?.confidence == 0.8f)
+    }
+
+    @Test
+    fun telecomAndBankingWorkflowsPassTheirSelectedIndustryToGuidance() = runTest {
+        val receivedIndustries = mutableListOf<String>()
+        val predictor = NextFieldPredictor { _, industry, context, validation ->
+            assertEquals("individual", context)
+            if (validation == "passed") {
+                receivedIndustries += industry
+                FieldPrediction("email_address", 0.7f)
+            } else {
+                null
+            }
+        }
+
+        listOf("telecom", "banking").forEach { industry ->
+            val controller = OnboardingFormController(
+                sessionId = "session-$industry",
+                fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
+                scope = backgroundScope,
+                entryStore = InMemoryFieldEntryStore(),
+                predictor = predictor,
+                industry = industry,
+                context = "individual"
+            )
+
+            controller.updateField("full_name", "Jane Wanjiku")
+            advanceTimeBy(300)
+            runCurrent()
+
+            assertEquals("email_address", controller.guidanceFlow.value.prediction?.fieldId)
+            assertEquals(0.7f, controller.guidanceFlow.value.prediction?.confidence)
+            assertEquals(industry, receivedIndustries.last())
+        }
+
+        assertEquals(listOf("telecom", "banking"), receivedIndustries)
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class LiveValidationSessionTest {
+    @Test
+    fun fieldIsValidatedAfterItsValueChanges() = runTest {
+        val validation = LiveValidationSession(
+            sessionId = "session",
+            fields = listOf(KnownFields.get("email_address")),
+            scope = backgroundScope,
+            debounceMillis = 300
+        )
+
+        validation.updateField("email_address", "invalid")
+        assertTrue(validation.stateFlow.value.results.isEmpty())
+
+        advanceTimeBy(300)
+        runCurrent()
+        assertFalse(validation.stateFlow.value.results.getValue("email_address").isValid)
+    }
+
+    @Test
+    fun changingADependencyRevalidatesOnlyDependentFields() = runTest {
+        val fields = listOf(
+            KnownFields.get("service_type"),
+            KnownFields.get("phone_service_selection"),
+            KnownFields.get("email_address")
+        )
+        val validation = LiveValidationSession("session", fields, scope = backgroundScope)
+
+        validation.updateField("phone_service_selection", "")
+        validation.updateField("email_address", "valid@example.com")
+        advanceTimeBy(300)
+        runCurrent()
+        assertTrue(validation.stateFlow.value.results.getValue("email_address").isValid)
+
+        validation.updateField("service_type", "mobile")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertFalse(validation.stateFlow.value.results.getValue("phone_service_selection").isValid)
+        assertEquals(true, validation.stateFlow.value.results.getValue("email_address").isValid)
+    }
+
+    @Test
+    fun unrelatedFieldDoesNotChangeWhenAnotherFieldIsEdited() = runTest {
+        val fields = listOf(
+            KnownFields.get("email_address"),
+            KnownFields.get("profession")
+        )
+        val validation = LiveValidationSession("session", fields, scope = backgroundScope)
+
+        validation.updateField("email_address", "invalid")
+        advanceTimeBy(300)
+        runCurrent()
+        val emailResult = validation.stateFlow.value.results.getValue("email_address")
+
+        validation.updateField("profession", "Engineer")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals(emailResult, validation.stateFlow.value.results.getValue("email_address"))
+    }
+
+    @Test
+    fun adminRuleOverridesAreUsedByLiveValidation() = runTest {
+        val configuration = FieldRuleConfiguration(
+            mapOf(
+                "profession" to FieldRuleOverride(
+                    addRules = listOf(RegexPattern("^[A-Z].*")),
+                    removeRules = listOf(NotBlank)
+                )
+            )
+        )
+        val validation = LiveValidationSession(
+            sessionId = "session",
+            fields = listOf(KnownFields.get("profession")),
+            configuration = configuration,
+            scope = backgroundScope
+        )
+
+        validation.updateField("profession", "engineer")
+        advanceTimeBy(300)
+        runCurrent()
+        assertFalse(validation.stateFlow.value.results.getValue("profession").isValid)
+    }
+}

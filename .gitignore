@@ -18,4 +18,4 @@ node_modules/
 .firebase/
 firebase-debug.log
 firebase-debug.*.log
-data/onboarding_dataset_v3*.csv
+ml/data/

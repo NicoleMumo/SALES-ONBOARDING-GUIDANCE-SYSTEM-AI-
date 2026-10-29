@@ -58,23 +58,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.salesonboarding.ui.theme.SalesOnboardingTheme
-import com.example.salesonboarding.validation.DateFormatAndMinimumAge
-import com.example.salesonboarding.validation.EmailFormat
-import com.example.salesonboarding.validation.FieldEntry
-import com.example.salesonboarding.validation.FieldEntryStore
-import com.example.salesonboarding.validation.FormField
-import com.example.salesonboarding.validation.KenyanPhoneFormat
-import com.example.salesonboarding.validation.LiveValidationState
-import com.example.salesonboarding.validation.MustBeTrue
-import com.example.salesonboarding.validation.OneOf
-import com.example.salesonboarding.validation.PatternByFieldValue
-import com.example.salesonboarding.validation.PositiveNumber
-import com.example.salesonboarding.validation.RegexPattern
-import com.example.salesonboarding.validation.RequiredIf
-import com.example.salesonboarding.validation.ValidationContext
-import com.example.salesonboarding.validation.ValidationErrorDisplayMapper
-import com.example.salesonboarding.validation.ValidationResult
 import kotlinx.coroutines.CoroutineScope
 import java.util.Locale
 
@@ -114,139 +97,6 @@ fun OnboardingScreen(
         onResumeFieldChange = controller::setResumeField,
         modifier = modifier
     )
-}
-
-@Composable
-fun OnboardingConsentScreen(
-    onConsent: () -> Unit,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var confirmed by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                "Customer Consent",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                "Please verify customer permission before collecting personal details.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                ConsentPoint(
-                    title = "Purpose of Collection",
-                    description = "Information is collected to set up the customer account and follow your company's onboarding process."
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ConsentPoint(
-                    title = "Document photos",
-                    description = "If you choose a document photo, text is read on this device to help with data entry. The photo and scan result are not uploaded or saved automatically."
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ConsentPoint(
-                    title = "Customer rights",
-                    description = "The customer may request review of their submitted details through authorized company channels."
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                ConsentPoint(
-                    title = "Access and retention",
-                    description = "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
-                )
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { confirmed = !confirmed },
-            shape = MaterialTheme.shapes.medium,
-            color = if (confirmed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            border = BorderStroke(
-                width = if (confirmed) 1.5.dp else 1.dp,
-                color = if (confirmed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Checkbox(
-                    checked = confirmed,
-                    onCheckedChange = null
-                )
-                Text(
-                    "Customer has been informed and agreed to proceed",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (confirmed) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (confirmed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(
-                onClick = onConsent,
-                enabled = confirmed,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text("Start Onboarding", fontWeight = FontWeight.SemiBold)
-            }
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text("Back")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConsentPoint(title: String, description: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
 }
 
 @Composable
@@ -1103,11 +953,12 @@ fun rememberOnboardingController(
     agentEmail: String = "",
     initialValues: Map<String, String?> = emptyMap(),
     initialResumeFieldId: String? = null,
-    isResumingSession: Boolean = false
+    isResumingSession: Boolean = false,
+    riskModel: TrainedCompletionRiskModel? = null
 ): OnboardingFormController = remember(
     sessionId, scope, entryStore, predictor, industry, context,
     agentUid, fields, playbook, initialModelUnavailable, agentEmail,
-    initialValues, initialResumeFieldId, isResumingSession
+    initialValues, initialResumeFieldId, isResumingSession, riskModel
 ) {
     OnboardingFormController(
         sessionId,
@@ -1123,7 +974,8 @@ fun rememberOnboardingController(
         agentEmail = agentEmail,
         initialValues = initialValues,
         initialResumeFieldId = initialResumeFieldId,
-        isResumingSession = isResumingSession
+        isResumingSession = isResumingSession,
+        riskModel = riskModel
     )
 }
 
@@ -1318,8 +1170,6 @@ private fun describePattern(pattern: String): String? = when (pattern) {
 
 private fun fieldActionLabel(field: FormField): String = when (field.fieldId) {
     "terms_and_conditions_acceptance" -> "Customer has read and accepted the terms"
-    "selfie_liveness_check" -> "Liveness verification check passed"
-    "face_match_verification" -> "Face match identity check passed"
     else -> "Confirm ${field.fieldName.lowercase(Locale.ROOT)}"
 }
 
@@ -1374,7 +1224,7 @@ fun OnboardingScreenPreview() {
     SalesOnboardingTheme {
         val playbook = OnboardingPlaybooks.forIndustry(
             "telecom",
-            com.example.salesonboarding.validation.FieldRuleConfiguration()
+            FieldRuleConfiguration()
         )
         OnboardingScreenContent(
             playbook = playbook,
