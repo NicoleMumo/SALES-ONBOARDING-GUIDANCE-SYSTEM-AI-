@@ -67,14 +67,16 @@ repository.
 | Folder or file | What it contains |
 | --- | --- |
 | `app/` | The Android app (Kotlin, Jetpack Compose, Firebase, TensorFlow Lite) and its tests. |
-| `ml/` | The simulated-data generator and checker (`dataset.py`), the next-question model's layers (`next_field_model.py`), the risk model and consistency measure (`consistency.py`), and the training notebook. |
+| `ml/` | The AI side: simulated-data generator and checker, the models' code, the training notebook, `requirements.txt`. |
 | `ml/models/` | The model files the app loads (copied into the app by the build). |
-| `ml/data/` | Generated datasets (local only, not in Git). |
+| `firebase/` | Database access rules (still to be tested and deployed) and an early rules test that needs rewriting. |
 | `tests/` | Python tests. |
 | `docs/` | The three guides below. |
-| `database.rules.json` | Firebase database access rules (still to be tested and deployed). |
-| `database.rules.test.js`, `package.json` | An early rules test for an older database layout; needs rewriting. |
 | `legacy/` | Earlier and replaced files, kept with notes on why ([legacy/README.md](legacy/README.md)). |
+
+The Gradle files in the top folder (`build.gradle.kts`, `settings.gradle.kts`,
+`gradle.properties`, `gradlew`, `gradlew.bat`, `gradle/`) are required there by
+Android Studio.
 
 ## Guides
 
