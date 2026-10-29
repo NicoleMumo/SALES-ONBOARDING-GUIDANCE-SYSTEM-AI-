@@ -49,7 +49,8 @@ See [02 - Connect Firebase](02-connect-firebase.md) for setup and access checks.
 | `OnboardingController.kt` | Form state, answer checking, suggestions, progress, and saving. |
 | `NextFieldPredictor.kt` | Runs the TensorFlow Lite next-field model. |
 | `Insights.kt` | The risk warning (trained model and hand-set fallback) and the consistency measure. |
-| `OnboardingScreen.kt` and `DocumentOcrScanner.kt` | The form, review and finish pages, and the ID photo reader. |
+| `OnboardingForm.kt` | The agent's form: sections with a step bar, review and finish pages. |
+| `FormQuestions.kt` | Each kind of question input, format hints, and the ID photo reader. |
 | `FirebaseFieldEntryStore.kt` | Saves sessions and answers to Firebase. |
 | `AdminDataStore.kt` and `AdminDashboardScreen.kt` | Admin settings, agent invitations, and team insights. |
 | `SessionHistoryScreen.kt` | Shows saved session history. |

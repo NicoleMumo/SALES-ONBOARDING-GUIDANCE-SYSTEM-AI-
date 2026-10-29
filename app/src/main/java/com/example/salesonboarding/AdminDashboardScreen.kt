@@ -855,9 +855,10 @@ private fun ConsistencySection(
         "A completed session follows the standard when at most " +
             "${SessionConsistencyCalculator.MAX_FAILED_CHECKS} answers had to be corrected and at " +
             "most ${SessionConsistencyCalculator.MAX_STEPS_OUT_OF_PLACE} questions came out of " +
-            "the standard order. The app chooses the order of questions, so agents cannot skip " +
-            "ahead; questions out of order usually come from the app's own suggestion. " +
-            "Corrected answers are the main sign of how consistently agents work.",
+            "the standard order. Agents see a section's questions together and can answer them " +
+            "in any order, so a few questions out of order is normal; a different order is not " +
+            "automatically wrong. Sessions saved before this version showed one question at a " +
+            "time, so their order was mostly set by the app.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

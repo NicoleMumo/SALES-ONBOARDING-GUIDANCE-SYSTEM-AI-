@@ -360,13 +360,11 @@ object CompletionRiskGuidanceMapper {
  * and "at most 2 and at most 2" holds for about 81% of completed sessions. They
  * should be checked again once real sessions exist.
  *
- * In this app the agent cannot choose the order: one question is shown at a
- * time and Next goes to the question the app picks (a correction, the AI's
- * suggestion, then the playbook order). So steps out of place are usually 0,
- * and when they are not they mostly reflect the AI's suggestion, not an agent
- * drifting. Failed checks are the measure that shows how agents differ. The
- * simulated thresholds above assumed agents could pick their own order, as on a
- * paper form, so the order limit is generous for this app.
+ * The form shows a section's questions together and the agent may answer them in
+ * any order or move between sections, as the simulated agents could, so steps out
+ * of place measure the agent again. Sessions saved before that redesign showed
+ * one question at a time in an order the app picked, so their steps out of place
+ * are mostly 0 or reflect the AI's suggestion, not the agent.
  */
 data class RecordedStep(
     val fieldId: String,

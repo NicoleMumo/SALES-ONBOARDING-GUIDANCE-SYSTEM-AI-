@@ -8,6 +8,53 @@ import org.junit.Test
 
 class OnboardingPlaybookTest {
     @Test
+    fun sectionsKeepEveryFieldInPlaybookOrder() {
+        val forms = listOf(
+            "banking" to listOf("individual", "business"),
+            "telecom" to listOf("mobile", "broadband", "tv", "iot", "landline")
+        )
+        forms.forEach { (industry, contexts) ->
+            contexts.forEach { context ->
+                val playbook = OnboardingPlaybooks.forIndustry(industry, FieldRuleConfiguration(), context)
+
+                val sections = playbook.sections()
+
+                assertEquals("$industry $context", playbook.fields, sections.flatMap { it.fields })
+                assertEquals("$industry $context", sections.size, sections.map { it.title }.distinct().size)
+                assertFalse(sections.any { it.title == COMPANY_SECTION })
+            }
+        }
+    }
+
+    @Test
+    fun formsAreSplitIntoTheirNamedSections() {
+        val banking = OnboardingPlaybooks.forIndustry("banking", FieldRuleConfiguration(), "business")
+        val telecom = OnboardingPlaybooks.forIndustry("telecom", FieldRuleConfiguration(), "mobile")
+
+        assertEquals(
+            listOf("Customer", "Identity", "Financial", "Declarations", "Account"),
+            banking.sections().map { it.title }
+        )
+        assertEquals(
+            listOf("Customer", "Identity", "Service", "Activation"),
+            telecom.sections().map { it.title }
+        )
+    }
+
+    @Test
+    fun companyQuestionsComeLastInTheirOwnSection() {
+        val custom = FormField("loyalty_code", "Loyalty code", "text", isRequired = false, validationRules = emptyList())
+        val playbook = OnboardingPlaybooks.forIndustry(
+            "telecom", FieldRuleConfiguration(customFields = listOf(custom)), "iot"
+        )
+
+        val last = playbook.sections().last()
+
+        assertEquals(COMPANY_SECTION, last.title)
+        assertEquals(listOf("loyalty_code"), last.fields.map { it.fieldId })
+    }
+
+    @Test
     fun playbooksFollowModelVocabAndContextSpecificSequences() {
         val bankingIndividual = OnboardingPlaybooks.forIndustry(
             "banking", FieldRuleConfiguration(), "individual"

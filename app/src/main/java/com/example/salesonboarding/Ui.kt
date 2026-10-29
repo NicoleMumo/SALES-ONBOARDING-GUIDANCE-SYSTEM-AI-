@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -221,6 +226,9 @@ fun AppScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Keep the content and the bottom action above the keyboard. The navigation bar
+            // is already padded by the activity's Scaffold, so it is not counted twice.
+            .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
     ) {
         ScreenHeader(title = title, subtitle = subtitle, onBack = onBack, actions = actions)
         Column(
