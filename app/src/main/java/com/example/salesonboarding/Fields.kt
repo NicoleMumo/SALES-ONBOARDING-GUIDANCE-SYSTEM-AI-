@@ -8,8 +8,6 @@ import java.security.MessageDigest
 
 object KnownFields {
 
-    private val validFieldIdPattern = Regex("^[a-z][a-z0-9_]{0,63}$")
-
     private fun validateCatalog(catalog: List<FormField>) {
         val duplicates = catalog
             .groupingBy { it.fieldId }
@@ -20,7 +18,7 @@ object KnownFields {
             "KnownFields contains duplicate field ids: ${duplicates.sorted().joinToString()}"
         }
         catalog.forEach { field ->
-            require(field.fieldId.matches(validFieldIdPattern)) {
+            require(FormField.isValidId(field.fieldId)) {
                 "Invalid field id '${field.fieldId}' in KnownFields. Use lower-case letters, digits, and underscores only."
             }
             require(field.fieldName.isNotBlank()) { "Field '${field.fieldId}' is missing a display name." }
@@ -263,11 +261,8 @@ object KnownFields {
 
     // endregion
 
+    // validateCatalog has already rejected duplicate ids.
     private val byId: Map<String, FormField> = all.associateBy { it.fieldId }
-
-    init {
-        check(byId.size == all.size) { "KnownFields contains duplicate field ids" }
-    }
 
     /** The configured field, or null if [fieldId] is not in the catalogue. */
     fun find(
