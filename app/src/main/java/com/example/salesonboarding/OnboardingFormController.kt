@@ -15,6 +15,7 @@ import com.example.salesonboarding.risk.CompletionRiskGuidance
 import com.example.salesonboarding.risk.CompletionRiskGuidanceMapper
 import com.example.salesonboarding.risk.CompletionRiskResult
 import com.example.salesonboarding.risk.CompletionRiskScorer
+import com.example.salesonboarding.risk.TrainedCompletionRiskModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,7 +68,12 @@ class OnboardingFormController(
     private val agentEmail: String = "",
     initialValues: Map<String, String?> = emptyMap(),
     private val initialResumeFieldId: String? = null,
-    private val isResumingSession: Boolean = false
+    private val isResumingSession: Boolean = false,
+    /**
+     * The trained abandonment-risk model. When null (file missing or refused),
+     * the older hand-set rule in [CompletionRiskScorer] is used instead.
+     */
+    private val riskModel: TrainedCompletionRiskModel? = null
 ) {
     val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
         id = "$industry-standard-onboarding",
@@ -211,7 +217,11 @@ class OnboardingFormController(
 
     fun recordRiskEvent(event: CompletionRiskEvent) {
         val events = currentRiskEvents + event
-        risk.value = CompletionRiskScorer.score(events)
+        risk.value = riskModel?.score(
+            events,
+            isBanking = industry == "banking",
+            isBusiness = context == "business"
+        ) ?: CompletionRiskScorer.score(events)
         currentRiskEvents = events
     }
 

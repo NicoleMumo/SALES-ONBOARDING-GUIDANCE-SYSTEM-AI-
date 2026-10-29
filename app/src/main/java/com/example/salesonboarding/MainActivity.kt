@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.google.firebase.auth.FirebaseAuth
+import com.example.salesonboarding.risk.TrainedCompletionRiskModel
 import com.example.salesonboarding.validation.FieldRuleConfiguration
 import java.util.UUID
 
@@ -465,6 +466,19 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(predictor) {
                                     onDispose { predictor?.close() }
                                 }
+                                // A missing or refused file leaves this null, and the
+                                // controller falls back to the older hand-set rule.
+                                val riskModel = remember {
+                                    try {
+                                        applicationContext.assets
+                                            .open(TrainedCompletionRiskModel.ASSET_NAME)
+                                            .bufferedReader()
+                                            .use { it.readText() }
+                                            .let(TrainedCompletionRiskModel::fromJsonOrNull)
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
                                 val controller = rememberOnboardingController(
                                     onboardingSessionId!!,
                                     scope,
@@ -477,6 +491,7 @@ class MainActivity : ComponentActivity() {
                                     fields = playbook.fields,
                                     playbook = playbook,
                                     initialModelUnavailable = predictorAttempt.isFailure,
+                                    riskModel = riskModel,
                                     initialValues = resumedSession
                                         ?.takeIf { it.sessionId == onboardingSessionId }
                                         ?.entries

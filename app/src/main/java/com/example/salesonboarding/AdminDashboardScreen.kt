@@ -21,6 +21,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -38,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.salesonboarding.consistency.ConsistencyReport
+import com.example.salesonboarding.consistency.SessionConsistencyCalculator
 import com.example.salesonboarding.validation.FieldRuleConfiguration
 import com.example.salesonboarding.validation.FormField
 import com.example.salesonboarding.validation.KnownFields
@@ -796,8 +799,13 @@ private fun AnalyticsSection(
                     }
                 }
             }
+            ConsistencySection(
+                report = analytics.consistency,
+                fieldNames = analytics.fieldNames,
+                agents = agents
+            )
             if (analytics.agentPerformance.isNotEmpty()) {
-                Text("Team consistency", style = MaterialTheme.typography.titleMedium)
+                Text("Completion by agent", style = MaterialTheme.typography.titleMedium)
                 analytics.agentPerformance.forEach { performance ->
                     val displayName = agents.firstOrNull {
                         it.email.equals(performance.agentId, ignoreCase = true)
@@ -829,6 +837,141 @@ private fun AnalyticsSection(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * How closely completed sessions followed the standard process. Plain counts, not
+ * a model; see `SessionConsistency.kt` for the definitions and where the limits
+ * come from.
+ */
+@Composable
+private fun ConsistencySection(
+    report: ConsistencyReport,
+    fieldNames: Map<String, String>,
+    agents: List<SalesAgentAccount>
+) {
+    fun percent(share: Double) = "${"%.0f".format(share * 100)}%"
+    fun fieldName(fieldId: String) = fieldNames[fieldId] ?: fieldId.replace('_', ' ')
+
+    Text("Process consistency", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "A completed session follows the standard when at most " +
+            "${SessionConsistencyCalculator.MAX_FAILED_CHECKS} answers had to be corrected and at " +
+            "most ${SessionConsistencyCalculator.MAX_STEPS_OUT_OF_PLACE} questions came out of " +
+            "the standard order. The app chooses the order of questions, so agents cannot skip " +
+            "ahead; questions out of order usually come from the app's own suggestion. " +
+            "Corrected answers are the main sign of how consistently agents work.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (report.sessionCount == 0) {
+        Text(
+            "No completed sessions with recorded steps yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    AdminSummaryCard(
+        "Followed the standard",
+        percent(report.followedStandardShare),
+        "${report.followedStandardCount} of ${report.sessionCount} completed sessions",
+        Modifier.fillMaxWidth()
+    )
+
+    if (report.weekly.size > 1) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("By week", style = MaterialTheme.typography.titleSmall)
+                report.weekly.forEach { week ->
+                    val label = when (week.weeksAgo) {
+                        0 -> "Latest week"
+                        1 -> "1 week earlier"
+                        else -> "${week.weeksAgo} weeks earlier"
+                    }
+                    Text(
+                        "$label: ${percent(week.followedStandardShare)} " +
+                            "(${week.sessionCount} sessions)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    LinearProgressIndicator(
+                        progress = { week.followedStandardShare.toFloat() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+
+    val fieldLists = listOf(
+        "Most often corrected" to report.mostFailedFields,
+        "Most often out of the standard order" to report.mostMisplacedFields
+    ).filter { it.second.isNotEmpty() }
+    fieldLists.forEach { (title, fields) ->
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                fields.forEach { field ->
+                    Text(
+                        "${fieldName(field.fieldId)}: ${field.count} times",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+
+    Text("By agent (least consistent first)", style = MaterialTheme.typography.titleSmall)
+    report.agents.forEach { agent ->
+        val displayName = agents.firstOrNull {
+            it.email.equals(agent.agentId, ignoreCase = true)
+        }?.displayName?.takeIf(String::isNotBlank) ?: agent.agentId
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(displayName, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${agent.sessionCount} sessions · " +
+                            "${"%.1f".format(agent.averageFailedChecks)} corrected · " +
+                            "${"%.1f".format(agent.averageStepsOutOfPlace)} out of order (averages)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    percent(agent.followedStandardShare),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

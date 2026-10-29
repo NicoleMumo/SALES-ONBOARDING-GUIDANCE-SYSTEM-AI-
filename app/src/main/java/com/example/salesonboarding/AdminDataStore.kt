@@ -1,5 +1,9 @@
 package com.example.salesonboarding
 
+import com.example.salesonboarding.consistency.ConsistencyInput
+import com.example.salesonboarding.consistency.ConsistencyReport
+import com.example.salesonboarding.consistency.RecordedStep
+import com.example.salesonboarding.consistency.SessionConsistencyCalculator
 import com.example.salesonboarding.validation.FieldRuleConfiguration
 import com.example.salesonboarding.validation.FieldRuleOverride
 import com.example.salesonboarding.validation.EmailFormat
@@ -39,7 +43,9 @@ data class OnboardingAnalytics(
     val averageCompletionMinutes: Double = 0.0,
     val averageReadinessPercent: Double = 0.0,
     val commonPausePoint: String? = null,
-    val agentPerformance: List<AgentPerformance> = emptyList()
+    val agentPerformance: List<AgentPerformance> = emptyList(),
+    val consistency: ConsistencyReport = ConsistencyReport(),
+    val fieldNames: Map<String, String> = emptyMap()
 ) {
     val completionRate: Double
         get() = if (sessionCount == 0) 0.0 else completedCount.toDouble() / sessionCount
@@ -89,7 +95,18 @@ data class OnboardingAnalytics(
                             completedCount = agentCompleted
                         )
                     }
-                    .sortedByDescending(AgentPerformance::sessionCount)
+                    .sortedByDescending(AgentPerformance::sessionCount),
+                consistency = SessionConsistencyCalculator.report(
+                    completed.map { session ->
+                        ConsistencyInput(
+                            agentId = session.agentId,
+                            startedAt = session.startedAt,
+                            standardOrder = session.playbookFieldIds,
+                            steps = session.steps
+                        )
+                    }
+                ),
+                fieldNames = sessions.fold(emptyMap()) { names, session -> names + session.fieldNames }
             )
         }
     }
@@ -112,7 +129,9 @@ data class OnboardingSessionMetrics(
     val validation: Map<String, Boolean> = emptyMap(),
     val playbookFieldIds: List<String> = emptyList(),
     val requiredFieldIds: List<String> = emptyList(),
-    val fieldNames: Map<String, String> = emptyMap()
+    val fieldNames: Map<String, String> = emptyMap(),
+    /** Answered steps in the order they happened, from the session's saved events. */
+    val steps: List<RecordedStep> = emptyList()
 )
 
 enum class AdminRule(val label: String) {
@@ -501,7 +520,8 @@ class FirebaseAdminDataStore(
                             val fieldId = field.child("fieldId").getValue(String::class.java)
                             val fieldName = field.child("fieldName").getValue(String::class.java)
                             if (fieldId != null && fieldName != null) fieldId to fieldName else null
-                        }.toMap()
+                        }.toMap(),
+                        steps = session.child("events").children.mapNotNull(DataSnapshot::toRecordedStep)
                     )
                 }
                 onResult(Result.success(OnboardingAnalytics.fromSessions(metrics)))
@@ -601,6 +621,22 @@ class FirebaseAdminDataStore(
 }
 
 private fun List<Double>.averageOrZero(): Double = if (isEmpty()) 0.0 else average()
+
+/**
+ * One saved session event as an answered step. The app saves an event each time
+ * an answer is checked (see `OnboardingFormController`); other event types and
+ * incomplete events are ignored rather than guessed at.
+ */
+private fun DataSnapshot.toRecordedStep(): RecordedStep? {
+    val passed = when (child("type").getValue(String::class.java)) {
+        "field_validation_passed" -> true
+        "field_validation_failed" -> false
+        else -> return null
+    }
+    val fieldId = child("fieldId").getValue(String::class.java) ?: return null
+    val timestamp = child("timestamp").value.asLongTimestamp() ?: return null
+    return RecordedStep(fieldId, passed, timestamp)
+}
 
 internal fun Set<AdminRule>.toValidationRules() = buildList {
     if (AdminRule.REQUIRED in this@toValidationRules) add(Required)

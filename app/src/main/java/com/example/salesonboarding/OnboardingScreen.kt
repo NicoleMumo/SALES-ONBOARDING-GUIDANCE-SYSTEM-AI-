@@ -1103,11 +1103,12 @@ fun rememberOnboardingController(
     agentEmail: String = "",
     initialValues: Map<String, String?> = emptyMap(),
     initialResumeFieldId: String? = null,
-    isResumingSession: Boolean = false
+    isResumingSession: Boolean = false,
+    riskModel: com.example.salesonboarding.risk.TrainedCompletionRiskModel? = null
 ): OnboardingFormController = remember(
     sessionId, scope, entryStore, predictor, industry, context,
     agentUid, fields, playbook, initialModelUnavailable, agentEmail,
-    initialValues, initialResumeFieldId, isResumingSession
+    initialValues, initialResumeFieldId, isResumingSession, riskModel
 ) {
     OnboardingFormController(
         sessionId,
@@ -1123,7 +1124,8 @@ fun rememberOnboardingController(
         agentEmail = agentEmail,
         initialValues = initialValues,
         initialResumeFieldId = initialResumeFieldId,
-        isResumingSession = isResumingSession
+        isResumingSession = isResumingSession,
+        riskModel = riskModel
     )
 }
 
