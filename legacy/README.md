@@ -48,6 +48,7 @@ Moved here on 2026-10-29 (each file keeps the path it had before, without the
   duplicate session-store functions, a deprecated alias), with the reason for
   each.
 
-The active project is organized around `app/`, `ml/`, `docs/`, and `tests/`.
-`ml/` replaced the former `data/`, `notebooks/` and `src/` folders on
-2026-10-29.
+The active project is organized around `android/`, `ml/`, `firebase/`, `docs/`
+and `tests/`. `ml/` replaced the former `data/`, `notebooks/` and `src/` folders,
+and `android/` and `firebase/` gathered the Android build and Firebase files from
+the top folder, on 2026-10-29.

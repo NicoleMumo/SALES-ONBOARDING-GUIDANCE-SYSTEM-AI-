@@ -173,11 +173,11 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 | `onboarding_model_flexible.keras` | Python, to reload the trained model |
 | `risk_model_report.json` | The evidence for the risk results above |
 
-The build copies the three app files into `app/src/main/assets/`.
+The build copies the three app files into `android/app/src/main/assets/`.
 
 ## Speed on a phone
 
-Run on a connected physical phone:
+Run on a connected physical phone, from the `android` folder:
 
 ```powershell
 .\gradlew.bat :app:connectedDebugAndroidTest `

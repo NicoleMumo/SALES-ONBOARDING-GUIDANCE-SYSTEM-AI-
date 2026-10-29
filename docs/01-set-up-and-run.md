@@ -16,7 +16,7 @@ customer information is used.
 
 1. Create or choose a Firebase project.
 2. Add an Android app with the package name `com.example.salesonboarding`.
-3. Download `google-services.json` and save it as `app/google-services.json`.
+3. Download `google-services.json` and save it as `android/app/google-services.json`.
    This file is private to your project and is not in Git.
 4. In Firebase Authentication, turn on **Email/Password** sign-in.
 5. Create a Realtime Database. The app uses this URL, set in `MainActivity.kt`
@@ -71,20 +71,21 @@ button to it from the sign-in screen.
 
 ## 4. Build and install
 
-Open the project folder in Android Studio, let Gradle sync, then run the app on
-an emulator or phone. From PowerShell:
+Open the **android** folder (not the top folder) in Android Studio, let Gradle
+sync, then run the app on an emulator or phone. From PowerShell:
 
 ```powershell
+cd android
 .\gradlew.bat :app:assembleDebug
 ```
 
 The build copies the model files from `ml/models/` into the app (Gradle task
 `syncOnboardingModelAssets`). Edit the files in `ml/models/`, not the copies in
-`app/src/main/assets/`.
+`android/app/src/main/assets/`.
 
 ## 5. Run the tests
 
-Android unit tests (99 tests):
+Android unit tests (100 tests), from the `android` folder:
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest
