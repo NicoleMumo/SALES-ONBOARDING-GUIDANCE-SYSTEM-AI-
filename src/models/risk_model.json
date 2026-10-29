@@ -1,0 +1,40 @@
+{
+  "model": "logistic_regression",
+  "feature_names": [
+    "events",
+    "failures",
+    "consecutive_failures",
+    "revisits",
+    "elapsed_minutes",
+    "longest_event_minutes",
+    "long_events",
+    "progress_percent",
+    "failure_rate",
+    "revisit_rate",
+    "minutes_per_event",
+    "progress_per_minute",
+    "is_banking",
+    "is_business"
+  ],
+  "weights": [
+    0.029819,
+    0.31253,
+    0.190293,
+    -0.028253,
+    0.015226,
+    0.024499,
+    0.056975,
+    -0.033293,
+    -1.070033,
+    0.127716,
+    -0.020178,
+    -0.02873,
+    -0.49848,
+    1.319212
+  ],
+  "intercept": 1.120239,
+  "medium_risk_threshold": 0.6086,
+  "high_risk_threshold": 0.7112,
+  "long_event_threshold_minutes": 15.0,
+  "note": "score = 1 / (1 + exp(-(intercept + sum(weights * features)))). Thresholds are the 80th and 90th percentile of validation scores, so about 20% of steps reach medium and 10% high. Trained on simulated sessions only; not a real-world probability."
+}

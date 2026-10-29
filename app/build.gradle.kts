@@ -44,7 +44,7 @@ android {
 
 tasks.register<Copy>("syncOnboardingModelAssets") {
     from(rootProject.file("src/models")) {
-        include("onboarding_model.tflite", "preprocessing_meta.json")
+        include("onboarding_model.tflite", "preprocessing_meta.json", "risk_model.json")
     }
     into(layout.projectDirectory.dir("src/main/assets"))
 }

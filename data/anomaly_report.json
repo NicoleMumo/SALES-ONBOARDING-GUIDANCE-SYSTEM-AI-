@@ -1,0 +1,56 @@
+{
+  "datasets": [
+    {
+      "dataset": "..\\..\\data\\onboarding_dataset_v3.csv",
+      "train_sessions": 5654,
+      "test_sessions": 1191,
+      "deviations_caught": 0.6725,
+      "normal_sessions_flagged": 0.0823,
+      "passes_mark": false,
+      "single_cause_report": {
+        "order_only": 0.1209,
+        "retries_only": 0.5449
+      },
+      "out_of_order_count": {
+        "catches_order_only_deviation": 0.9782,
+        "normal_sessions_with_any_out_of_order_step": 0.4526,
+        "normal_mean_out_of_order_steps": 0.86
+      }
+    },
+    {
+      "dataset": "..\\..\\data\\onboarding_dataset_v3_seed7.csv",
+      "train_sessions": 5622,
+      "test_sessions": 1125,
+      "deviations_caught": 0.744,
+      "normal_sessions_flagged": 0.1049,
+      "passes_mark": false,
+      "single_cause_report": {
+        "order_only": 0.1351,
+        "retries_only": 0.6418
+      },
+      "out_of_order_count": {
+        "catches_order_only_deviation": 0.9716,
+        "normal_sessions_with_any_out_of_order_step": 0.3227,
+        "normal_mean_out_of_order_steps": 0.42
+      }
+    },
+    {
+      "dataset": "..\\..\\data\\onboarding_dataset_v3_seed99.csv",
+      "train_sessions": 5603,
+      "test_sessions": 1152,
+      "deviations_caught": 0.6675,
+      "normal_sessions_flagged": 0.0677,
+      "passes_mark": false,
+      "single_cause_report": {
+        "order_only": 0.0773,
+        "retries_only": 0.5972
+      },
+      "out_of_order_count": {
+        "catches_order_only_deviation": 0.9818,
+        "normal_sessions_with_any_out_of_order_step": 0.3333,
+        "normal_mean_out_of_order_steps": 0.41
+      }
+    }
+  ],
+  "all_pass": false
+}
