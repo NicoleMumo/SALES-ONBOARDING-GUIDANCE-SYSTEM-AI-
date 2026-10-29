@@ -1,0 +1,95 @@
+{
+  "datasets": [
+    {
+      "dataset": "..\\..\\data\\onboarding_dataset_v3.csv",
+      "rows": {
+        "train": 79469,
+        "test": 16740,
+        "validation": 16446
+      },
+      "abandoned_share": {
+        "train": 0.1271,
+        "test": 0.0959,
+        "validation": 0.1315
+      },
+      "validation_auc": {
+        "logistic_regression": 0.7098,
+        "gradient_boosting": 0.6861,
+        "app_rule": 0.5741
+      },
+      "chosen_model": "logistic_regression",
+      "test_auc": {
+        "model": 0.7346,
+        "app_rule": 0.5874,
+        "gain_over_app_rule": 0.1472
+      },
+      "test_average_precision": {
+        "model": 0.2398,
+        "app_rule": 0.1169
+      },
+      "passes_mark": true,
+      "export_matches_sklearn_to": 2.220446049250313e-16
+    },
+    {
+      "dataset": "..\\..\\data\\onboarding_dataset_v3_seed7.csv",
+      "rows": {
+        "validation": 17734,
+        "train": 79011,
+        "test": 15877
+      },
+      "abandoned_share": {
+        "validation": 0.1105,
+        "train": 0.1289,
+        "test": 0.1655
+      },
+      "validation_auc": {
+        "logistic_regression": 0.7359,
+        "gradient_boosting": 0.7083,
+        "app_rule": 0.5816
+      },
+      "chosen_model": "logistic_regression",
+      "test_auc": {
+        "model": 0.7213,
+        "app_rule": 0.5653,
+        "gain_over_app_rule": 0.156
+      },
+      "test_average_precision": {
+        "model": 0.3536,
+        "app_rule": 0.1902
+      },
+      "passes_mark": true,
+      "export_matches_sklearn_to": 3.3306690738754696e-16
+    },
+    {
+      "dataset": "..\\..\\data\\onboarding_dataset_v3_seed99.csv",
+      "rows": {
+        "train": 78948,
+        "test": 16189,
+        "validation": 17349
+      },
+      "abandoned_share": {
+        "train": 0.1182,
+        "test": 0.144,
+        "validation": 0.1353
+      },
+      "validation_auc": {
+        "logistic_regression": 0.7471,
+        "gradient_boosting": 0.7393,
+        "app_rule": 0.5582
+      },
+      "chosen_model": "logistic_regression",
+      "test_auc": {
+        "model": 0.7144,
+        "app_rule": 0.5493,
+        "gain_over_app_rule": 0.1651
+      },
+      "test_average_precision": {
+        "model": 0.2962,
+        "app_rule": 0.1636
+      },
+      "passes_mark": true,
+      "export_matches_sklearn_to": 5.551115123125783e-16
+    }
+  ],
+  "all_pass": true
+}
