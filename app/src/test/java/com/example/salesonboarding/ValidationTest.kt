@@ -2,7 +2,6 @@ package com.example.salesonboarding
 
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -167,12 +166,10 @@ class ValidationErrorDisplayTest {
     fun failingEmailRuleProducesAnActionableMessage() = runTest {
         val validation = LiveValidationSession(
             sessionId = "session",
-            fields = listOf(KnownFields.get("email_address")),
-            scope = backgroundScope
+            fields = listOf(KnownFields.get("email_address"))
         )
 
-        validation.updateField("email_address", "not-an-email")
-        advanceTimeBy(300)
+        validation.answer("email_address", "not-an-email")
         runCurrent()
 
         val error = ValidationErrorDisplayMapper.forState(validation.stateFlow.value).single()
@@ -200,15 +197,12 @@ class ValidationErrorDisplayTest {
     fun touchedAndClearedRequiredFieldShowsAnError() = runTest {
         val validation = LiveValidationSession(
             sessionId = "session",
-            fields = listOf(KnownFields.get("email_address")),
-            scope = backgroundScope
+            fields = listOf(KnownFields.get("email_address"))
         )
 
-        validation.updateField("email_address", "agent@example.com")
-        advanceTimeBy(300)
+        validation.answer("email_address", "agent@example.com")
         runCurrent()
-        validation.updateField("email_address", "")
-        advanceTimeBy(300)
+        validation.answer("email_address", "")
         runCurrent()
 
         val error = ValidationErrorDisplayMapper.forState(validation.stateFlow.value).single()

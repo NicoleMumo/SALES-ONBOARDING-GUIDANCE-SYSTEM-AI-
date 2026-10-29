@@ -573,3 +573,64 @@ object OnboardingPlaybooks {
 }
 
 // endregion
+
+// region Form sections
+
+/** One step of the agent's form: a few related questions shown together. */
+data class FormSection(val title: String, val fields: List<FormField>)
+
+/**
+ * The playbook split into sections. Sections only group neighbouring questions, so the
+ * questions keep the playbook's order, which the consistency measure compares sessions
+ * against. Questions a company added come last, under [COMPANY_SECTION].
+ */
+fun OnboardingPlaybook.sections(): List<FormSection> {
+    val sectionOf = SECTION_BY_FIELD[industry].orEmpty()
+    val sections = mutableListOf<FormSection>()
+    fields.forEach { field ->
+        val title = sectionOf[field.fieldId] ?: COMPANY_SECTION
+        val last = sections.lastOrNull()
+        if (last?.title == title) {
+            sections[sections.lastIndex] = last.copy(fields = last.fields + field)
+        } else {
+            sections += FormSection(title, listOf(field))
+        }
+    }
+    return sections
+}
+
+const val COMPANY_SECTION = "Company questions"
+
+private fun section(title: String, vararg fieldIds: String) = fieldIds.associateWith { title }
+
+private val SECTION_BY_FIELD: Map<String, Map<String, String>> = mapOf(
+    "banking" to section(
+        "Customer", "full_name", "business_name", "email_address", "mobile_phone_number",
+        "date_of_birth", "home_address"
+    ) + section(
+        "Identity", "identification_document", "identification_document_type",
+        "identification_document_number"
+    ) + section(
+        "Financial", "profession", "income", "assets"
+    ) + section(
+        "Declarations", "us_person_status", "politically_exposed_person_status"
+    ) + section(
+        "Account", "terms_and_conditions_acceptance", "commercial_address",
+        "beneficial_owner_information", "business_relationship_purpose",
+        "business_relationship_nature", "ownership_and_control_information"
+    ),
+    "telecom" to section(
+        "Customer", "full_name", "email_address", "contact_phone_number", "date_of_birth",
+        "gender", "physical_address"
+    ) + section(
+        "Identity", "identification_document", "subscriber_type"
+    ) + section(
+        "Service", "service_type", "contract_type", "payment_method",
+        "paperless_billing_preference", "phone_service_selection",
+        "internet_service_selection", "streaming_addons_selection"
+    ) + section(
+        "Activation", "subscriber_number"
+    )
+)
+
+// endregion

@@ -119,6 +119,8 @@ class FirebaseFieldEntryStore(
                 "context" to context,
                 "status" to "in_progress",
                 "startedAt" to System.currentTimeMillis(),
+                // Marks sessions whose saved checks are one per attempt (see ANSWER_CHECKS_ON_LEAVE).
+                "answerChecks" to ANSWER_CHECKS_ON_LEAVE,
                 "playbookId" to playbook.id,
                 "playbookTitle" to playbook.title,
                 "playbookVersion" to playbook.version,
@@ -265,6 +267,14 @@ class FirebaseFieldEntryStore(
             android.util.Log.e("FirebaseFieldEntryStore", message, error)
         }
 }
+
+/**
+ * Saved as `answerChecks` on every session started by this version: each saved
+ * `field_validation_*` event is one attempt, checked when the agent left the box.
+ * Sessions without it checked answers 300 ms after a keystroke, so their events
+ * include half-typed answers and cannot be counted as corrections.
+ */
+const val ANSWER_CHECKS_ON_LEAVE = "on_leave"
 
 /** Company ids become database path segments: 3 to 64 letters, digits, `_` or `-`. */
 internal val COMPANY_ID_PATTERN = Regex("^[A-Za-z0-9_-]{3,64}$")
