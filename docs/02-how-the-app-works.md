@@ -136,7 +136,7 @@ how backups are handled.
 
 ## Where things are in the code
 
-All app code is in one package, `app/src/main/java/com/example/salesonboarding/`:
+All app code is in one package, `android/app/src/main/java/com/example/salesonboarding/`:
 
 | File | What it does |
 | --- | --- |

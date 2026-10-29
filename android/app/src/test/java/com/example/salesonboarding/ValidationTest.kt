@@ -65,8 +65,8 @@ class ValidationRulesTest {
     }
 
     @Test fun catalogueHoldsExactlyTheFieldsTheModelWasTrainedOn() {
-        // Unit tests run from the app module, so the model's metadata is one folder up.
-        val metadata = File("../ml/models/preprocessing_meta.json").readText()
+        // Unit tests run from the app module (android/app), so ml/ is two folders up.
+        val metadata = File("../../ml/models/preprocessing_meta.json").readText()
         val vocabulary = Regex("\"field_vocab\"\\s*:\\s*\\[(.*?)]", RegexOption.DOT_MATCHES_ALL)
             .find(metadata)?.groupValues?.get(1)
             ?: error("field_vocab not found in preprocessing_meta.json")
