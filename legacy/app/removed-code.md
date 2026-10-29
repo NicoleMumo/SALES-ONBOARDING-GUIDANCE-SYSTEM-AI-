@@ -175,7 +175,45 @@ never updated. All five callers now use `validationRules`.
         get() = validationRules
 ```
 
-## 5. `KnownFields.fieldIds`
+## 5. `TfliteNextFieldPredictor.createOrNull` and `GreetingPreview`
+
+Files: `NextFieldPredictor.kt`, `MainActivity.kt` (removed in the commit after `d606683`)
+
+Why removed: nothing called `createOrNull`; `MainActivity` builds the predictor
+directly because it needs to know whether loading failed. `GreetingPreview` was
+an Android Studio preview of the onboarding screen, which already has its own
+preview (`OnboardingScreenPreview`).
+
+```kotlin
+        /**
+         * Creates the predictor, or returns null if the model or metadata is missing or the two
+         * do not match. A null predictor means no suggestions: use the rule-based order instead.
+         * [onError] receives the reason, for logging (it never contains customer data).
+         */
+        fun createOrNull(
+            assets: AssetManager,
+            onError: (Exception) -> Unit
+        ): TfliteNextFieldPredictor? =
+            try {
+                TfliteNextFieldPredictor(assets)
+            } catch (e: Exception) {
+                onError(e)
+                null
+            }
+
+@Preview(showBackground = true)
+@Composable
+fun GreetingPreview() {
+    SalesOnboardingTheme {
+        val scope = rememberCoroutineScope()
+        val store = remember { InMemoryFieldEntryStore() }
+        val controller = rememberOnboardingController("preview-session", scope, store)
+        OnboardingScreen(controller)
+    }
+}
+```
+
+## 6. `KnownFields.fieldIds`
 
 File: `validation/KnownFields.kt`
 

@@ -266,8 +266,11 @@ class FirebaseFieldEntryStore(
         }
 }
 
+/** Company ids become database path segments: 3 to 64 letters, digits, `_` or `-`. */
+internal val COMPANY_ID_PATTERN = Regex("^[A-Za-z0-9_-]{3,64}$")
+
 private fun requireValidCompanyId(companyId: String) {
-    require(companyId.matches(Regex("^[A-Za-z0-9_-]{3,64}$"))) {
+    require(COMPANY_ID_PATTERN.matches(companyId)) {
         "A valid company ID is required to store onboarding sessions."
     }
 }

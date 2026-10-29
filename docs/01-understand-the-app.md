@@ -41,15 +41,19 @@ See [02 - Connect Firebase](02-connect-firebase.md) for setup and access checks.
 
 | File or folder | What it does |
 | --- | --- |
-| `MainActivity.kt` | Sign-in, account checks, and screen routing. |
-| `OnboardingPlaybook.kt` | Chooses fields for an industry and customer type. |
-| `validation/` | Field definitions and answer checks. |
-| `OnboardingFormController.kt` | Connects form state, suggestions, progress, and saving. |
-| `NextFieldPredictor.kt` | Runs the TensorFlow Lite model. |
-| `OnboardingScreen.kt` | Shows the form, checks, progress, and suggestions. |
+| `MainActivity.kt` | App start and screen routing. |
+| `Auth.kt` | Sign-in and registration screens, and the Firebase account checks. |
+| `AgentScreens.kt` | Agent home, form choice, and customer consent. |
+| `Fields.kt` | The question catalogue, admin rule changes, and the playbooks that choose fields for an industry and customer type. |
+| `Validation.kt` | Answer checks and error messages. |
+| `OnboardingController.kt` | Form state, answer checking, suggestions, progress, and saving. |
+| `NextFieldPredictor.kt` | Runs the TensorFlow Lite next-field model. |
+| `Insights.kt` | The risk warning (trained model and hand-set fallback) and the consistency measure. |
+| `OnboardingScreen.kt` and `DocumentOcrScanner.kt` | The form, review and finish pages, and the ID photo reader. |
 | `FirebaseFieldEntryStore.kt` | Saves sessions and answers to Firebase. |
-| `AdminDataStore.kt` and `AdminDashboardScreen.kt` | Admin settings and agent invitations. |
+| `AdminDataStore.kt` and `AdminDashboardScreen.kt` | Admin settings, agent invitations, and team insights. |
 | `SessionHistoryScreen.kt` | Shows saved session history. |
+| `Ui.kt` | Colours and theme. |
 
 Open the project root in Android Studio. The app is in `app/`. Python data
 tools, model code and the training notebook are in `ml/`.

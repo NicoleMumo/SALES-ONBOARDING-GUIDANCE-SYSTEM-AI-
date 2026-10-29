@@ -572,7 +572,6 @@ class FirebaseAdminDataStore(
 
     companion object {
         private const val INVITATION_ID_PREFIX = "invite_"
-        private val COMPANY_ID_PATTERN = Regex("^[A-Za-z0-9_-]{3,64}$")
 
         private fun emailKey(email: String): String =
             Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)

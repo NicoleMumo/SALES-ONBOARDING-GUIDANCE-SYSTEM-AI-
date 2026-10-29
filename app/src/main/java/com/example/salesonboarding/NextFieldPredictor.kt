@@ -295,22 +295,6 @@ class TfliteNextFieldPredictor(
         // Letters, digits, apostrophes and "/" stay inside a word, as in the training vocabulary.
         private val TOKEN_SEPARATORS = Regex("[\\s,._;:!?()\"-]+")
 
-        /**
-         * Creates the predictor, or returns null if the model or metadata is missing or the two
-         * do not match. A null predictor means no suggestions: use the rule-based order instead.
-         * [onError] receives the reason, for logging (it never contains customer data).
-         */
-        fun createOrNull(
-            assets: AssetManager,
-            onError: (Exception) -> Unit
-        ): TfliteNextFieldPredictor? =
-            try {
-                TfliteNextFieldPredictor(assets)
-            } catch (e: Exception) {
-                onError(e)
-                null
-            }
-
         // Read the whole stream: available() is not a reliable size for compressed assets.
         private fun loadAsset(assets: AssetManager, name: String): ByteBuffer {
             val bytes = assets.open(name).use { it.readBytes() }

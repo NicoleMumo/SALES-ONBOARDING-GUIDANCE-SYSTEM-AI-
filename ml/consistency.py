@@ -44,9 +44,9 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # The app's standard field order, copied from the Kotlin playbooks.
 #
-# `tests/test_consistency.py` reads `OnboardingPlaybook.kt` and fails if this
-# copy drifts from it, and `tests/test_dataset.py` checks the generator against
-# this copy. Change `OnboardingPlaybook.kt` and these together.
+# `tests/test_consistency.py` reads the app's playbooks in `Fields.kt` and fails
+# if this copy drifts from them, and `tests/test_dataset.py` checks the generator
+# against this copy. Change the playbooks in `Fields.kt` and these together.
 # ---------------------------------------------------------------------------
 BANKING_INDIVIDUAL = [
     "full_name", "email_address", "mobile_phone_number", "date_of_birth",

@@ -21,7 +21,7 @@ from consistency import (  # noqa: E402
 
 PLAYBOOK_SOURCE = (
     ROOT / "app" / "src" / "main" / "java" / "com" / "example" / "salesonboarding"
-    / "OnboardingPlaybook.kt"
+    / "Fields.kt"
 )
 
 
@@ -233,7 +233,7 @@ def app_banking_fields():
         re.S,
     )
     if individual is None or business is None:
-        raise AssertionError("Banking field lists not found in OnboardingPlaybook.kt")
+        raise AssertionError("Banking field lists not found in Fields.kt")
     ids = lambda text: re.findall(r'"([a-z_]+)"', text)
     individual_ids = ids(individual.group(1))
     return individual_ids, ids(business.group(1)) + individual_ids[1:] + ids(business.group(2))
