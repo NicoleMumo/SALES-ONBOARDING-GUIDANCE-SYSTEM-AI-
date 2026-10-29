@@ -1,6 +1,5 @@
 import csv
-import importlib.util
-import re
+import sys
 import tempfile
 import unittest
 from collections import defaultdict
@@ -8,62 +7,35 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "ml"))
+
+import dataset  # noqa: E402
+from consistency import standard_order  # noqa: E402
+
+FORMS = {
+    "banking": ("individual", "business"),
+    "telecom": ("mobile", "broadband", "tv", "iot", "landline"),
+}
 
 
-def load_module(name, path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Cannot load module from {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-GENERATOR = load_module(
-    "onboarding_data_generator", ROOT / "data" / "generate_onboarding_data.py"
-)
-CHECKER = load_module("check_dataset", ROOT / "data" / "check_dataset.py")
-PLAYBOOK_SOURCE = (
-    ROOT / "app" / "src" / "main" / "java" / "com" / "example" / "salesonboarding"
-    / "OnboardingPlaybook.kt"
-)
-
-
-def app_banking_fields():
-    """Banking field order for (individual, business), read from the Kotlin playbook."""
-    source = PLAYBOOK_SOURCE.read_text(encoding="utf-8")
-    individual = re.search(r"val bankingIndividualFields\s*=\s*listOf\((.*?)\)", source, re.S)
-    business = re.search(
-        r"val bankingBusinessFields\s*=\s*listOf\((.*?)\)\s*\+\s*"
-        r"bankingIndividualFields\.drop\(1\)\s*\+\s*listOf\((.*?)\)",
-        source,
-        re.S,
-    )
-    if individual is None or business is None:
-        raise AssertionError("Banking field lists not found in OnboardingPlaybook.kt")
-    ids = lambda text: re.findall(r'"([a-z_]+)"', text)
-    individual_ids = ids(individual.group(1))
-    business_ids = ids(business.group(1)) + individual_ids[1:] + ids(business.group(2))
-    return individual_ids, business_ids
-
-
-def generator_banking_fields(context):
+def generator_fields(industry, context):
+    fields, _stages = dataset.DEFS[industry]
     return [
         field
-        for field, _stage, condition in GENERATOR.BANKING_FIELDS
+        for field, _stage, condition in fields
         if condition is None or condition(context)
     ]
 
 
 class OnboardingDataGeneratorTests(unittest.TestCase):
     def test_same_seed_produces_identical_events(self):
-        first = GENERATOR.generate(80, seed=42)
-        second = GENERATOR.generate(80, seed=42)
+        first = dataset.generate(80, seed=42)
+        second = dataset.generate(80, seed=42)
 
         self.assertEqual(first, second)
 
     def test_business_name_is_only_generated_for_business_banking(self):
-        events = GENERATOR.generate(80, seed=42)
+        events = dataset.generate(80, seed=42)
         business_name_events = [
             event for event in events if event["onboarding_field"] == "business_name"
         ]
@@ -78,7 +50,7 @@ class OnboardingDataGeneratorTests(unittest.TestCase):
         )
 
     def test_events_and_session_splits_are_consistent(self):
-        events = GENERATOR.generate(120, seed=7)
+        events = dataset.generate(120, seed=7)
         session_events = defaultdict(list)
         session_splits = defaultdict(set)
         for event in events:
@@ -102,34 +74,38 @@ class OnboardingDataGeneratorTests(unittest.TestCase):
                 self.assertEqual(event["previous_onboarding_field"], previous)
                 self.assertEqual(event["next_onboarding_field"], following)
 
-    def test_banking_form_matches_the_app_playbook(self):
-        individual, business = app_banking_fields()
-
-        self.assertEqual(generator_banking_fields("individual"), individual)
-        self.assertEqual(generator_banking_fields("business"), business)
+    def test_every_form_matches_the_app_order(self):
+        """Compared with ml/consistency.py's copy, which test_consistency.py checks
+        against the Kotlin playbooks, so the generator cannot drift from the app."""
+        for industry, contexts in FORMS.items():
+            for context in contexts:
+                with self.subTest(industry=industry, context=context):
+                    self.assertEqual(
+                        standard_order(industry, context), generator_fields(industry, context)
+                    )
 
     def test_no_agent_appears_in_more_than_one_split(self):
-        events = GENERATOR.generate(200, seed=7)
+        events = dataset.generate(200, seed=7)
 
-        self.assertEqual(CHECKER.agents_in_more_than_one_split(events), [])
+        self.assertEqual(dataset.agents_in_more_than_one_split(events), [])
 
     def test_removed_identity_steps_are_not_generated(self):
         removed = {"selfie_liveness_check", "face_match_verification"}
-        events = GENERATOR.generate(200, seed=11)
+        events = dataset.generate(200, seed=11)
 
-        self.assertFalse(removed & set(GENERATOR.F))
-        self.assertFalse(removed & {field for field, _, _ in GENERATOR.BANKING_FIELDS})
+        self.assertFalse(removed & set(dataset.F))
+        self.assertFalse(removed & {field for field, _, _ in dataset.BANKING_FIELDS})
         self.assertFalse(removed & {event["onboarding_field"] for event in events})
 
     def test_generator_rejects_nonpositive_session_count(self):
         with self.assertRaisesRegex(ValueError, "greater than zero"):
-            GENERATOR.generate(0, seed=1)
+            dataset.generate(0, seed=1)
 
     def test_csv_round_trip_keeps_v3_schema(self):
-        events = GENERATOR.generate(30, seed=19)
+        events = dataset.generate(30, seed=19)
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "data" / "dataset.csv"
-            GENERATOR.save(events, output_path)
+            dataset.save(events, output_path)
 
             with output_path.open(newline="", encoding="utf-8") as dataset_file:
                 reader = csv.DictReader(dataset_file)
@@ -170,7 +146,7 @@ class OnboardingDataGeneratorTests(unittest.TestCase):
             },
         ]
 
-        results = CHECKER.next_field_baselines(rows)
+        results = dataset.next_field_baselines(rows)
 
         self.assertEqual(results["B1 (context, field)"], 0.0)
         self.assertEqual(results["B2 (+ previous field, validation)"], 0.0)

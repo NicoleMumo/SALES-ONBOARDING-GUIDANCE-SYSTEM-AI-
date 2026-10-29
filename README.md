@@ -44,9 +44,8 @@ repository.
 | Folder or file | What it contains |
 | --- | --- |
 | `app/` | Android app, tests, and model files used by the app. |
-| `data/` | Tools to create and check simulated training data. |
-| `notebooks/` | Model training, testing, and export notebook. |
-| `src/models/` | Main model files and model settings. |
+| `ml/` | Simulated training data (`dataset.py`), the next-field model's layers, the risk model and consistency measure (`consistency.py`), and the training notebook. |
+| `ml/models/` | Model files and settings the app loads. |
 | `tests/` | Python tests. |
 | `database.rules.json` | Firebase database access rules. These still need to be tested and deployed. |
 | `docs/` | Five current guides listed below. |
@@ -57,12 +56,12 @@ repository.
 Run these commands from the project folder:
 
 ```powershell
-python data/generate_onboarding_data.py --sessions 8000 --seed 2026
-python data/check_dataset.py data/onboarding_dataset_v3.csv
+python ml/dataset.py generate --sessions 8000 --seed 2026
+python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
 ```
 
 The generated CSV is local and is not committed to Git. Run the notebook
-`notebooks/onboarding_transformer.ipynb` in Colab or a Python 3.11 environment
+`ml/onboarding_transformer.ipynb` in Colab or a Python 3.11 environment
 to train and test the model.
 
 Upload the whole CSV (about 34 MB) and wait for the upload to finish. The

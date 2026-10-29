@@ -12,7 +12,7 @@ import kotlin.math.exp
  * to 0.73 (ROC-AUC) against 0.55 to 0.59 for the hand-set rule, which is close to
  * guessing. See docs/04 for the full numbers and limits.
  *
- * The arithmetic here must stay identical to `src/consistency/features.py`, which
+ * The arithmetic here must stay identical to `ml/consistency.py`, which
  * produced the weights; `TrainedCompletionRiskModelTest` checks it against scores
  * computed in Python.
  *
@@ -54,7 +54,7 @@ class TrainedCompletionRiskModel internal constructor(
         )
     }
 
-    /** Feature values in [FEATURE_NAMES] order. Mirrors `features()` in features.py. */
+    /** Feature values in [FEATURE_NAMES] order. Mirrors `features()` in ml/consistency.py. */
     internal fun featureValues(
         events: List<CompletionRiskEvent>,
         isBanking: Boolean,

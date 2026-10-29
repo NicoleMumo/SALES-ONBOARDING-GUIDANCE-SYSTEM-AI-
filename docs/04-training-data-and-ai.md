@@ -8,8 +8,8 @@ guidance, and on-device speed test.
 Run these commands from the project folder:
 
 ```powershell
-python data/generate_onboarding_data.py --sessions 8000 --seed 2026
-python data/check_dataset.py data/onboarding_dataset_v3.csv
+python ml/dataset.py generate --sessions 8000 --seed 2026
+python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
 ```
 
 The generator uses Python's built-in libraries. It creates simulated banking
@@ -97,7 +97,7 @@ The test covers the standard forms only. It does not include company custom
 fields, company rule changes, or edits that make an earlier answer invalid.
 Its results are an estimate of app behavior, not a full reproduction.
 
-The model and its settings must be kept as a matching pair in `src/models/`.
+The model and its settings must be kept as a matching pair in `ml/models/`.
 Gradle copies both to the Android app. Do not replace only one file.
 
 ## Completion-risk guidance
@@ -106,15 +106,15 @@ Completion-risk guidance is separate from next-field prediction. It is a
 warning based on answer checks, time spent, revisits, and required field
 progress. It is not a proven probability that a customer will stop.
 
-The app uses a trained logistic regression saved in `src/models/risk_model.json`.
+The app uses a trained logistic regression saved in `ml/models/risk_model.json`.
 If that file is missing or refused, it falls back to the older hand-set rule.
 To train the model and compare it with the hand-set rule on agents never seen
 in training:
 
 ```powershell
-.\.venv-ml\Scripts\python.exe src/consistency/train_risk.py `
-  data/onboarding_dataset_v3.csv --out src/models/risk_model.json `
-  --report data/risk_model_report.json
+.\.venv-ml\Scripts\python.exe ml/consistency.py `
+  ml/data/onboarding_dataset_v3.csv --out ml/models/risk_model.json `
+  --report ml/models/risk_model_report.json
 ```
 
 The warning thresholds are measured on validation agents; test agents are

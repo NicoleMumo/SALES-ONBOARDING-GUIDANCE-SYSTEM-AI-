@@ -14,7 +14,7 @@ class SessionConsistencyTest {
             RecordedStep(field, passed = index !in failed, timestampMillis = 1_000L * index)
         }
 
-    // The same cases as tests/test_consistency_anomaly.py, so Kotlin and Python
+    // The same cases as OutOfOrderTests in tests/test_consistency.py, so Kotlin and Python
     // agree on what "steps out of place" means.
     @Test
     fun countsMatchThePythonDefinition() {

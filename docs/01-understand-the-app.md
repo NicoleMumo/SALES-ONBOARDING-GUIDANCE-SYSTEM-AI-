@@ -52,8 +52,8 @@ See [02 - Connect Firebase](02-connect-firebase.md) for setup and access checks.
 | `SessionHistoryScreen.kt` | Shows saved session history. |
 
 Open the project root in Android Studio. The app is in `app/`. Python data
-tools are in `data/`, and model training is in `notebooks/`.
+tools, model code and the training notebook are in `ml/`.
 
-The main model and its settings are in `src/models/`. The Gradle task
-`syncOnboardingModelAssets` copies both files into the app. Keep the model and
-settings together.
+The model files and their settings are in `ml/models/`. The Gradle task
+`syncOnboardingModelAssets` copies the next-field model, its settings and the
+risk model into the app. Keep the model and settings together.

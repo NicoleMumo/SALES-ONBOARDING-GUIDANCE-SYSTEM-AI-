@@ -8,7 +8,7 @@ import org.junit.Test
 
 /**
  * The Kotlin scorer must agree with the Python that trained it. The expected
- * scores below were computed by `src/consistency/features.py` with the shipped
+ * scores below were computed by `ml/consistency.py` with the shipped
  * weights; if either side changes, these fail.
  */
 class TrainedCompletionRiskModelTest {
@@ -22,7 +22,7 @@ class TrainedCompletionRiskModelTest {
 
     /**
      * The weights the app ships, as exported by the training script into
-     * `src/models/risk_model.json`. Built through [TrainedCompletionRiskModel.fromParts]
+     * `ml/models/risk_model.json`. Built through [TrainedCompletionRiskModel.fromParts]
      * rather than the JSON reader, because Android's `org.json` is only a stub on
      * the unit-test classpath; the reader itself is a thin wrapper around this.
      */

@@ -6,7 +6,7 @@ package com.example.salesonboarding.consistency
  * This is deliberately not a model. Two plain counts per completed session:
  *  - steps out of place: the fewest steps that would have to move to put the
  *    session in the playbook's order (the same measure as `out_of_order_steps`
- *    in src/consistency/features.py, tested on simulated sessions);
+ *    in ml/consistency.py, tested on simulated sessions);
  *  - failed checks: how many answers had to be corrected.
  *
  * A session "followed the standard" when both are small. The limits come from

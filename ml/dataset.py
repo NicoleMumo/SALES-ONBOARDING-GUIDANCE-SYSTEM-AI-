@@ -1,7 +1,10 @@
 """
-Realistic synthetic onboarding-session generator (v3) for SalesMesh.
+Create and check the simulated onboarding sessions (v3) used for training.
 
-Replacement for the older v2 simulator. It retains the 28-column event
+`generate` writes the dataset; `check` reports its quality and the next-field
+lookup baselines the model has to beat.
+
+The generator is the replacement for the older v2 simulator. It retains the 28-column event
 schema and uses the same industries, contexts, and validation values. The
 banking flow matches the app's banking playbooks: an ID photo step
 (`identification_document`) followed by document type and number, and no
@@ -42,9 +45,11 @@ Every number in CONFIG is an assumption. When real (anonymised) data
 arrives, replace these with measured values and regenerate.
 
 Usage:
-    python data/generate_onboarding_data.py
-    python data/generate_onboarding_data.py --sessions 12000 --seed 7
-    python data/generate_onboarding_data.py --noise
+    python ml/dataset.py generate
+    python ml/dataset.py generate --sessions 12000 --seed 7
+    python ml/dataset.py generate --noise
+    python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
+    python ml/dataset.py check ml/data/onboarding_dataset_v3.csv --compare path/to/raw.csv
 """
 
 import argparse
@@ -52,9 +57,10 @@ import csv
 import math
 import random
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
+from statistics import median
 
 # ---------------------------------------------------------------------------
 # Configuration (assumptions -- calibrate against real data when available)
@@ -654,15 +660,224 @@ def save(events, path):
         w.writerows(events)
 
 
+# ---------------------------------------------------------------------------
+# Dataset checks: quality report and next-field lookup baselines
+# ---------------------------------------------------------------------------
+REQUIRED_COLUMNS = {
+    "session_id",
+    "sales_agent_id",
+    "context_value",
+    "onboarding_field",
+    "event_timestamp",
+    "event_duration_minutes",
+    "agent_response_time_minutes",
+    "previous_onboarding_field",
+    "next_onboarding_field",
+    "validation_status",
+    "failure_reason",
+    "is_revisit",
+    "session_status",
+    "split",
+}
+
+
+def read_dataset(path):
+    with path.open(newline="", encoding="utf-8") as dataset_file:
+        reader = csv.DictReader(dataset_file)
+        missing = REQUIRED_COLUMNS - set(reader.fieldnames or ())
+        if missing:
+            raise ValueError(f"{path} is missing columns: {sorted(missing)}")
+        rows = list(reader)
+    if not rows:
+        raise ValueError(f"{path} contains no data rows.")
+    return rows
+
+
+def deduplicate(rows):
+    seen = set()
+    unique_rows = []
+    for row in rows:
+        key = tuple(row.items())
+        if key not in seen:
+            seen.add(key)
+            unique_rows.append(row)
+    return unique_rows, len(rows) - len(unique_rows)
+
+
+def majority_table(rows, columns):
+    counts = defaultdict(Counter)
+    for row in rows:
+        key = tuple(row[column] or "" for column in columns)
+        counts[key][row["next_onboarding_field"]] += 1
+    return {key: targets.most_common(1)[0][0] for key, targets in counts.items()}
+
+
+def predict(table, rows, columns, fallback):
+    predictions = []
+    for row in rows:
+        key = tuple(row[column] or "" for column in columns)
+        predictions.append(table.get(key, fallback(row)))
+    return predictions
+
+
+def next_field_baselines(rows):
+    labeled_rows = [row for row in rows if row["next_onboarding_field"]]
+    training = [row for row in labeled_rows if row["split"] == "train"]
+    test = [row for row in labeled_rows if row["split"] == "test"]
+    if not training or not test:
+        raise ValueError("The dataset needs labeled train and test rows for baselines.")
+
+    global_majority = Counter(
+        row["next_onboarding_field"] for row in training
+    ).most_common(1)[0][0]
+    baseline_keys = (
+        ("B1 (context, field)", ("context_value", "onboarding_field")),
+        (
+            "B2 (+ previous field, validation)",
+            (
+                "context_value",
+                "previous_onboarding_field",
+                "onboarding_field",
+                "validation_status",
+            ),
+        ),
+        (
+            "B3 (+ agent id)",
+            (
+                "sales_agent_id",
+                "context_value",
+                "previous_onboarding_field",
+                "onboarding_field",
+                "validation_status",
+            ),
+        ),
+    )
+
+    results = {}
+    prior_predictions = None
+    for name, columns in baseline_keys:
+        table = majority_table(training, columns)
+        if prior_predictions is None:
+            fallback = lambda row: global_majority
+        else:
+            prior_by_row = {
+                id(row): prediction for row, prediction in zip(test, prior_predictions)
+            }
+            fallback = lambda row: prior_by_row[id(row)]
+        predictions = predict(table, test, columns, fallback)
+        accuracy = sum(
+            prediction == row["next_onboarding_field"]
+            for prediction, row in zip(predictions, test)
+        ) / len(test)
+        results[name] = accuracy
+        prior_predictions = predictions
+    return results
+
+
+def agents_in_more_than_one_split(rows):
+    """Agents with events in more than one split. With an agent split this is empty."""
+    splits_by_agent = defaultdict(set)
+    for row in rows:
+        splits_by_agent[row["sales_agent_id"]].add(row["split"])
+    return sorted(agent for agent, splits in splits_by_agent.items() if len(splits) > 1)
+
+
+def _number(row, key):
+    try:
+        return float(row[key] or 0)
+    except ValueError as error:
+        raise ValueError(f"Invalid number in {key}: {row[key]!r}") from error
+
+
+def _is_true(value):
+    return value.strip().lower() in {"true", "1", "yes"}
+
+
+def report(path):
+    all_rows = read_dataset(path)
+    rows, duplicate_count = deduplicate(all_rows)
+    sessions = defaultdict(list)
+    for row in rows:
+        sessions[row["session_id"]].append(row)
+    for events in sessions.values():
+        events.sort(key=lambda row: row["event_timestamp"])
+
+    event_counts = [len(events) for events in sessions.values()]
+    session_minutes = [
+        sum(
+            _number(event, "event_duration_minutes")
+            + _number(event, "agent_response_time_minutes")
+            for event in events
+        )
+        for events in sessions.values()
+    ]
+    final_statuses = Counter(events[-1]["session_status"] for events in sessions.values())
+    split_sessions = defaultdict(set)
+    for row in rows:
+        split_sessions[row["split"]].add(row["session_id"])
+    failures = [row for row in rows if row["validation_status"] == "failed"]
+    failed_fields = Counter(row["onboarding_field"] for row in failures)
+    revisits = sum(_is_true(row["is_revisit"]) for row in rows)
+    missing_reasons = sum(not row["failure_reason"].strip() for row in failures)
+
+    print(f"\n=== {path}")
+    print(
+        f"sessions {len(sessions):,}  events {len(rows):,}  "
+        f"agents {len({row['sales_agent_id'] for row in rows}):,}  "
+        f"exact duplicate rows removed {duplicate_count:,}"
+    )
+    print(
+        f"events/session median {median(event_counts):.0f}  "
+        f"p90 {sorted(event_counts)[int(0.9 * (len(event_counts) - 1))]}  "
+        f"max {max(event_counts)}  "
+        f">30 events {sum(count > 30 for count in event_counts) / len(event_counts):.1%}"
+    )
+    print(
+        f"session minutes median {median(session_minutes):.1f}  "
+        f"p90 {sorted(session_minutes)[int(0.9 * (len(session_minutes) - 1))]:.1f}"
+    )
+    print("final status:", dict(Counter(final_statuses).most_common()))
+    print(f"validation failure rate per event: {len(failures) / len(rows):.3f}")
+    print(f"revisit rate per event: {revisits / len(rows):.3f}")
+    print(f"failed events with no reason: {missing_reasons:,}")
+    print("most-failed fields:", dict(failed_fields.most_common(5)))
+    print("split (sessions):", {key: len(value) for key, value in split_sessions.items()})
+    shared_agents = agents_in_more_than_one_split(rows)
+    print(f"agents in more than one split: {len(shared_agents)}")
+    if shared_agents:
+        print("  warning: test scores include agents the model saw in training")
+    for name, accuracy in next_field_baselines(rows).items():
+        print(f"  {name:38s} test next-field accuracy {accuracy:.2%}")
+    if not shared_agents:
+        print("  (B3 equals B2 here: no test agent appears in training)")
+
+
+# ---------------------------------------------------------------------------
+# Command line
+# ---------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sessions", type=int, default=8000)
-    ap.add_argument("--seed", type=int, default=2026)
-    ap.add_argument("--out", default="data/onboarding_dataset_v3.csv")
-    ap.add_argument("--noise", action="store_true", help="also write <out>_raw.csv with realistic log noise")
+    commands = ap.add_subparsers(dest="command", required=True)
+
+    gen = commands.add_parser("generate", help="write a simulated dataset")
+    gen.add_argument("--sessions", type=int, default=8000)
+    gen.add_argument("--seed", type=int, default=2026)
+    gen.add_argument("--out", default="ml/data/onboarding_dataset_v3.csv")
+    gen.add_argument("--noise", action="store_true", help="also write <out>_raw.csv with realistic log noise")
+
+    check = commands.add_parser("check", help="report dataset quality and lookup baselines")
+    check.add_argument("path", type=Path)
+    check.add_argument("--compare", type=Path)
+
     args = ap.parse_args()
+    if args.command == "check":
+        report(args.path)
+        if args.compare:
+            report(args.compare)
+        return
+
     if args.sessions <= 0:
-        ap.error("--sessions must be greater than zero.")
+        gen.error("--sessions must be greater than zero.")
 
     events = generate(args.sessions, args.seed)
     save(events, args.out)

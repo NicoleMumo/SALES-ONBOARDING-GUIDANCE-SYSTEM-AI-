@@ -29,8 +29,8 @@ Moved here on 2026-10-29 (each file keeps the path it had before, without the
   notebook's app-style test replaced it: it uses the same rows, the app's
   allowed fields, and also measures the app's own fallback rule.
 - `src/evaluate_completion_risk.py` scored the old hand-set risk rule against
-  a threshold. `src/consistency/train_risk.py` replaced it: it trains the risk
-  model the app now uses and measures the hand-set rule on the same agents.
+  a threshold. `ml/consistency.py` replaced it: it trains the risk model the
+  app now uses and measures the hand-set rule on the same agents.
 - `tests/test_evaluation_baselines.py` tested only the two scripts above. It
   imports them from their old `src/` paths, so it is kept as a record, not as
   a working test.
@@ -40,8 +40,9 @@ Moved here on 2026-10-29 (each file keeps the path it had before, without the
   and 10.5% of normal sessions flagged on one dataset against 10% allowed). On
   sessions whose only fault was step order it caught 8-14%, while the plain
   out-of-order count caught 97-98%. The app uses that plain count instead. The
-  script imports `features` and `playbooks` from `src/consistency/`, so it only
-  runs from that folder.
+  script imports the old `features` and `playbooks` modules, which are now part
+  of `ml/consistency.py`, so it no longer runs as it is.
 
-The active project is organized around `app/`, `data/`, `docs/`, `notebooks/`,
-`src/`, and `tests/`.
+The active project is organized around `app/`, `ml/`, `docs/`, and `tests/`.
+`ml/` replaced the former `data/`, `notebooks/` and `src/` folders on
+2026-10-29.
