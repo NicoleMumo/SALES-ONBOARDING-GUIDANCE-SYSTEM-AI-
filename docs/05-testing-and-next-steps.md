@@ -14,10 +14,10 @@ deployed.
 
 ## Still needs testing
 
-1. Run the notebook from top to bottom. Record candidate coverage, app-style
-   Top-1/Top-3/Top-5, Macro F1, and TensorFlow Lite versus Keras results.
-   Keep these separate from old full-vocabulary results.
-2. Run Android unit tests and build the app:
+1. Test the model with suitable real-world data. The current results come from
+   simulated data only (see
+   [04 - Training data and AI](04-training-data-and-ai.md)).
+2. Run Android unit tests and build the app (last run: 68 tests, no failures):
 
    ```powershell
    .\gradlew.bat :app:testDebugUnitTest
@@ -32,9 +32,10 @@ deployed.
 7. Test with suitable real-world data before making claims about real agent
    or customer performance.
 
-The earlier `:app:compileDebugKotlin` check passed after a syntax fix. It was
-not a full app test. Firebase rule deployment, the new model evaluation, and
-physical-device timing are not confirmed.
+Done: the model evaluation (95.0% on simulated test steps; 86.5% for the app's
+own rule), the TensorFlow Lite check, and a load test on an Android emulator.
+Not confirmed: Firebase rule deployment, a full run of the app by an agent, and
+timing on a physical device.
 
 ## Before real customer data
 
