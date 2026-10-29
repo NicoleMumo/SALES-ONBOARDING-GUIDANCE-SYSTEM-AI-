@@ -128,11 +128,14 @@ one that was not; 0.5 is guessing.
   43% of later abandonments, and 30% of those warnings are right; at 10%, it
   catches 27% and 38% are right. It is better late in a session (0.83) than early
   (0.71). So it is a useful prompt to offer help, not a prediction to act on alone.
-- In the app, each answer the agent finishes is one input to the warning, the same
-  as in training. If `risk_model.json` is missing or refused, the app uses the old
-  hand-set rule.
-- Known approximation: the app's progress figure is required answers done out of
-  required questions; the training data used answers passed out of all questions.
+- In the app, each answer the agent finishes is one input to the warning, measured
+  the way the training data was: its time runs from the previous checked answer
+  (or from opening the form), so it includes asking and listening, not only
+  typing; progress is answers correct out of all the form's questions. If
+  `risk_model.json` is missing or refused (for example thresholds outside 0 to
+  1), the app uses the old hand-set rule.
+- The simulated times are assumptions; real step times may be distributed
+  differently, so the warning thresholds should be checked on real sessions.
 
 **Retraining** (needs numpy and scikit-learn):
 

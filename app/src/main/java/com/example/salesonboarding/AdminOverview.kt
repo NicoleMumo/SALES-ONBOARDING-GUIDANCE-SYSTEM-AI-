@@ -233,6 +233,14 @@ private fun StandardCard(report: ConsistencyReport) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (report.sessionsWithoutChecks > 0) {
+            Text(
+                "${report.sessionsWithoutChecks} completed sessions have no saved answer checks (for example, " +
+                    "a saved session submitted without changing an answer) and are not counted.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

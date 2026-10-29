@@ -70,7 +70,7 @@ object CompletionRiskCalculator {
         }
         if (features.progressPercent < LOW_PROGRESS_THRESHOLD_PERCENT) {
             score += LOW_PROGRESS_WEIGHT
-            reasons += "Less than half of the required information is complete."
+            reasons += "Less than half of the form is complete."
         }
 
         val boundedScore = score.coerceIn(0.0, 1.0)
@@ -135,8 +135,8 @@ object CompletionRiskScorer {
  * It answers the same question -- is this session heading for the customer giving
  * up? -- but its weights were learned from simulated sessions instead of chosen by
  * hand, and it was tested on agents it had never seen. On that test it scored 0.71
- * to 0.73 (ROC-AUC) against 0.55 to 0.59 for the hand-set rule, which is close to
- * guessing. See docs/04 for the full numbers and limits.
+ * to 0.74 (ROC-AUC) against 0.55 to 0.59 for the hand-set rule, which is close to
+ * guessing. See docs/03-ai-data-and-results.md for the full numbers and limits.
  *
  * The arithmetic here must stay identical to `ml/consistency.py`, which
  * produced the weights; `TrainedCompletionRiskModelTest` checks it against scores
@@ -194,16 +194,10 @@ class TrainedCompletionRiskModel internal constructor(
         val longEvents = events.count { it.durationMinutes > LONG_EVENT_THRESHOLD_MINUTES }
         val progress = events.last().progressPercent
 
-        var consecutiveFailures = 0
-        for (event in events.asReversed()) {
-            if (event.validationPassed) break
-            consecutiveFailures++
-        }
-
         return doubleArrayOf(
             count.toDouble(),
             failures.toDouble(),
-            consecutiveFailures.toDouble(),
+            trailingFailures(events).toDouble(),
             revisits.toDouble(),
             elapsed,
             longest,
@@ -227,11 +221,7 @@ class TrainedCompletionRiskModel internal constructor(
      */
     private fun reasonsFor(events: List<CompletionRiskEvent>): List<String> {
         val reasons = mutableListOf<String>()
-        var consecutiveFailures = 0
-        for (event in events.asReversed()) {
-            if (event.validationPassed) break
-            consecutiveFailures++
-        }
+        val consecutiveFailures = trailingFailures(events)
         if (consecutiveFailures >= 2) {
             reasons += "The last $consecutiveFailures answers did not pass their checks."
         } else if (events.any { !it.validationPassed }) {
@@ -248,6 +238,10 @@ class TrainedCompletionRiskModel internal constructor(
         }
         return reasons
     }
+
+    /** Failed checks in a row at the end of the session so far. */
+    private fun trailingFailures(events: List<CompletionRiskEvent>): Int =
+        events.asReversed().takeWhile { !it.validationPassed }.size
 
     companion object {
         const val ASSET_NAME = "risk_model.json"
@@ -282,8 +276,12 @@ class TrainedCompletionRiskModel internal constructor(
             highRiskThreshold: Double
         ): TrainedCompletionRiskModel? {
             if (featureNames != FEATURE_NAMES || weights.size != FEATURE_NAMES.size) return null
-            if (mediumRiskThreshold > highRiskThreshold) return null
             if (!intercept.isFinite() || weights.any { !it.isFinite() }) return null
+            // Scores lie between 0 and 1, so thresholds outside it (or NaN) would mark
+            // every step low or high. Refusing the file keeps the hand-set rule instead.
+            val thresholds = listOf(mediumRiskThreshold, highRiskThreshold)
+            if (thresholds.any { !it.isFinite() || it <= 0.0 || it >= 1.0 }) return null
+            if (mediumRiskThreshold > highRiskThreshold) return null
             return TrainedCompletionRiskModel(
                 weights = weights.toDoubleArray(),
                 intercept = intercept,
@@ -428,7 +426,12 @@ data class ConsistencyReport(
     val mostFailedFields: List<FieldCount> = emptyList(),
     val weekly: List<WeeklyConsistency> = emptyList(),
     /** Completed sessions from before answers were checked on leaving the box; not counted. */
-    val earlierSessionsLeftOut: Int = 0
+    val earlierSessionsLeftOut: Int = 0,
+    /**
+     * Completed sessions with no saved checks or no saved form (for example a resumed
+     * session submitted without changing an answer, or event saves that failed); not counted.
+     */
+    val sessionsWithoutChecks: Int = 0
 ) {
     val followedStandardShare: Double
         get() = if (sessionCount == 0) 0.0 else followedStandardCount.toDouble() / sessionCount
@@ -491,10 +494,15 @@ object SessionConsistencyCalculator {
     /** Summary for the admin dashboard. Pass completed sessions only. */
     fun report(sessions: List<ConsistencyInput>): ConsistencyReport {
         val (comparable, earlier) = sessions.partition { it.checksEachAttempt }
-        val scored = comparable
-            .filter { it.steps.isNotEmpty() && it.standardOrder.isNotEmpty() }
-            .map { it to forSession(it.steps, it.standardOrder) }
-        if (scored.isEmpty()) return ConsistencyReport(earlierSessionsLeftOut = earlier.size)
+        val (measurable, withoutChecks) = comparable
+            .partition { it.steps.isNotEmpty() && it.standardOrder.isNotEmpty() }
+        val scored = measurable.map { it to forSession(it.steps, it.standardOrder) }
+        if (scored.isEmpty()) {
+            return ConsistencyReport(
+                earlierSessionsLeftOut = earlier.size,
+                sessionsWithoutChecks = withoutChecks.size
+            )
+        }
 
         val agents = scored.groupBy { (input, _) -> input.agentId.ifBlank { "Unknown agent" } }
             .map { (agentId, agentSessions) ->
@@ -539,7 +547,8 @@ object SessionConsistencyCalculator {
             mostMisplacedFields = topFields(scored.flatMap { it.second.misplacedFieldIds }),
             mostFailedFields = topFields(scored.flatMap { it.second.failedFieldIds }),
             weekly = weekly,
-            earlierSessionsLeftOut = earlier.size
+            earlierSessionsLeftOut = earlier.size,
+            sessionsWithoutChecks = withoutChecks.size
         )
     }
 

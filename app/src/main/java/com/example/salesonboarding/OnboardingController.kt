@@ -233,8 +233,12 @@ class OnboardingFormController(
      * The trained abandonment-risk model. When null (file missing or refused),
      * the older hand-set rule in [CompletionRiskScorer] is used instead.
      */
-    private val riskModel: TrainedCompletionRiskModel? = null
+    private val riskModel: TrainedCompletionRiskModel? = null,
+    private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
+    /** When the form opened: the first answer's time is counted from here. */
+    private val openedAtMillis = nowMillis()
+
     val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
         id = "$industry-standard-onboarding",
         title = "$industry onboarding",
@@ -247,7 +251,8 @@ class OnboardingFormController(
     private val session = LiveValidationSession(
         sessionId = sessionId,
         fields = fields,
-        initialValues = initialValues
+        initialValues = initialValues,
+        nowMillis = nowMillis
     )
 
     val stateFlow: StateFlow<LiveValidationState> = session.stateFlow
@@ -292,17 +297,18 @@ class OnboardingFormController(
                     val validatedAt = interaction.validatedAtMillis
                     val passed = interaction.validationPassed
                     if (validatedAt != null && passed != null && processedRiskInteractions.add(index)) {
-                        val durationMinutes =
-                            (validatedAt - interaction.startedAtMillis).coerceAtLeast(0) / 60_000.0
                         val wasRevisited = state.interactionHistory
                             .take(index)
                             .any { it.fieldId == interaction.fieldId }
+                        // The risk model was trained on simulated steps whose time is the whole
+                        // step (asking, answering, typing) and whose progress is answers passed
+                        // out of all the form's questions, so the app measures both the same way.
                         recordRiskEvent(
                             CompletionRiskEvent(
-                                durationMinutes = durationMinutes,
+                                durationMinutes = stepMinutes(state, validatedAt),
                                 validationPassed = passed,
                                 isRevisit = wasRevisited,
-                                progressPercent = readiness(state).scorePercent.toDouble()
+                                progressPercent = answeredPercent(state)
                             )
                         )
                         sessionStore?.appendEvent(
@@ -536,6 +542,23 @@ class OnboardingFormController(
 
     private fun isRequired(field: FormField, state: LiveValidationState): Boolean =
         field.isRequiredFor(state.values)
+
+    /** Minutes since the previous checked answer (or since the form opened), up to this check. */
+    private fun stepMinutes(state: LiveValidationState, validatedAt: Long): Double {
+        val previousCheck = state.interactionHistory
+            .mapNotNull { it.validatedAtMillis }
+            .filter { it < validatedAt }
+            .maxOrNull() ?: openedAtMillis
+        return (validatedAt - previousCheck).coerceAtLeast(0) / 60_000.0
+    }
+
+    /** Questions answered correctly, out of all the form's questions, as a percentage. */
+    private fun answeredPercent(state: LiveValidationState): Double =
+        if (fields.isEmpty()) 0.0 else fields.count { isValid(it, state) } * 100.0 / fields.size
+
+    /** The risk inputs recorded so far, one per checked answer. */
+    val riskEvents: List<CompletionRiskEvent>
+        get() = currentRiskEvents
 
     private fun isValid(field: FormField, state: LiveValidationState): Boolean =
         !state.values[field.fieldId].isNullOrBlank() &&

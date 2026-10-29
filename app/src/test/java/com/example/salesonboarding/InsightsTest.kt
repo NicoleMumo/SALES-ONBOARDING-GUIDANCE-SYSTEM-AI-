@@ -324,6 +324,11 @@ class TrainedCompletionRiskModelTest {
         assertNull("too few weights", build(weights = shippedWeights.dropLast(1)))
         assertNull("thresholds the wrong way round", build(medium = 0.9, high = 0.1))
         assertNull("a weight that is not a number", build(weights = shippedWeights.dropLast(1) + Double.NaN))
+        // A NaN threshold would make every step HIGH, since `score < NaN` is never true.
+        assertNull("a medium threshold that is not a number", build(medium = Double.NaN))
+        assertNull("a high threshold that is not a number", build(high = Double.NaN))
+        assertNull("a threshold at or below 0", build(medium = 0.0))
+        assertNull("a threshold at or above 1", build(high = 1.5))
     }
 
     @Test
@@ -523,6 +528,7 @@ class SessionConsistencyTest {
 
         assertEquals(0, report.sessionCount)
         assertEquals(0.0, report.followedStandardShare, 0.0)
+        assertEquals("both are reported as not counted, not silently dropped", 2, report.sessionsWithoutChecks)
     }
 
     @Test

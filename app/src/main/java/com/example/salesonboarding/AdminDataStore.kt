@@ -92,7 +92,7 @@ data class OnboardingAnalytics(
                         )
                     }
                 ),
-                fieldNames = sessions.fold(emptyMap()) { names, session -> names + session.fieldNames }
+                fieldNames = buildMap { sessions.forEach { putAll(it.fieldNames) } }
             )
         }
     }

@@ -46,6 +46,42 @@ class OnboardingFormControllerTest {
     }
 
     @Test
+    fun riskInputsAreMeasuredLikeTheTrainingData() = runTest {
+        // Training: a step's time is the whole step, and progress is answers passed out of
+        // all the form's questions. So each answer is timed from the previous check (or
+        // from opening the form), not from its first keystroke.
+        var now = 0L
+        val controller = OnboardingFormController(
+            "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address"),
+                KnownFields.get("profession")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            nowMillis = { now }
+        )
+        runCurrent()
+
+        now = 100_000 // the agent asks, then starts typing 100 s after the form opened
+        controller.updateField("full_name", "Jane Wanjiku")
+        now = 120_000
+        controller.checkField("full_name")
+        runCurrent()
+        now = 170_000
+        controller.updateField("email_address", "jane@example.com")
+        now = 180_000
+        controller.checkField("email_address")
+        runCurrent()
+
+        val events = controller.riskEvents
+        assertEquals(listOf(2.0, 1.0), events.map { it.durationMinutes })
+        assertEquals(100.0 / 3, events[0].progressPercent, 1e-9)
+        assertEquals(200.0 / 3, events[1].progressPercent, 1e-9)
+    }
+
+    @Test
     fun continueIsDisabledForInvalidAndEmptyRequiredFields() = runTest {
         val store = InMemoryFieldEntryStore()
         val controller = OnboardingFormController(

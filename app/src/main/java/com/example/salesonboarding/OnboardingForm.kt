@@ -82,6 +82,7 @@ fun OnboardingScreen(
         onSectionOpened = controller::setResumeField,
         onNewOnboarding = onNewOnboarding,
         onReturnToDashboard = onReturnToDashboard,
+        currentState = { controller.stateFlow.value },
         modifier = modifier
     )
 }
@@ -153,7 +154,9 @@ fun OnboardingForm(
     initialFieldId: String? = null,
     onSectionOpened: (fieldId: String) -> Unit = {},
     onNewOnboarding: () -> Unit = {},
-    onReturnToDashboard: () -> Unit = {}
+    onReturnToDashboard: () -> Unit = {},
+    /** The form state right now, including checks run since this composition. */
+    currentState: () -> LiveValidationState = { state }
 ) {
     val sections = remember(playbook) { playbook.sections() }
     val reviewPage = sections.size
@@ -174,7 +177,9 @@ fun OnboardingForm(
         onCheckPending()
         page = target.coerceIn(0, reviewPage)
         sections.getOrNull(page)?.let { section ->
-            val firstOpen = section.fields.firstOrNull { !it.isAnsweredIn(state) } ?: section.fields.first()
+            // The answer just checked above is not in `state` yet, so read the current state.
+            val latest = currentState()
+            val firstOpen = section.fields.firstOrNull { !it.isAnsweredIn(latest) } ?: section.fields.first()
             onSectionOpened(firstOpen.fieldId)
         }
     }
