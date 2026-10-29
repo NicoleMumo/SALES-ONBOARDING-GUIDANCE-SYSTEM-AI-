@@ -13,7 +13,8 @@ field to complete next. Company admins manage agents, forms, and sessions.
 - Identity checks are manual. The app has no paid KYC service, selfie,
   liveness, face-match, sanctions, or automated approval feature.
 - The training data is simulated. It does not come from real customers.
-- The new test for the model's Android prediction flow has not been run.
+- The model's results come from simulated data only. They do not show how well
+  it works with real agents or customers.
 - Firebase access rules and privacy plans still need testing before real
   customer data can be used.
 - Agent email verification is turned off for testing.
@@ -64,10 +65,27 @@ The generated CSV is local and is not committed to Git. Run the notebook
 `notebooks/onboarding_transformer.ipynb` in Colab or a Python 3.11 environment
 to train and test the model.
 
-The old 93.70% Top-1 result tested all known fields. It does not show how well
-the model works with the app's remaining-field list. The new app-style test is
-in the notebook but has not been run. See
-[04 - Training data and AI](docs/04-training-data-and-ai.md).
+Upload the whole CSV (about 34 MB) and wait for the upload to finish. The
+notebook stops with a message if the file is cut off.
+
+## How well the model works
+
+The model suggests the next field. It was tested on simulated sessions from
+agents it never saw in training, using only the fields the app allows at each
+step (16,533 steps):
+
+| Method | Right next field |
+| --- | --- |
+| App's own rule, no AI: first unfinished required field | 86.5% |
+| Lookup table on the previous field and last check | 93.0% |
+| Transformer model | **95.0%** |
+| Best possible (the right field was an allowed choice) | 97.9% |
+
+On the same steps the model was right and the app's rule wrong 1,449 times,
+and the reverse 41 times. Two full runs gave 95.0% and 95.2%, so read the
+model score as "about 95%". These numbers are from simulated data. They do
+not show real-world accuracy. See
+[04 - Training data and AI](docs/04-training-data-and-ai.md) for the details.
 
 ## Current guides
 
