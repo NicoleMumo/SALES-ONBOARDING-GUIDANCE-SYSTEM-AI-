@@ -27,7 +27,7 @@ customer information is used.
    ```
 
    If your database has another URL, change it there.
-6. Deploy the rules in [database.rules.json](../database.rules.json) to the
+6. Deploy the rules in [database.rules.json](../firebase/database.rules.json) to the
    database (see "Check access" below before relying on them).
 
 Never put Firebase service-account keys in the app or in this repository.
@@ -116,8 +116,9 @@ companies, each with an admin and an agent. Check that:
 - Agents can only create and update their own sessions, and only while a
   session is in progress.
 
-`database.rules.test.js` (run with `npm run test:database-rules`, which needs
-Node and the Firebase CLI) is an early test file. It checks an older database
+`firebase/database.rules.test.js` (run from the `firebase/` folder with
+`npm run test:database-rules`, which needs Node and the Firebase CLI) is an
+early test file. It checks an older database
 layout with paths at the root (`onboardingSessions/`, `salesAgents/`), not the
 current `companies/{companyId}/` layout, so it does not test the current rules
 and two of its three checks would fail. It needs to be rewritten for the current
