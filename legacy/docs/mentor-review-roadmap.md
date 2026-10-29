@@ -1,8 +1,8 @@
 # Archived mentor roadmap
 
 This is the original detailed roadmap, kept for history. Its status and file
-locations may be out of date. Use [`../../docs/05-testing-and-next-steps.md`](../../docs/05-testing-and-next-steps.md)
-for current progress and [`../../docs/01-understand-the-app.md`](../../docs/01-understand-the-app.md)
+locations may be out of date. Use [`../../docs/03-ai-data-and-results.md`](../../docs/03-ai-data-and-results.md)
+for current results and what is not yet shown, and [`../../docs/02-how-the-app-works.md`](../../docs/02-how-the-app-works.md)
 for the current app description.
 
 ---
