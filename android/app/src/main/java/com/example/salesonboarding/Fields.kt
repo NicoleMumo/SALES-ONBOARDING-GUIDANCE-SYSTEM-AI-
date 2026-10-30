@@ -330,6 +330,13 @@ class FieldRuleConfiguration(
     fun allFields(fields: List<FormField>): List<FormField> =
         (fields.map(::fieldFor) + customFields).distinctBy(FormField::fieldId)
 
+    /** Drops a custom field; unknown ids are ignored. */
+    fun withoutCustomField(fieldId: String): FieldRuleConfiguration = FieldRuleConfiguration(
+        overrides = overrides,
+        customFields = customFields.filterNot { it.fieldId == fieldId },
+        lockedFieldIds = lockedFieldIds
+    )
+
     /** Adds or replaces a custom field. Its id must be a safe database key. */
     fun withCustomField(field: FormField): FieldRuleConfiguration {
         require(FormField.isValidId(field.fieldId)) {
@@ -413,6 +420,19 @@ data class OnboardingPlaybook(
     }
 }
 
+/** The headings the admin's Questions page sorts standard questions under. */
+object QuestionGroups {
+    val order = listOf("Identity", "Contact", "Business", "Money", "Service")
+
+    fun of(fieldId: String): String = when {
+        fieldId in setOf("income", "assets", "payment_method") || "billing" in fieldId -> "Money"
+        fieldId.endsWith("_selection") || fieldId in setOf("service_type", "subscriber_type", "subscriber_number", "contract_type") -> "Service"
+        fieldId.startsWith("business") || listOf("beneficial", "ownership", "profession", "commercial").any { it in fieldId } -> "Business"
+        listOf("email", "phone", "address").any { it in fieldId } -> "Contact"
+        else -> "Identity"
+    }
+}
+
 object OnboardingPlaybooks {
     private val bankingIndividualFields = listOf(
         "full_name",
@@ -473,6 +493,10 @@ object OnboardingPlaybooks {
             "landline" to telecomFields("landline")
         )
     )
+
+    /** Every standard question an [industry]'s forms can ask, across all its customer types. */
+    fun fieldIdsFor(industry: String): Set<String> =
+        fieldsByContext[industry].orEmpty().values.flatten().toSet()
 
     fun forIndustry(
         industry: String,

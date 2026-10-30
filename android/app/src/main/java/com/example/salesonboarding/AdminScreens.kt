@@ -83,6 +83,7 @@ fun AdminDashboardScreen(
     var analyticsErrorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isLoadingSessions by remember(companyId, store) { mutableStateOf(false) }
     var sessionsErrorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
+    var openSession by remember(companyId, store) { mutableStateOf<StoredOnboardingSession?>(null) }
 
     fun <T> handle(result: Result<T>, onSuccess: (T) -> Unit = {}) {
         result.onSuccess {
@@ -142,6 +143,7 @@ fun AdminDashboardScreen(
             selected = selectedSection.ordinal,
             onSelect = { index ->
                 selectedSection = AdminSection.entries[index]
+                openSession = null
                 if (selectedSection == AdminSection.SESSIONS) loadSessions()
             }
         )
@@ -198,7 +200,16 @@ fun AdminDashboardScreen(
                         }
                     }
                 )
-                AdminSection.SESSIONS -> AppScreen(
+                AdminSection.SESSIONS -> if (openSession != null) {
+                    SessionDetailScreen(
+                        session = openSession!!,
+                        agentName = agents.firstOrNull {
+                            it.email.equals(openSession!!.agentEmail, ignoreCase = true)
+                        }?.displayName,
+                        onBack = { openSession = null },
+                        bottomBar = bottomBar
+                    )
+                } else AppScreen(
                     title = "Sessions",
                     subtitle = "The company's onboarding records. Answers are read-only.",
                     bottomBar = bottomBar,
@@ -211,14 +222,40 @@ fun AdminDashboardScreen(
                         sessions = sessions,
                         agents = agents,
                         isLoading = isLoadingSessions,
-                        errorMessage = sessionsErrorMessage
+                        errorMessage = sessionsErrorMessage,
+                        onOpenSession = { openSession = it }
                     )
                 }
                 AdminSection.QUESTIONS -> QuestionsPage(
                     configuration = configuration,
+                    industry = companyIndustry,
                     errorMessage = errorMessage,
                     onSignOut = onSignOut,
                     bottomBar = bottomBar,
+                    onUpdateField = { fieldId, name, description, type, rules, choices, onComplete ->
+                        store.updateCustomField(fieldId, name, description, type, rules, choices) {
+                            onComplete(it)
+                            if (!isCurrentAdminScope()) return@updateCustomField
+                            handle(it) {
+                                val updatedConfiguration = configuration.withCustomField(
+                                    customField(fieldId, name, description, type, rules, choices)
+                                )
+                                configuration = updatedConfiguration
+                                onConfigurationChanged(updatedConfiguration)
+                            }
+                        }
+                    },
+                    onDeleteField = { fieldId, onComplete ->
+                        store.deleteCustomField(fieldId) {
+                            onComplete(it)
+                            if (!isCurrentAdminScope()) return@deleteCustomField
+                            handle(it) {
+                                val updatedConfiguration = configuration.withoutCustomField(fieldId)
+                                configuration = updatedConfiguration
+                                onConfigurationChanged(updatedConfiguration)
+                            }
+                        }
+                    },
                     onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
                         store.addCustomField(fieldId, name, description, type, rules, choices) {
                             if (!isCurrentAdminScope()) {
@@ -535,23 +572,36 @@ private fun ProgressBar(share: Float) {
 
 // region Questions
 
+private typealias QuestionSaver =
+    (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun QuestionsPage(
     configuration: FieldRuleConfiguration,
+    industry: String?,
     errorMessage: String?,
     onSignOut: () -> Unit,
     bottomBar: @Composable ColumnScope.() -> Unit,
-    onAddField: (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit,
+    onAddField: QuestionSaver,
+    onUpdateField: QuestionSaver,
+    onDeleteField: (String, (Result<Unit>) -> Unit) -> Unit,
     onRequiredChanged: (String, Boolean) -> Unit
 ) {
     var showCustom by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<FormField?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<FormField?>(null) }
     var search by remember { mutableStateOf("") }
     val query = search.trim().lowercase(Locale.ROOT)
     val locked = FieldRuleConfiguration.DEFAULT_LOCKED_FIELD_IDS
-    val standard = KnownFields.all.filter { query.isBlank() || query in it.fieldName.lowercase(Locale.ROOT) }
-    val requiredCount = KnownFields.all.count { field -> configuration.rulesFor(field).any { it is Required } }
+    // Only the questions this company's industry actually asks.
+    val industryIds = industry?.let(OnboardingPlaybooks::fieldIdsFor)
+    val ofIndustry = KnownFields.all.filter { industryIds == null || it.fieldId in industryIds }
+    val requiredCount = ofIndustry.count { field -> configuration.rulesFor(field).any { it is Required } }
+    val groups = ofIndustry
+        .filter { query.isBlank() || query in it.fieldName.lowercase(Locale.ROOT) }
+        .groupBy { QuestionGroups.of(it.fieldId) }
 
     AdminPage(
         title = "Questions",
@@ -566,47 +616,55 @@ private fun QuestionsPage(
         }
         if (!showCustom) {
             Text(
-                "$requiredCount of ${KnownFields.all.size} required",
+                "$requiredCount of ${ofIndustry.size} required",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
             AdminTextField(search, { search = it }, placeholder = "Search questions", searchIcon = true)
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                 TextButton(onClick = {
-                    KnownFields.all.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, true) }
+                    ofIndustry.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, true) }
                 }) { Text("Make all required") }
                 TextButton(onClick = {
-                    KnownFields.all.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, false) }
+                    ofIndustry.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, false) }
                 }) { Text("Make all optional") }
             }
-            SectionCard(subtitle = "Turn a switch off to make a question optional. Locked questions always stay required.") {
-                if (standard.isEmpty()) {
-                    EmptyState("Nothing matches", "Try a different search.", iconRes = R.drawable.ic_sm_questions)
-                }
-                standard.forEachIndexed { index, field ->
-                    if (index > 0) HorizontalDivider(color = Sm.colors.divider)
-                    val required = configuration.rulesFor(field).any { it is Required }
-                    val isLocked = field.fieldId in locked
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Space.s)
-                    ) {
-                        Text(field.fieldName, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink, modifier = Modifier.weight(1f))
-                        if (isLocked) SmIcon(R.drawable.ic_sm_lock, Sm.colors.muted, size = 18.dp, description = "Locked")
-                        SmSwitch(
-                            checked = required,
-                            onCheckedChange = { onRequiredChanged(field.fieldId, it) },
-                            enabled = !isLocked,
-                            modifier = Modifier.semantics {
-                                contentDescription = "${field.fieldName} is " + if (required) "required" else "optional"
-                            }
-                        )
+            if (groups.isEmpty()) {
+                EmptyState("Nothing matches", "Try a different search.", iconRes = R.drawable.ic_sm_questions)
+            }
+            QuestionGroups.order.mapNotNull { name -> groups[name]?.let { name to it } }.forEach { (name, fields) ->
+                Text(name.uppercase(Locale.ROOT), style = smCapsStyle(), color = Sm.colors.muted)
+                SectionCard {
+                    fields.forEachIndexed { index, field ->
+                        if (index > 0) HorizontalDivider(color = Sm.colors.divider)
+                        val required = configuration.rulesFor(field).any { it is Required }
+                        val isLocked = field.fieldId in locked
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Space.s)
+                        ) {
+                            Text(field.fieldName, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink, modifier = Modifier.weight(1f))
+                            if (isLocked) SmIcon(R.drawable.ic_sm_lock, Sm.colors.muted, size = 18.dp, description = "Locked")
+                            SmSwitch(
+                                checked = required,
+                                onCheckedChange = { onRequiredChanged(field.fieldId, it) },
+                                enabled = !isLocked,
+                                modifier = Modifier.semantics {
+                                    contentDescription = "${field.fieldName} is " + if (required) "required" else "optional"
+                                }
+                            )
+                        }
                     }
                 }
             }
+            Text(
+                "Locked questions always stay required.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Sm.colors.muted
+            )
         } else {
             PrimaryButton("Add a question", onClick = { showAdd = true }, iconRes = R.drawable.ic_sm_plus)
             SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI model was not trained on them.") {
@@ -630,6 +688,10 @@ private fun QuestionsPage(
                         field.validationRules.filterIsInstance<OneOf>().flatMap { it.choices }
                             .takeIf { it.isNotEmpty() }
                             ?.let { Text("Options: ${it.joinToString()}", style = MaterialTheme.typography.bodySmall, color = Sm.colors.ink) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                            TextButton(onClick = { editing = field }) { Text("Edit") }
+                            TextButton(onClick = { deleting = field }) { Text("Delete", color = Sm.colors.cherry) }
+                        }
                     }
                 }
             }
@@ -637,28 +699,63 @@ private fun QuestionsPage(
     }
 
     if (showAdd) {
-        AddQuestionSheet(configuration, onDismiss = { showAdd = false }, onAddField = onAddField)
+        QuestionSheet(configuration, existing = null, onDismiss = { showAdd = false }, onSave = onAddField)
+    }
+    editing?.let { field ->
+        QuestionSheet(configuration, existing = field, onDismiss = { editing = null }, onSave = onUpdateField)
+    }
+    deleting?.let { field ->
+        var isDeleting by remember(field) { mutableStateOf(false) }
+        var deleteError by remember(field) { mutableStateOf<String?>(null) }
+        SmSheet("Delete this question?", onDismiss = { deleting = null }) {
+            Text(
+                "\"${field.fieldName}\" will no longer be asked in new sessions. Sessions already saved keep their answers.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Sm.colors.muted
+            )
+            deleteError?.let { Banner(it, Tone.Negative) }
+            PrimaryButton(
+                text = if (isDeleting) "Deleting…" else "Delete question",
+                onClick = {
+                    isDeleting = true
+                    onDeleteField(field.fieldId) { result ->
+                        isDeleting = false
+                        result.onSuccess { deleting = null }
+                            .onFailure { deleteError = it.message ?: "Could not delete the question." }
+                    }
+                },
+                isLoading = isDeleting
+            )
+            SecondaryButton("Keep it", onClick = { deleting = null })
+        }
     }
 }
 
+/** Adds a question, or edits [existing] (its ID stays the same). */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun AddQuestionSheet(
+private fun QuestionSheet(
     configuration: FieldRuleConfiguration,
+    existing: FormField?,
     onDismiss: () -> Unit,
-    onAddField: (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit
+    onSave: QuestionSaver
 ) {
-    var fieldName by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var fieldType by remember { mutableStateOf("text") }
-    var choiceOptions by remember { mutableStateOf("") }
-    var selectedRules by remember { mutableStateOf(setOf(AdminRule.REQUIRED)) }
+    var fieldName by remember { mutableStateOf(existing?.fieldName.orEmpty()) }
+    var description by remember { mutableStateOf(existing?.description.orEmpty()) }
+    var fieldType by remember { mutableStateOf(existing?.fieldType ?: "text") }
+    var choiceOptions by remember {
+        mutableStateOf(existing?.validationRules?.filterIsInstance<OneOf>()?.flatMap { it.choices }?.joinToString(", ").orEmpty())
+    }
+    var selectedRules by remember {
+        mutableStateOf(existing?.validationRules?.toAdminRules(existing.isRequired) ?: setOf(AdminRule.REQUIRED))
+    }
     var isSavingField by remember { mutableStateOf(false) }
-    val fieldId = remember(fieldName) {
+    val typedId = remember(fieldName) {
         fieldName.trim().lowercase(Locale.ROOT)
             .replace(Regex("[^a-z0-9]+"), "_")
             .trim('_')
     }
+    val fieldId = existing?.fieldId ?: typedId
     val parsedChoices = choiceOptions.split(',')
         .map(String::trim)
         .filter(String::isNotBlank)
@@ -666,10 +763,12 @@ private fun AddQuestionSheet(
         .toSet()
         .takeIf { fieldType == "choice" }
         .orEmpty()
-    val idTaken = fieldId in KnownFields.all.map { it.fieldId } ||
-        fieldId in configuration.customFields.map { it.fieldId }
+    val idTaken = existing == null && (
+        fieldId in KnownFields.all.map { it.fieldId } ||
+            fieldId in configuration.customFields.map { it.fieldId }
+        )
 
-    SmSheet("Add a question", onDismiss = onDismiss) {
+    SmSheet(if (existing == null) "Add a question" else "Edit question", onDismiss = onDismiss) {
         AdminTextField(fieldName, { fieldName = it }, label = "Question name")
         AdminTextField(description, { description = it }, label = "Instructions for the agent", singleLine = false)
         Text(
@@ -712,10 +811,14 @@ private fun AddQuestionSheet(
             }
         }
         PrimaryButton(
-            text = if (isSavingField) "Saving question…" else "Add question",
+            text = when {
+                isSavingField -> "Saving question…"
+                existing == null -> "Add question"
+                else -> "Save changes"
+            },
             onClick = {
                 isSavingField = true
-                onAddField(
+                onSave(
                     fieldId,
                     fieldName.trim(),
                     description.trim(),
@@ -730,7 +833,7 @@ private fun AddQuestionSheet(
             enabled = fieldId.isNotBlank() && fieldName.isNotBlank() && description.isNotBlank() &&
                 (fieldType != "choice" || parsedChoices.isNotEmpty()) && !idTaken,
             isLoading = isSavingField,
-            iconRes = R.drawable.ic_sm_plus
+            iconRes = if (existing == null) R.drawable.ic_sm_plus else R.drawable.ic_sm_check
         )
         if (isSavingField) {
             Text(

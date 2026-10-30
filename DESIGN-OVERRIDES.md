@@ -12,6 +12,4 @@ Where the app does something different from the design pictures, and why.
 | Launch | Splash library | Theme-only launch screen (Android 12+ shows the dark one) | The splash library is not available offline |
 | Whole app | Light and dark | Light only | Agreed with the team |
 | Customer type | First card chosen | Nothing chosen until tapped | Avoids onboarding the wrong type by accident |
-| Questions | Groups (Identity, Contact, Business, Money) | One list, searchable | Questions have no group saved |
-| Questions | Edit / delete own questions | Add only | The database layer has no edit or delete yet |
-| Questions | Only the company's industry | All standard questions | Not wired yet |
+| Questions | Four groups (Identity, Contact, Business, Money) | Those four plus a fifth, Service, for telecom plan questions | Telecom has questions that fit none of the four |

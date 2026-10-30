@@ -160,6 +160,18 @@ interface AdminDataStore {
         choices: Set<String>,
         onResult: (Result<Unit>) -> Unit
     )
+    /** Replaces the name, instructions, type, checks and choices of one of the company's own questions. */
+    fun updateCustomField(
+        fieldId: String,
+        name: String,
+        description: String,
+        fieldType: String,
+        rules: Set<AdminRule>,
+        choices: Set<String>,
+        onResult: (Result<Unit>) -> Unit
+    )
+    /** Removes one of the company's own questions from new sessions; saved sessions keep their copy. */
+    fun deleteCustomField(fieldId: String, onResult: (Result<Unit>) -> Unit)
     fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit)
     fun loadSessions(onResult: (Result<List<StoredOnboardingSession>>) -> Unit)
 }
@@ -473,6 +485,39 @@ class FirebaseAdminDataStore(
                 }
             }
         )
+    }
+
+    override fun updateCustomField(
+        fieldId: String,
+        name: String,
+        description: String,
+        fieldType: String,
+        rules: Set<AdminRule>,
+        choices: Set<String>,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        if (!isConfigured(onResult)) return
+        if (!isValidFieldId(fieldId, onResult)) return
+        fields.child(fieldId).setValue(
+            mapOf(
+                "fieldId" to fieldId,
+                "fieldName" to name,
+                "description" to description,
+                "fieldType" to fieldType,
+                "rules" to rules.map(AdminRule::name),
+                "choices" to choices.toList()
+            )
+        )
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun deleteCustomField(fieldId: String, onResult: (Result<Unit>) -> Unit) {
+        if (!isConfigured(onResult)) return
+        if (!isValidFieldId(fieldId, onResult)) return
+        fields.child(fieldId).removeValue()
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
     }
 
     override fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit) {

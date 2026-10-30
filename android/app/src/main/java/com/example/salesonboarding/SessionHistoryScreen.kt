@@ -1,16 +1,21 @@
 package com.example.salesonboarding
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
@@ -52,6 +56,19 @@ fun AgentSessionHistoryScreen(
     }
 
     LaunchedEffect(agentUid, store) { refresh() }
+    var openSession by remember(agentUid) { mutableStateOf<StoredOnboardingSession?>(null) }
+    openSession?.let { session ->
+        SessionDetailScreen(
+            session = session,
+            agentName = null,
+            onBack = { openSession = null },
+            modifier = modifier,
+            onResumeSession = if (session.status.equals("in_progress", ignoreCase = true)) {
+                { onResumeSession(session) }
+            } else null
+        )
+        return
+    }
     AppScreen(
         title = "My sessions",
         subtitle = "Review completed sessions or continue a saved one.",
@@ -71,6 +88,7 @@ fun AgentSessionHistoryScreen(
             agents = emptyList(),
             isLoading = isLoading,
             errorMessage = errorMessage,
+            onOpenSession = { openSession = it },
             onResumeSession = onResumeSession
         )
     }
@@ -81,8 +99,8 @@ fun AgentSessionHistoryScreen(
 // region Session list (agents and admins)
 
 /**
- * Searchable, filterable session cards, newest first. Answers are shown read-only under
- * "View answers"; [onResumeSession] adds a Resume button to unfinished sessions.
+ * Searchable, filterable session cards, newest first. Tapping a card calls [onOpenSession]
+ * (the detail page); [onResumeSession] adds a Continue button to unfinished sessions.
  */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -91,12 +109,12 @@ fun SessionHistoryContent(
     agents: List<SalesAgentAccount>,
     isLoading: Boolean,
     errorMessage: String?,
+    onOpenSession: (StoredOnboardingSession) -> Unit,
     onResumeSession: ((StoredOnboardingSession) -> Unit)? = null
 ) {
     var searchText by remember { mutableStateOf("") }
     var selectedStatus by remember { mutableStateOf("all") }
     var selectedIndustry by remember { mutableStateOf("all") }
-    var expandedSessionIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val search = searchText.trim().lowercase(Locale.ROOT)
     val filteredSessions = sessions
         .sortedByDescending { it.startedAt ?: 0L }
@@ -185,7 +203,6 @@ fun SessionHistoryContent(
                     agentName = agents.firstOrNull {
                         it.email.equals(session.agentEmail, ignoreCase = true)
                     }?.displayName,
-                    expanded = session.sessionId in expandedSessionIds,
                     onResumeSession = if (
                         onResumeSession != null && session.status.equals("in_progress", ignoreCase = true)
                     ) {
@@ -193,13 +210,7 @@ fun SessionHistoryContent(
                     } else {
                         null
                     },
-                    onToggleDetails = {
-                        expandedSessionIds = if (session.sessionId in expandedSessionIds) {
-                            expandedSessionIds - session.sessionId
-                        } else {
-                            expandedSessionIds + session.sessionId
-                        }
-                    }
+                    onOpen = { onOpenSession(session) }
                 )
             }
         }
@@ -210,69 +221,121 @@ fun SessionHistoryContent(
 private fun SessionCard(
     session: StoredOnboardingSession,
     agentName: String?,
-    expanded: Boolean,
     onResumeSession: (() -> Unit)?,
-    onToggleDetails: () -> Unit
+    onOpen: () -> Unit
 ) {
-    val filledFieldIds = session.entries
-        .filter { !it.value.isNullOrBlank() && it.isValid != false }
-        .mapTo(mutableSetOf()) { it.fieldId }
-        .apply { addAll(session.validatedFieldIds) }
     val totalFieldCount = session.fieldNames.size
     val completed = session.status.equals("completed", ignoreCase = true)
 
-    SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            Text(session.customerLabel(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            StatusPill(session.status.displayStatus(), if (completed) Tone.Positive else Tone.Neutral, showIcon = completed)
-        }
-        Text(
-            listOf(session.industry.displayIndustry(), session.context.displayValue(), session.startedAt.displayDateTime())
-                .filter(String::isNotBlank).joinToString(" · "),
-            style = MaterialTheme.typography.bodySmall,
-            color = Sm.colors.muted
-        )
-        Text(
-            buildList {
-                if (totalFieldCount > 0) add("${filledFieldIds.size} of $totalFieldCount answered")
-                add("Agent: ${agentName?.takeIf(String::isNotBlank) ?: session.agentEmail.ifBlank { session.agentId.shortAgentId() }}")
-            }.joinToString(" · "),
-            style = MaterialTheme.typography.bodySmall,
-            color = Sm.colors.muted
-        )
-        if (onResumeSession != null) {
-            PrimaryButton("Continue this session", onClick = onResumeSession)
-        }
-        TextButton(onClick = onToggleDetails) {
-            Text(if (expanded) "Hide answers" else "View answers")
-        }
-        if (expanded) {
-            HorizontalDivider(color = Sm.colors.divider)
-            if (session.entries.isEmpty()) {
+    Surface(
+        onClick = onOpen,
+        shape = RoundedCornerShape(22.dp),
+        color = Sm.colors.white,
+        border = BorderStroke(1.5.dp, Sm.colors.border),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(Space.l), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                 Text(
-                    "No answers saved yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Sm.colors.muted
+                    session.customerLabel(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Sm.colors.ink,
+                    modifier = Modifier.weight(1f)
                 )
-            }
-            session.entries.sortedBy { session.fieldNames[it.fieldId] ?: it.fieldId }.forEach { entry ->
-                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        session.fieldNames[entry.fieldId] ?: entry.fieldId.displayValue(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Sm.colors.muted
-                    )
-                    Text(entry.value.orEmpty(), style = MaterialTheme.typography.bodyMedium)
-                }
+                StatusPill(session.status.displayStatus(), if (completed) Tone.Positive else Tone.Neutral, showIcon = completed)
             }
             Text(
-                "Session ID ${session.sessionId} · agent account ${session.agentEmail.ifBlank { session.agentId.ifBlank { "unknown" } }}",
-                style = MaterialTheme.typography.labelSmall,
+                listOf(session.industry.displayIndustry(), session.context.displayValue(), session.startedAt.displayDateTime())
+                    .filter(String::isNotBlank).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
+            Text(
+                buildList {
+                    if (totalFieldCount > 0) add("${session.filledCount()} of $totalFieldCount answered")
+                    add("Agent: ${session.agentLabel(agentName)}")
+                }.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = Sm.colors.muted
+            )
+            if (onResumeSession != null) {
+                PrimaryButton("Continue this session", onClick = onResumeSession)
+            }
         }
     }
 }
+
+/**
+ * One session on its own page: who, when, how far it got, and every saved answer, read-only.
+ * [onResumeSession] adds a Continue button for an unfinished session (agents only).
+ */
+@Composable
+fun SessionDetailScreen(
+    session: StoredOnboardingSession,
+    agentName: String?,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onResumeSession: (() -> Unit)? = null,
+    bottomBar: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    val completed = session.status.equals("completed", ignoreCase = true)
+    val total = session.fieldNames.size
+    val filled = session.filledCount()
+    val answers = session.entries
+        .filter { !it.value.isNullOrBlank() }
+        .sortedBy { session.fieldNames[it.fieldId] ?: it.fieldId }
+
+    AppScreen(
+        title = session.customerLabel(),
+        subtitle = session.playbookTitle.ifBlank { session.industry.displayIndustry() },
+        onBack = onBack,
+        bottomBar = bottomBar,
+        modifier = modifier
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalAlignment = Alignment.CenterVertically) {
+            StatusPill(session.status.displayStatus(), if (completed) Tone.Positive else Tone.Neutral, showIcon = completed)
+            if (total > 0) {
+                Text("$filled of $total answered", style = MaterialTheme.typography.bodySmall, color = Sm.colors.muted)
+            }
+        }
+        SectionCard(title = "Session") {
+            DetailRow("Customer type", listOf(session.industry.displayIndustry(), session.context.displayValue()).filter(String::isNotBlank).joinToString(" · "))
+            DetailRow("Started", session.startedAt.displayDateTime())
+            session.completedAt?.let { DetailRow("Finished", it.displayDateTime()) }
+            DetailRow("Agent", session.agentLabel(agentName))
+            DetailRow("Session ID", session.sessionId)
+        }
+        SectionCard(title = "Answers") {
+            if (answers.isEmpty()) {
+                Text("No answers saved yet.", style = MaterialTheme.typography.bodyMedium, color = Sm.colors.muted)
+            }
+            answers.forEachIndexed { index, entry ->
+                if (index > 0) HorizontalDivider(color = Sm.colors.divider)
+                DetailRow(session.fieldNames[entry.fieldId] ?: entry.fieldId.displayValue(), entry.value.orEmpty())
+            }
+        }
+        if (onResumeSession != null) {
+            PrimaryButton("Continue this session", onClick = onResumeSession)
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(label.uppercase(Locale.ROOT), style = smCapsStyle(), color = Sm.colors.muted)
+        Text(value.ifBlank { "—" }, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink)
+    }
+}
+
+private fun StoredOnboardingSession.filledCount(): Int = entries
+    .filter { !it.value.isNullOrBlank() && it.isValid != false }
+    .mapTo(mutableSetOf()) { it.fieldId }
+    .apply { addAll(validatedFieldIds) }
+    .size
+
+private fun StoredOnboardingSession.agentLabel(agentName: String?): String =
+    agentName?.takeIf(String::isNotBlank) ?: agentEmail.ifBlank { agentId.shortAgentId() }
 
 // endregion
 
