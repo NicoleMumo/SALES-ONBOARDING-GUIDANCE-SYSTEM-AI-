@@ -34,6 +34,8 @@ interface OnboardingSessionStore : FieldEntryStore {
         playbook: OnboardingPlaybook,
         agentEmail: String
     )
+    /** Saves that the customer agreed at [atMillis], and which agent recorded it. */
+    fun recordConsent(sessionId: String, agentId: String, atMillis: Long) {}
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
     fun appendEvent(sessionId: String, type: String, fieldId: String?)
     fun markCompleted(sessionId: String)
@@ -136,6 +138,13 @@ class FirebaseFieldEntryStore(
                 }
             )
         ).reportFailure("Could not start onboarding session '$sessionId'.")
+    }
+
+    override fun recordConsent(sessionId: String, agentId: String, atMillis: Long) {
+        requireValidSessionId(sessionId)
+        sessions.child(sessionId).updateChildren(
+            mapOf("consentAt" to atMillis, "consentBy" to agentId)
+        ).reportFailure("Could not save the customer's consent for session '$sessionId'.")
     }
 
     override fun recordValidation(

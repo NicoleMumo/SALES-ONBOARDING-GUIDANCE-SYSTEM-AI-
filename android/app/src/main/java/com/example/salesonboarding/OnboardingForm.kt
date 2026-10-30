@@ -1,34 +1,27 @@
 package com.example.salesonboarding
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -39,12 +32,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 
 // region The form, connected to its controller
@@ -63,6 +59,7 @@ fun OnboardingScreen(
 
     OnboardingForm(
         playbook = controller.playbook,
+        customerType = controller.context.replaceFirstChar { it.titlecase(java.util.Locale.ROOT) },
         state = state,
         guidance = guidance,
         readiness = controller.readiness(state),
@@ -80,6 +77,7 @@ fun OnboardingScreen(
         configurationWarning = configurationWarning,
         initialFieldId = controller.resumeFieldId,
         onSectionOpened = controller::setResumeField,
+        onLeave = onReturnToDashboard,
         onNewOnboarding = onNewOnboarding,
         onReturnToDashboard = onReturnToDashboard,
         currentState = { controller.stateFlow.value },
@@ -103,11 +101,12 @@ fun rememberOnboardingController(
     initialValues: Map<String, String?> = emptyMap(),
     initialResumeFieldId: String? = null,
     isResumingSession: Boolean = false,
-    riskModel: TrainedCompletionRiskModel? = null
+    riskModel: TrainedCompletionRiskModel? = null,
+    consentAtMillis: Long? = null
 ): OnboardingFormController = remember(
     sessionId, scope, entryStore, predictor, industry, context,
     agentUid, fields, playbook, initialModelUnavailable, agentEmail,
-    initialValues, initialResumeFieldId, isResumingSession, riskModel
+    initialValues, initialResumeFieldId, isResumingSession, riskModel, consentAtMillis
 ) {
     OnboardingFormController(
         sessionId,
@@ -124,7 +123,8 @@ fun rememberOnboardingController(
         initialValues = initialValues,
         initialResumeFieldId = initialResumeFieldId,
         isResumingSession = isResumingSession,
-        riskModel = riskModel
+        riskModel = riskModel,
+        consentAtMillis = consentAtMillis
     )
 }
 
@@ -135,10 +135,12 @@ fun rememberOnboardingController(
 /**
  * The agent's form: one page per section (see [sections]), then a review page. The agent
  * can move between sections freely; submitting needs every required answer to be valid.
+ * Going back from the first section leaves the form ([onLeave]); the draft is already saved.
  */
 @Composable
 fun OnboardingForm(
     playbook: OnboardingPlaybook,
+    customerType: String,
     state: LiveValidationState,
     guidance: NextFieldGuidance,
     readiness: OnboardingReadiness,
@@ -153,6 +155,7 @@ fun OnboardingForm(
     configurationWarning: String? = null,
     initialFieldId: String? = null,
     onSectionOpened: (fieldId: String) -> Unit = {},
+    onLeave: () -> Unit = {},
     onNewOnboarding: () -> Unit = {},
     onReturnToDashboard: () -> Unit = {},
     /** The form state right now, including checks run since this composition. */
@@ -219,6 +222,7 @@ fun OnboardingForm(
         else -> key(page) {
             SectionPage(
                 playbook = playbook,
+                customerType = customerType,
                 sections = sections,
                 page = page,
                 state = state,
@@ -227,6 +231,7 @@ fun OnboardingForm(
                 draftSaveStatus = draftSaveStatus,
                 configurationWarning = configurationWarning,
                 onGoTo = ::goTo,
+                onLeave = onLeave,
                 onValueChange = onValueChange,
                 onCheckField = onCheckField,
                 modifier = modifier
@@ -238,6 +243,7 @@ fun OnboardingForm(
 @Composable
 private fun SectionPage(
     playbook: OnboardingPlaybook,
+    customerType: String,
     sections: List<FormSection>,
     page: Int,
     state: LiveValidationState,
@@ -246,39 +252,31 @@ private fun SectionPage(
     draftSaveStatus: DraftSaveStatus?,
     configurationWarning: String?,
     onGoTo: (Int) -> Unit,
+    onLeave: () -> Unit,
     onValueChange: (fieldId: String, value: String) -> Unit,
     onCheckField: (fieldId: String) -> Unit,
     modifier: Modifier
 ) {
     val section = sections[page]
-    // Only the model's pick is tagged; without a model the section order is the guide.
+    // Only the model's pick is offered; without a model the section order is the guide.
     val suggestedId = guidance.prediction?.fieldId?.takeIf { it == guidance.nextFieldId }
     val suggestedPage = sections.indexOfFirst { s -> s.fields.any { it.fieldId == suggestedId } }
-    val required = section.fields.filter { it.isRequiredFor(state.values) }
 
     AppScreen(
         title = section.title,
-        subtitle = "${playbook.title} · step ${page + 1} of ${sections.size}",
-        onBack = if (page > 0) ({ onGoTo(page - 1) }) else null,
+        subtitle = "$customerType · Step ${page + 1} of ${sections.size}",
+        onBack = if (page > 0) ({ onGoTo(page - 1) }) else onLeave,
         actions = { if (!isOnline) StatusPill("Offline", Tone.Caution) },
         modifier = modifier,
         bottomBar = {
             draftSaveStatus?.let { DraftStatusLine(it) }
-            if (required.isNotEmpty()) {
-                Text(
-                    "${required.count { it.isAnsweredIn(state) }} of ${required.size} required answered in this section",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             PrimaryButton(
                 text = if (page == sections.lastIndex) "Review answers" else "Next: ${sections[page + 1].title}",
-                onClick = { onGoTo(page + 1) },
-                icon = Icons.AutoMirrored.Filled.ArrowForward
+                onClick = { onGoTo(page + 1) }
             )
         }
     ) {
-        StepBar(sections, page, state, onGoTo)
+        ProgressSegments(sections, page, state, onGoTo)
         configurationWarning?.let { Banner(it, Tone.Caution) }
         if (!isOnline) {
             Banner("You are offline. Keep going; answers are sent when the connection returns.", Tone.Neutral)
@@ -291,38 +289,76 @@ private fun SectionPage(
                 title = if (high) "High chance this customer stops" else "This customer may not finish"
             )
         }
-        if (suggestedPage >= 0 && suggestedPage != page) {
-            val target = sections[suggestedPage]
-            Banner(
-                "${target.fields.first { it.fieldId == suggestedId }.fieldName}, in ${target.title}.",
-                Tone.Ai,
-                title = "Suggested next",
-                action = { TextButton(onClick = { onGoTo(suggestedPage) }) { Text("Go to ${target.title}") } }
+        if (suggestedId != null) {
+            val target = sections.getOrNull(suggestedPage)
+            SuggestedNextRow(
+                fieldName = sections.flatMap { it.fields }.first { it.fieldId == suggestedId }.fieldName,
+                onClick = if (suggestedPage >= 0 && suggestedPage != page) ({ onGoTo(suggestedPage) }) else null,
+                sectionName = target?.title?.takeIf { suggestedPage != page }
             )
         }
-        Text(
-            "Questions marked * are required.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        section.fields.forEachIndexed { index, field ->
-            QuestionCard(
-                field = field,
-                allFields = playbook.fields,
-                state = state,
-                isSuggested = field.fieldId == suggestedId,
-                imeAction = if (index == section.fields.lastIndex) ImeAction.Done else ImeAction.Next,
-                onValueChange = { onValueChange(field.fieldId, it) },
-                onCheck = { onCheckField(field.fieldId) }
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
+            section.fields.forEachIndexed { index, field ->
+                QuestionBlock(
+                    field = field,
+                    allFields = playbook.fields,
+                    state = state,
+                    imeAction = if (index == section.fields.lastIndex) ImeAction.Done else ImeAction.Next,
+                    onValueChange = { onValueChange(field.fieldId, it) },
+                    onCheck = { onCheckField(field.fieldId) }
+                )
+            }
         }
         if (guidance.modelUnavailable) {
             Text(
                 "Suggestions are off on this phone. Follow the order shown.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Sm.colors.muted
             )
         }
+    }
+}
+
+/** The AI's pick. A chevron and a tap show up when it is in another section. */
+@Composable
+private fun SuggestedNextRow(fieldName: String, sectionName: String?, onClick: (() -> Unit)?) {
+    val c = Sm.colors
+    val content: @Composable () -> Unit = {
+        Row(
+            Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SmIcon(R.drawable.ic_sm_plus, c.cherry, size = 24.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (sectionName == null) "Suggested next" else "Suggested next · $sectionName",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                    color = c.mutedStrong
+                )
+                Text(fieldName, style = MaterialTheme.typography.titleMedium, color = c.ink)
+            }
+            if (onClick != null) SmIcon(R.drawable.ic_sm_chevron_right, c.ink)
+        }
+    }
+    val shape = RoundedCornerShape(16.dp)
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+            shape = shape,
+            color = c.cream,
+            border = BorderStroke(1.5.dp, c.switchOff),
+            content = content
+        )
+    } else {
+        Surface(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+            shape = shape,
+            color = c.cream,
+            border = BorderStroke(1.5.dp, c.switchOff),
+            content = content
+        )
     }
 }
 
@@ -338,10 +374,11 @@ private fun ReviewPage(
     onSubmit: () -> Unit,
     modifier: Modifier
 ) {
+    val c = Sm.colors
     val ready = canSubmit && readiness.isReady
     AppScreen(
-        title = "Review answers",
-        subtitle = "Check each answer with the customer, then submit.",
+        title = "Review",
+        subtitle = "Check each answer with the customer",
         onBack = { onGoTo(sections.lastIndex) },
         modifier = modifier,
         bottomBar = {
@@ -351,29 +388,31 @@ private fun ReviewPage(
                 onClick = onSubmit,
                 enabled = ready,
                 isLoading = isSubmitting,
-                icon = Icons.Filled.Check
+                iconRes = R.drawable.ic_sm_check
             )
         }
     ) {
-        StepBar(sections, sections.size, state, onGoTo)
         val missing = readiness.incompleteRequiredFields + readiness.invalidOptionalFields
         if (missing.isEmpty()) {
             Banner("Every required question is answered.", Tone.Positive)
         } else {
-            Banner(missing.joinToString(), Tone.Caution, title = "Still needed before you can submit (${missing.size})")
+            Banner(missing.joinToString(), Tone.Caution, title = "Still needed (${missing.size})")
         }
         sections.forEachIndexed { index, section ->
             SectionCard(
                 title = section.title,
                 action = {
                     TextButton(onClick = { onGoTo(index) }) {
-                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text("  Edit")
+                        Text(
+                            "Edit",
+                            style = MaterialTheme.typography.titleSmall.copy(textDecoration = TextDecoration.Underline),
+                            color = c.ink
+                        )
                     }
                 }
             ) {
                 section.fields.forEachIndexed { fieldIndex, field ->
-                    if (fieldIndex > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    if (fieldIndex > 0) HorizontalDivider(color = c.divider)
                     AnswerRow(field, state)
                 }
             }
@@ -383,24 +422,25 @@ private fun ReviewPage(
 
 @Composable
 private fun AnswerRow(field: FormField, state: LiveValidationState) {
+    val c = Sm.colors
     val value = state.values[field.fieldId]
     val error = errorFor(field, state)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(field.fieldName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(field.fieldName, style = MaterialTheme.typography.bodySmall, color = c.muted)
         when {
-            !value.isNullOrBlank() -> Text(displayAnswer(field, value), style = MaterialTheme.typography.bodyLarge)
+            !value.isNullOrBlank() -> Text(displayAnswer(field, value), style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
             field.isRequiredFor(state.values) -> Text(
                 "Not answered (required)",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.error
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
+                color = c.cherry
             )
             else -> Text(
                 "Not answered",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, fontWeight = FontWeight.Normal),
+                color = c.muted
             )
         }
-        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.cherryDeep) }
     }
 }
 
@@ -412,6 +452,7 @@ private fun CompletionPage(
     onReturnToDashboard: () -> Unit,
     modifier: Modifier
 ) {
+    val c = Sm.colors
     val answered = fields.count { !values[it.fieldId].isNullOrBlank() }
     val summary = listOf("full_name", "business_name", "mobile_phone_number", "contact_phone_number", "email_address")
         .mapNotNull { id ->
@@ -419,37 +460,28 @@ private fun CompletionPage(
             values[id]?.takeIf(String::isNotBlank)?.let { field.fieldName to it }
         }
     AppScreen(
-        title = "Onboarding complete",
-        subtitle = "The customer's details were saved.",
+        title = "Done",
+        subtitle = "The customer's details were saved",
         modifier = modifier,
         bottomBar = {
-            PrimaryButton("Onboard another customer", onClick = onNewOnboarding, icon = Icons.Filled.Add)
-            SecondaryButton("Back to home", onClick = onReturnToDashboard, icon = Icons.Filled.Home)
+            PrimaryButton("Onboard another customer", onClick = onNewOnboarding, iconRes = R.drawable.ic_sm_plus)
+            SecondaryButton("Back to home", onClick = onReturnToDashboard)
         }
     ) {
         Box(Modifier.fillMaxWidth().padding(vertical = Space.l), contentAlignment = Alignment.Center) {
             Box(
-                Modifier
-                    .size(88.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(50)),
+                Modifier.size(88.dp).background(c.lime, CircleShape),
                 contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
+            ) { SmIcon(R.drawable.ic_sm_check, c.ink, size = 44.dp) }
         }
-        SectionCard(title = "Customer summary", subtitle = "$answered of ${fields.size} questions answered") {
+        SectionCard(title = "Customer", subtitle = "$answered of ${fields.size} questions answered") {
             if (summary.isEmpty()) {
                 Text("Customer record saved.", style = MaterialTheme.typography.bodyMedium)
             }
             summary.forEach { (label, value) ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(label, style = MaterialTheme.typography.bodySmall, color = c.muted)
+                    Text(value, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
                 }
             }
         }
@@ -458,7 +490,7 @@ private fun CompletionPage(
 
 // endregion
 
-// region Step bar and status
+// region Progress and status
 
 private enum class SectionStatus { Todo, Started, Done, NeedsFix }
 
@@ -473,68 +505,58 @@ private fun FormSection.status(state: LiveValidationState): SectionStatus {
     }
 }
 
-/** One pill per section plus "Review"; tap any of them to go there. [page] == sections.size is the review. */
+/**
+ * One thin bar per section (ink when done or current, cherry when a section needs a fix).
+ * Each is also a button, so the agent can move to any section.
+ */
 @Composable
-private fun StepBar(sections: List<FormSection>, page: Int, state: LiveValidationState, onGoTo: (Int) -> Unit) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(page) { listState.animateScrollToItem(page) }
-    LazyRow(state = listState, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-        itemsIndexed(sections) { index, section ->
-            StepPill(index + 1, section.title, section.status(state), index == page) { onGoTo(index) }
-        }
-        item {
-            StepPill(sections.size + 1, "Review", SectionStatus.Todo, page == sections.size) { onGoTo(sections.size) }
-        }
-    }
-}
-
-@Composable
-private fun StepPill(number: Int, title: String, status: SectionStatus, isCurrent: Boolean, onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val (container, content) = when {
-        isCurrent -> scheme.primary to scheme.onPrimary
-        status == SectionStatus.NeedsFix -> scheme.errorContainer to scheme.onErrorContainer
-        status == SectionStatus.Done -> scheme.primaryContainer to scheme.onPrimaryContainer
-        else -> scheme.surfaceVariant to scheme.onSurfaceVariant
-    }
-    val statusWords = when (status) {
-        SectionStatus.Done -> "done"
-        SectionStatus.NeedsFix -> "needs a fix"
-        SectionStatus.Started -> "started"
-        SectionStatus.Todo -> "not started"
-    }
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(50),
-        color = container,
-        contentColor = content,
-        modifier = Modifier
-            .heightIn(min = 40.dp)
-            .semantics {
-                contentDescription = "Step $number, $title, $statusWords" + if (isCurrent) ", current" else ""
+private fun ProgressSegments(sections: List<FormSection>, page: Int, state: LiveValidationState, onGoTo: (Int) -> Unit) {
+    val c = Sm.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        sections.forEachIndexed { index, section ->
+            val status = section.status(state)
+            val words = when (status) {
+                SectionStatus.Done -> "done"
+                SectionStatus.NeedsFix -> "needs a fix"
+                SectionStatus.Started -> "started"
+                SectionStatus.Todo -> "not started"
             }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            when (status) {
-                SectionStatus.Done -> Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                SectionStatus.NeedsFix -> Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
-                else -> Text("$number", style = MaterialTheme.typography.labelMedium)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clickable(role = Role.Button) { onGoTo(index) }
+                    .semantics {
+                        contentDescription = "Step ${index + 1}, ${section.title}, $words" +
+                            if (index == page) ", current" else ""
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .background(
+                            when {
+                                status == SectionStatus.NeedsFix -> c.cherry
+                                index == page || status == SectionStatus.Done -> c.ink
+                                else -> c.line
+                            },
+                            RoundedCornerShape(3.dp)
+                        )
+                )
             }
-            Text(title, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
 
 @Composable
 private fun DraftStatusLine(status: DraftSaveStatus) {
+    val c = Sm.colors
     val (text, color) = when {
-        status.errorMessage != null -> status.errorMessage to MaterialTheme.colorScheme.error
-        status.isSaving -> "Saving draft…" to MaterialTheme.colorScheme.onSurfaceVariant
-        status.savedAtMillis != null -> "Draft saved" to MaterialTheme.colorScheme.onSurfaceVariant
+        status.errorMessage != null -> status.errorMessage to c.cherryDeep
+        status.isSaving -> "Saving draft…" to c.muted
+        status.savedAtMillis != null -> "Draft saved" to c.muted
         else -> return
     }
     Text(text, style = MaterialTheme.typography.bodySmall, color = color)
@@ -548,9 +570,10 @@ private fun DraftStatusLine(status: DraftSaveStatus) {
 @Composable
 private fun OnboardingFormPreview() {
     val playbook = OnboardingPlaybooks.forIndustry("banking", FieldRuleConfiguration(), "individual")
-    SalesOnboardingTheme(darkTheme = false) {
+    SalesOnboardingTheme {
         OnboardingForm(
             playbook = playbook,
+            customerType = "Individual",
             state = LiveValidationState(
                 values = mapOf("full_name" to "Jane Wanjiku", "email_address" to "jane@example"),
                 results = mapOf(

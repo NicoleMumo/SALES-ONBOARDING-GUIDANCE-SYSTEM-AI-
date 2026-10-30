@@ -7,17 +7,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
@@ -64,9 +58,12 @@ fun AgentSessionHistoryScreen(
         onBack = onBack,
         modifier = modifier,
         actions = {
-            IconButton(onClick = ::refresh, enabled = !isLoading) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-            }
+            HeaderButton(
+                icon = R.drawable.ic_sm_refresh,
+                description = "Refresh",
+                onClick = ::refresh,
+                enabled = !isLoading
+            )
         }
     ) {
         SessionHistoryContent(
@@ -141,36 +138,46 @@ fun SessionHistoryContent(
             onValueChange = { searchText = it },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Search names, contact details, agents or session ID") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            leadingIcon = { SmIcon(R.drawable.ic_sm_search, Sm.colors.muted) },
             singleLine = true,
-            shape = MaterialTheme.shapes.medium
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Sm.colors.ink,
+                unfocusedBorderColor = Sm.colors.border,
+                focusedTextColor = Sm.colors.ink,
+                unfocusedTextColor = Sm.colors.ink,
+                cursorColor = Sm.colors.ink
+            )
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalArrangement = Arrangement.spacedBy(Space.s)
+        ) {
             listOf("all" to "All", "completed" to "Completed", "in_progress" to "In progress").forEach { (value, label) ->
-                FilterChip(selected = selectedStatus == value, onClick = { selectedStatus = value }, label = { Text(label) })
+                SmChip(label, selected = selectedStatus == value, onClick = { selectedStatus = value })
             }
             listOf("banking" to "Banking", "telecom" to "Telecom").forEach { (value, label) ->
-                FilterChip(
+                SmChip(
+                    label,
                     selected = selectedIndustry == value,
-                    onClick = { selectedIndustry = if (selectedIndustry == value) "all" else value },
-                    label = { Text(label) }
+                    onClick = { selectedIndustry = if (selectedIndustry == value) "all" else value }
                 )
             }
         }
         Text(
             "${filteredSessions.size} of ${sessions.size} sessions · newest first",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Sm.colors.muted
         )
 
         when {
             errorMessage != null -> Banner(errorMessage, Tone.Negative)
-            isLoading && sessions.isEmpty() -> Text("Loading sessions…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            isLoading && sessions.isEmpty() -> Text("Loading sessions…", color = Sm.colors.muted)
             filteredSessions.isEmpty() -> EmptyState(
                 title = if (sessions.isEmpty()) "No sessions yet" else "Nothing matches",
                 message = if (sessions.isEmpty()) "Onboarding sessions will appear here."
                 else "Try a different search or filter.",
-                icon = Icons.AutoMirrored.Filled.List
+                iconRes = R.drawable.ic_sm_sessions
             )
             else -> filteredSessions.forEach { session ->
                 SessionCard(
@@ -223,7 +230,7 @@ private fun SessionCard(
             listOf(session.industry.displayIndustry(), session.context.displayValue(), session.startedAt.displayDateTime())
                 .filter(String::isNotBlank).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Sm.colors.muted
         )
         Text(
             buildList {
@@ -231,21 +238,21 @@ private fun SessionCard(
                 add("Agent: ${agentName?.takeIf(String::isNotBlank) ?: session.agentEmail.ifBlank { session.agentId.shortAgentId() }}")
             }.joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Sm.colors.muted
         )
         if (onResumeSession != null) {
-            PrimaryButton("Continue this session", onClick = onResumeSession, icon = Icons.AutoMirrored.Filled.ArrowForward)
+            PrimaryButton("Continue this session", onClick = onResumeSession)
         }
         TextButton(onClick = onToggleDetails) {
             Text(if (expanded) "Hide answers" else "View answers")
         }
         if (expanded) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = Sm.colors.divider)
             if (session.entries.isEmpty()) {
                 Text(
                     "No answers saved yet.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Sm.colors.muted
                 )
             }
             session.entries.sortedBy { session.fieldNames[it.fieldId] ?: it.fieldId }.forEach { entry ->
@@ -253,7 +260,7 @@ private fun SessionCard(
                     Text(
                         session.fieldNames[entry.fieldId] ?: entry.fieldId.displayValue(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Sm.colors.muted
                     )
                     Text(entry.value.orEmpty(), style = MaterialTheme.typography.bodyMedium)
                 }
@@ -261,7 +268,7 @@ private fun SessionCard(
             Text(
                 "Session ID ${session.sessionId} · agent account ${session.agentEmail.ifBlank { session.agentId.ifBlank { "unknown" } }}",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Sm.colors.muted
             )
         }
     }

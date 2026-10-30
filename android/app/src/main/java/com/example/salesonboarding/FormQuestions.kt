@@ -8,32 +8,34 @@ import android.net.NetworkRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,13 +49,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -63,57 +73,82 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 // region Questions
 
+/**
+ * One question: its name (a `*` if required, "Optional" if not), one line saying what it
+ * means, then the box to answer in. A wrong answer is explained under the box.
+ */
 @Composable
-internal fun QuestionCard(
+internal fun QuestionBlock(
     field: FormField,
     allFields: List<FormField>,
     state: LiveValidationState,
-    isSuggested: Boolean,
     imeAction: ImeAction,
     onValueChange: (String) -> Unit,
     onCheck: () -> Unit
 ) {
+    val c = Sm.colors
     val value = state.values[field.fieldId].orEmpty()
     val required = field.isRequiredFor(state.values)
     val error = errorFor(field, state)
     val isValid = field.isAnsweredIn(state)
     val choices = field.validationRules.filterIsInstance<OneOf>().flatMap { it.choices }.distinct()
+    val isConfirm = field.validationRules.any { it is MustBeTrue }
     // A choice or a tick is a finished answer, so it is checked straight away.
     val choose: (String) -> Unit = {
         onValueChange(it)
         onCheck()
     }
 
-    SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+    Column {
+        Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (required) "${field.fieldName} *" else field.fieldName,
-                style = MaterialTheme.typography.titleSmall,
+                buildAnnotatedString {
+                    append(field.fieldName)
+                    if (required) withStyle(SpanStyle(color = c.cherry)) { append(" *") }
+                },
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
+                color = c.ink,
                 modifier = Modifier.weight(1f)
             )
-            if (isSuggested) StatusPill("Suggested next", Tone.Ai, showIcon = true)
-            if (!required) StatusPill("Optional", Tone.Neutral)
+            if (!required) {
+                Text("Optional", style = MaterialTheme.typography.bodySmall, color = c.muted)
+            }
         }
         meaningfulDescription(field)?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp, lineHeight = 19.sp),
+                color = c.mutedStrong,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
+        Spacer(Modifier.height(8.dp))
         when {
             choices.isNotEmpty() -> ChoiceInput(field, value, choices, isValid, onChoose = choose)
-            field.validationRules.any { it is MustBeTrue } -> ConfirmInput(field, value, onChoose = choose)
+            isConfirm -> ConfirmInput(field, value, onChoose = choose)
             else -> TextInput(
                 field = field,
                 value = value,
-                error = error,
+                hasError = error != null,
                 isValid = isValid,
-                hint = primaryFormatHint(field, state.values, allFields),
                 imeAction = imeAction,
                 onValueChange = onValueChange,
                 onCheck = onCheck
             )
         }
-        // Text inputs show their error in the box; choices and ticks show it here.
-        if (error != null && (choices.isNotEmpty() || field.validationRules.any { it is MustBeTrue })) {
-            Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        if (error != null) {
+            Row(
+                Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SmIcon(R.drawable.ic_sm_alert, c.cherry, size = 16.dp)
+                Text(error, style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp), color = c.cherryDeep)
+            }
+        } else if (!isValid && choices.isEmpty() && !isConfirm) {
+            primaryFormatHint(field, state.values, allFields)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = c.muted, modifier = Modifier.padding(top = 6.dp))
+            }
         }
         if (field.fieldId == "identification_document") {
             DocumentOcrScanner()
@@ -121,71 +156,96 @@ internal fun QuestionCard(
     }
 }
 
+/** The 60 dp answer box: thin olive outline, ink when focused, cherry when wrong. */
 @Composable
 private fun TextInput(
     field: FormField,
     value: String,
-    error: String?,
+    hasError: Boolean,
     isValid: Boolean,
-    hint: String?,
     imeAction: ImeAction,
     onValueChange: (String) -> Unit,
     onCheck: () -> Unit
 ) {
+    val c = Sm.colors
     val focusManager = LocalFocusManager.current
     var hadFocus by remember(field.fieldId) { mutableStateOf(false) }
+    var focused by remember(field.fieldId) { mutableStateOf(false) }
     val multiline = field.fieldId.contains("address") || field.fieldId.contains("notes")
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+    val shape = RoundedCornerShape(14.dp)
+    val borderColor = when {
+        hasError -> c.cherry
+        focused -> c.ink
+        else -> c.switchOff
+    }
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { focus ->
-                // Check the answer when the agent leaves the box, never while typing.
-                if (hadFocus && !focus.isFocused) onCheck()
-                hadFocus = focus.isFocused
-            },
-        placeholder = { Text(fieldPlaceholder(field)) },
-        shape = MaterialTheme.shapes.medium,
-        singleLine = !multiline,
-        minLines = if (multiline) 2 else 1,
-        maxLines = if (multiline) 4 else 1,
-        isError = error != null,
-        trailingIcon = when {
-            isValid -> {
-                { Icon(Icons.Filled.CheckCircle, "Answer accepted", tint = MaterialTheme.colorScheme.primary) }
+            .heightIn(min = if (multiline) 84.dp else 60.dp)
+            .background(c.white, shape)
+            .border(if (focused || hasError) 2.dp else 1.5.dp, borderColor, shape)
+            .padding(start = 18.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) {
+                Text(
+                    fieldPlaceholder(field),
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Normal),
+                    color = c.muted.copy(alpha = 0.7f)
+                )
             }
-            error != null -> {
-                { Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error) }
-            }
-            else -> null
-        },
-        supportingText = when {
-            error != null -> {
-                { Text(error) }
-            }
-            hint != null -> {
-                { Text(hint) }
-            }
-            else -> null
-        },
-        keyboardOptions = KeyboardOptions(
-            keyboardType = when (field.fieldType.lowercase(Locale.ROOT)) {
-                "number" -> KeyboardType.Decimal
-                "email" -> KeyboardType.Email
-                "phone" -> KeyboardType.Phone
-                else -> KeyboardType.Text
-            },
-            imeAction = imeAction
-        ),
-        keyboardActions = KeyboardActions(
-            onNext = { focusManager.moveFocus(FocusDirection.Down) },
-            onDone = { focusManager.clearFocus() }
-        )
-    )
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focus ->
+                        // Check the answer when the agent leaves the box, never while typing.
+                        if (hadFocus && !focus.isFocused) onCheck()
+                        hadFocus = focus.isFocused
+                        focused = focus.isFocused
+                    }
+                    .semantics { contentDescription = field.fieldName },
+                singleLine = !multiline,
+                minLines = if (multiline) 2 else 1,
+                maxLines = if (multiline) 4 else 1,
+                textStyle = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp, color = c.ink),
+                cursorBrush = SolidColor(c.ink),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = when (field.fieldType.lowercase(Locale.ROOT)) {
+                        "number" -> KeyboardType.Decimal
+                        "email" -> KeyboardType.Email
+                        "phone" -> KeyboardType.Phone
+                        else -> KeyboardType.Text
+                    },
+                    imeAction = imeAction
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = { focusManager.clearFocus() }
+                )
+            )
+        }
+        if (isValid) Tick()
+    }
 }
 
-/** Up to four options as large tap targets (two side by side), more as a dropdown. */
+/** The small ink circle with a lime tick that marks an accepted answer. */
+@Composable
+private fun Tick() {
+    val c = Sm.colors
+    Box(
+        Modifier
+            .size(32.dp)
+            .background(c.ink, CircleShape)
+            .semantics { contentDescription = "Answer accepted" },
+        contentAlignment = Alignment.Center
+    ) { SmIcon(R.drawable.ic_sm_check, c.lime, size = 16.dp) }
+}
+
+/** Two or more fixed answers: side by side for two, stacked up to four, a dropdown beyond. */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ChoiceInput(
@@ -195,6 +255,7 @@ private fun ChoiceInput(
     isValid: Boolean,
     onChoose: (String) -> Unit
 ) {
+    val c = Sm.colors
     val focusManager = LocalFocusManager.current
     val pick: (String) -> Unit = {
         focusManager.clearFocus() // checks a box still being typed in first
@@ -209,25 +270,35 @@ private fun ChoiceInput(
         }
         else -> {
             var expanded by remember(field.fieldId) { mutableStateOf(false) }
+            val shape = RoundedCornerShape(14.dp)
             ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                OutlinedTextField(
-                    value = if (value.isBlank()) "" else value.toDisplayLabel(),
-                    onValueChange = {},
-                    readOnly = true,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    placeholder = { Text("Select an option") },
-                    shape = MaterialTheme.shapes.medium,
-                    trailingIcon = {
-                        if (isValid) Icon(Icons.Filled.CheckCircle, "Answer accepted", tint = MaterialTheme.colorScheme.primary)
-                        else ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                    }
-                )
-                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        .heightIn(min = 60.dp)
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .background(c.white, shape)
+                        .border(if (expanded) 2.dp else 1.5.dp, if (expanded) c.ink else c.switchOff, shape)
+                        .padding(start = 18.dp, end = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        if (value.isBlank()) "Choose an option" else value.toDisplayLabel(),
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp),
+                        color = if (value.isBlank()) c.muted.copy(alpha = 0.7f) else c.ink,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isValid) Tick() else SmIcon(R.drawable.ic_sm_chevron_down, c.ink)
+                }
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    containerColor = c.white
+                ) {
                     choices.sorted().forEach { choice ->
                         DropdownMenuItem(
-                            text = { Text(choice.toDisplayLabel()) },
+                            text = { Text(choice.toDisplayLabel(), style = MaterialTheme.typography.bodyLarge) },
                             onClick = {
                                 expanded = false
                                 pick(choice)
@@ -242,27 +313,26 @@ private fun ChoiceInput(
 
 @Composable
 private fun ChoiceOption(choice: String, selected: Boolean, onPick: (String) -> Unit, modifier: Modifier) {
-    val scheme = MaterialTheme.colorScheme
+    val c = Sm.colors
     Surface(
         modifier = modifier
-            .heightIn(min = 52.dp)
+            .heightIn(min = 56.dp)
             .selectable(selected = selected, role = Role.RadioButton, onClick = { onPick(choice) }),
-        shape = MaterialTheme.shapes.medium,
-        color = if (selected) scheme.primaryContainer else scheme.surface,
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) scheme.primary else scheme.outline)
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) c.ink else c.white,
+        border = BorderStroke(1.5.dp, if (selected) c.ink else c.switchOff)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = Space.m, vertical = Space.s),
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RadioButton(selected = selected, onClick = null)
             Text(
                 choice.toDisplayLabel(),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) scheme.onPrimaryContainer else scheme.onSurface,
-                modifier = Modifier.padding(start = Space.xs)
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                color = if (selected) c.cream else c.ink,
+                modifier = Modifier.weight(1f)
             )
+            if (selected) SmIcon(R.drawable.ic_sm_check, c.lime, size = 20.dp)
         }
     }
 }
@@ -270,31 +340,38 @@ private fun ChoiceOption(choice: String, selected: Boolean, onPick: (String) -> 
 /** A statement the customer must confirm, such as accepting the terms. */
 @Composable
 private fun ConfirmInput(field: FormField, value: String, onChoose: (String) -> Unit) {
+    val c = Sm.colors
     val focusManager = LocalFocusManager.current
     val checked = value.equals("true", ignoreCase = true) || value.equals("yes", ignoreCase = true)
-    val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp)
+            .heightIn(min = 64.dp)
             .toggleable(value = checked, role = Role.Checkbox) {
                 focusManager.clearFocus()
                 onChoose(if (checked) "false" else "true")
             },
-        shape = MaterialTheme.shapes.medium,
-        color = if (checked) scheme.primaryContainer else scheme.surface,
-        border = BorderStroke(if (checked) 1.5.dp else 1.dp, if (checked) scheme.primary else scheme.outline)
+        shape = RoundedCornerShape(16.dp),
+        color = c.cream,
+        border = BorderStroke(1.5.dp, c.switchOff)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = Space.m, vertical = Space.s),
-            verticalAlignment = Alignment.CenterVertically
+            Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Checkbox(checked = checked, onCheckedChange = null)
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .background(c.ink, RoundedCornerShape(9.dp))
+                    .padding(2.dp)
+                    .background(if (checked) c.ink else c.white, RoundedCornerShape(7.dp)),
+                contentAlignment = Alignment.Center
+            ) { if (checked) SmIcon(R.drawable.ic_sm_check, c.lime, size = 17.dp) }
             Text(
                 fieldActionLabel(field),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (checked) scheme.onPrimaryContainer else scheme.onSurface,
-                modifier = Modifier.padding(start = Space.xs)
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+                color = c.ink
             )
         }
     }
@@ -304,10 +381,16 @@ private fun ConfirmInput(field: FormField, value: String, onChoose: (String) -> 
 
 // region Reading text from a document photo
 
+/**
+ * "Read from photo": on the identification document question, the agent can choose a photo
+ * of the document and the phone reads its printed text (Google ML Kit, on the phone). The
+ * text is shown to compare with the card; it is never put into an answer, uploaded or saved.
+ */
 @Composable
 fun DocumentOcrScanner(
     modifier: Modifier = Modifier
 ) {
+    val c = Sm.colors
     val context = LocalContext.current
     val recognizer = remember {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -369,30 +452,42 @@ fun DocumentOcrScanner(
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Space.s)
-    ) {
-        SecondaryButton(
-            text = if (isScanning) "Reading document…" else "Read text from a document photo",
-            onClick = { imagePicker.launch("image/*") },
-            enabled = !isScanning,
-            icon = Icons.Filled.AccountBox
-        )
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .padding(top = 10.dp)
+                .heightIn(min = 44.dp)
+                .clickable(enabled = !isScanning, role = Role.Button) { imagePicker.launch("image/*") },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SmIcon(R.drawable.ic_sm_id_card, c.ink, size = 20.dp)
+            Text(
+                if (isScanning) "Reading…" else "Read from photo",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = TextDecoration.Underline
+                ),
+                color = c.ink
+            )
+        }
         Text(
-            "Read on this phone. Nothing is uploaded or saved automatically. Compare the result with the original document; reading the text does not verify identity.",
+            "Read on this phone. Not uploaded or saved. It does not check identity.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = c.muted
         )
-        errorMessage?.let { Banner(it, Tone.Negative) }
+        errorMessage?.let { Banner(it, Tone.Negative, modifier = Modifier.padding(top = 8.dp)) }
         if (extractedText.isNotBlank()) {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = c.cream,
+                border = BorderStroke(1.dp, c.line)
             ) {
                 Column(Modifier.padding(Space.m), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    Text("Text found · check before using", style = MaterialTheme.typography.titleSmall)
+                    Text("Text found. Check it against the card.", style = MaterialTheme.typography.titleSmall)
                     SelectionContainer {
                         Text(extractedText, style = MaterialTheme.typography.bodyMedium)
                     }

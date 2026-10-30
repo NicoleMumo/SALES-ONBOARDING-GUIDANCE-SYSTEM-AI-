@@ -9,32 +9,20 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,27 +33,28 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
 // region Dashboard frame and data
 
-private enum class AdminSection(val label: String, val icon: ImageVector) {
-    OVERVIEW("Overview", Icons.Filled.Home),
-    AGENTS("Agents", Icons.Filled.Person),
-    SESSIONS("Sessions", Icons.AutoMirrored.Filled.List),
-    QUESTIONS("Questions", Icons.Filled.Edit),
-    COMPANY("Company", Icons.Filled.Settings)
+private enum class AdminSection(val label: String, val icon: Int) {
+    OVERVIEW("Overview", R.drawable.ic_sm_overview),
+    AGENTS("Agents", R.drawable.ic_sm_agents),
+    SESSIONS("Sessions", R.drawable.ic_sm_sessions),
+    QUESTIONS("Questions", R.drawable.ic_sm_questions),
+    COMPANY("Company", R.drawable.ic_sm_company)
 }
 
 /**
- * The admin's screens behind an always-visible bottom navigation bar. State is keyed by
- * company and store, and late callbacks that belong to another company are ignored, so a
- * previous tenant's data can never appear here.
+ * The admin's screens behind an always-visible bottom bar. State is keyed by company and
+ * store, and late callbacks that belong to another company are ignored, so a previous
+ * tenant's data can never appear here.
  */
 @Composable
 fun AdminDashboardScreen(
@@ -146,147 +135,143 @@ fun AdminDashboardScreen(
         loadAnalytics()
     }
 
-    Column(
+    // Always visible, so no page is hidden off the edge of the screen.
+    val bottomBar: @Composable ColumnScope.() -> Unit = {
+        SmBottomBar(
+            items = AdminSection.entries.map { SmNavItem(it.label, it.icon) },
+            selected = selectedSection.ordinal,
+            onSelect = { index ->
+                selectedSection = AdminSection.entries[index]
+                if (selectedSection == AdminSection.SESSIONS) loadSessions()
+            }
+        )
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Sm.colors.white)
     ) {
-        Box(Modifier.weight(1f)) {
-            key(companyId, store) {
-                when (selectedSection) {
-                    AdminSection.OVERVIEW -> AdminOverviewPage(
-                        companyId = companyId,
-                        analytics = analytics,
-                        agents = agents,
-                        isLoading = isLoadingAnalytics,
-                        errorMessage = analyticsErrorMessage ?: errorMessage,
-                        onRefresh = ::loadAnalytics,
-                        onSignOut = onSignOut
-                    )
-                    AdminSection.AGENTS -> AgentsPage(
-                        agents = agents,
-                        errorMessage = errorMessage,
-                        statusMessage = agentStatusMessage,
-                        onSignOut = onSignOut,
-                        onAdd = { email, name, onComplete ->
-                            agentStatusMessage = null
-                            store.addAgent(email, name) {
-                                if (!isCurrentAdminScope()) return@addAgent
-                                it.onSuccess {
-                                    agentStatusMessage = "Invitation added. Share the company ID with the agent so they can register with this email, verify it, and join your company."
-                                    store.observeAgents { refreshed ->
-                                        if (!isCurrentAdminScope()) return@observeAgents
-                                        handle(refreshed) { agents = it }
-                                    }
-                                    onComplete(Result.success(Unit))
-                                }.onFailure { error ->
-                                    errorMessage = error.message ?: "Could not add the agent profile."
-                                    onComplete(Result.failure(error))
+        key(companyId, store) {
+            when (selectedSection) {
+                AdminSection.OVERVIEW -> AdminOverviewPage(
+                    companyId = companyId,
+                    analytics = analytics,
+                    agents = agents,
+                    isLoading = isLoadingAnalytics,
+                    errorMessage = analyticsErrorMessage ?: errorMessage,
+                    onRefresh = ::loadAnalytics,
+                    onSignOut = onSignOut,
+                    bottomBar = bottomBar
+                )
+                AdminSection.AGENTS -> AgentsPage(
+                    agents = agents,
+                    errorMessage = errorMessage,
+                    statusMessage = agentStatusMessage,
+                    onSignOut = onSignOut,
+                    bottomBar = bottomBar,
+                    onAdd = { email, name, onComplete ->
+                        agentStatusMessage = null
+                        store.addAgent(email, name) {
+                            if (!isCurrentAdminScope()) return@addAgent
+                            it.onSuccess {
+                                agentStatusMessage = "Invitation added. Share the company ID with the agent so they can register with this email, verify it, and join your company."
+                                store.observeAgents { refreshed ->
+                                    if (!isCurrentAdminScope()) return@observeAgents
+                                    handle(refreshed) { agents = it }
                                 }
+                                onComplete(Result.success(Unit))
+                            }.onFailure { error ->
+                                errorMessage = error.message ?: "Could not add the agent profile."
+                                onComplete(Result.failure(error))
                             }
-                        },
-                        onToggleActive = { agent ->
-                            store.setAgentActive(agent.id, !agent.isActive) {
-                                if (!isCurrentAdminScope()) return@setAgentActive
-                                handle(it) {
-                                    agents = agents.map { current ->
-                                        if (current.id == agent.id) current.copy(isActive = !agent.isActive) else current
-                                    }
+                        }
+                    },
+                    onToggleActive = { agent ->
+                        store.setAgentActive(agent.id, !agent.isActive) {
+                            if (!isCurrentAdminScope()) return@setAgentActive
+                            handle(it) {
+                                agents = agents.map { current ->
+                                    if (current.id == agent.id) current.copy(isActive = !agent.isActive) else current
                                 }
                             }
                         }
-                    )
-                    AdminSection.SESSIONS -> AppScreen(
-                        title = "Sessions",
-                        subtitle = "The company's onboarding records. Answers are read-only.",
-                        actions = {
-                            IconButton(onClick = ::loadSessions, enabled = !isLoadingSessions) {
-                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-                            }
-                            IconButton(onClick = onSignOut) {
-                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
-                            }
-                        }
-                    ) {
-                        SessionHistoryContent(
-                            sessions = sessions,
-                            agents = agents,
-                            isLoading = isLoadingSessions,
-                            errorMessage = sessionsErrorMessage
-                        )
                     }
-                    AdminSection.QUESTIONS -> QuestionsPage(
-                        configuration = configuration,
-                        errorMessage = errorMessage,
-                        onSignOut = onSignOut,
-                        onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
-                            store.addCustomField(fieldId, name, description, type, rules, choices) {
-                                if (!isCurrentAdminScope()) {
-                                    onComplete(it)
-                                    return@addCustomField
-                                }
+                )
+                AdminSection.SESSIONS -> AppScreen(
+                    title = "Sessions",
+                    subtitle = "The company's onboarding records. Answers are read-only.",
+                    bottomBar = bottomBar,
+                    actions = {
+                        HeaderButton(R.drawable.ic_sm_refresh, "Refresh", ::loadSessions, enabled = !isLoadingSessions)
+                        HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut)
+                    }
+                ) {
+                    SessionHistoryContent(
+                        sessions = sessions,
+                        agents = agents,
+                        isLoading = isLoadingSessions,
+                        errorMessage = sessionsErrorMessage
+                    )
+                }
+                AdminSection.QUESTIONS -> QuestionsPage(
+                    configuration = configuration,
+                    errorMessage = errorMessage,
+                    onSignOut = onSignOut,
+                    bottomBar = bottomBar,
+                    onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
+                        store.addCustomField(fieldId, name, description, type, rules, choices) {
+                            if (!isCurrentAdminScope()) {
                                 onComplete(it)
-                                handle(it) {
-                                    val updatedConfiguration = configuration.withCustomField(
-                                        customField(fieldId, name, description, type, rules, choices)
-                                    )
-                                    configuration = updatedConfiguration
-                                    if (isCurrentAdminScope()) {
-                                        onConfigurationChanged(updatedConfiguration)
-                                    }
+                                return@addCustomField
+                            }
+                            onComplete(it)
+                            handle(it) {
+                                val updatedConfiguration = configuration.withCustomField(
+                                    customField(fieldId, name, description, type, rules, choices)
+                                )
+                                configuration = updatedConfiguration
+                                if (isCurrentAdminScope()) {
+                                    onConfigurationChanged(updatedConfiguration)
                                 }
                             }
-                        },
-                        onRequiredChanged = { fieldId, enabled ->
-                            store.saveRequiredRule(fieldId, enabled) {
-                                if (!isCurrentAdminScope()) return@saveRequiredRule
-                                handle(it) {
-                                    store.loadRuleConfiguration { loaded ->
-                                        if (!isCurrentAdminScope()) return@loadRuleConfiguration
-                                        handle(loaded) {
-                                            configuration = it
-                                            if (isCurrentAdminScope()) {
-                                                onConfigurationChanged(it)
-                                            }
+                        }
+                    },
+                    onRequiredChanged = { fieldId, enabled ->
+                        store.saveRequiredRule(fieldId, enabled) {
+                            if (!isCurrentAdminScope()) return@saveRequiredRule
+                            handle(it) {
+                                store.loadRuleConfiguration { loaded ->
+                                    if (!isCurrentAdminScope()) return@loadRuleConfiguration
+                                    handle(loaded) {
+                                        configuration = it
+                                        if (isCurrentAdminScope()) {
+                                            onConfigurationChanged(it)
                                         }
                                     }
                                 }
                             }
                         }
-                    )
-                    AdminSection.COMPANY -> CompanyPage(
-                        companyId = companyId,
-                        industry = companyIndustry,
-                        isSaving = isSavingCompanyIndustry,
-                        errorMessage = errorMessage,
-                        onSignOut = onSignOut,
-                        onSaveIndustry = { industry ->
-                            isSavingCompanyIndustry = true
-                            store.saveCompanyIndustry(industry) { result ->
-                                if (!isCurrentAdminScope()) return@saveCompanyIndustry
-                                isSavingCompanyIndustry = false
-                                handle(result) {
-                                    companyIndustry = industry
-                                    onCompanyIndustryChanged(industry)
-                                }
+                    }
+                )
+                AdminSection.COMPANY -> CompanyPage(
+                    companyId = companyId,
+                    industry = companyIndustry,
+                    isSaving = isSavingCompanyIndustry,
+                    errorMessage = errorMessage,
+                    onSignOut = onSignOut,
+                    bottomBar = bottomBar,
+                    onSaveIndustry = { industry ->
+                        isSavingCompanyIndustry = true
+                        store.saveCompanyIndustry(industry) { result ->
+                            if (!isCurrentAdminScope()) return@saveCompanyIndustry
+                            isSavingCompanyIndustry = false
+                            handle(result) {
+                                companyIndustry = industry
+                                onCompanyIndustryChanged(industry)
                             }
                         }
-                    )
-                }
-            }
-        }
-        // Always visible, so no page is hidden off the edge of the screen. The activity's
-        // Scaffold already pads the system navigation bar.
-        NavigationBar(windowInsets = WindowInsets(0)) {
-            AdminSection.entries.forEach { section ->
-                NavigationBarItem(
-                    selected = selectedSection == section,
-                    onClick = {
-                        selectedSection = section
-                        if (section == AdminSection.SESSIONS) loadSessions()
-                    },
-                    icon = { Icon(section.icon, contentDescription = null) },
-                    label = { Text(section.label) }
+                    }
                 )
             }
         }
@@ -300,34 +285,152 @@ private fun AdminPage(
     subtitle: String,
     errorMessage: String?,
     onSignOut: () -> Unit,
+    bottomBar: @Composable ColumnScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
     AppScreen(
         title = title,
         subtitle = subtitle,
-        actions = {
-            IconButton(onClick = onSignOut) {
-                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
-            }
-        }
+        bottomBar = bottomBar,
+        actions = { HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut) }
     ) {
         errorMessage?.let { Banner(it, Tone.Negative) }
         content()
     }
 }
 
+/** A plain text box in the app's colours. */
+@Composable
+private fun AdminTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String? = null,
+    placeholder: String? = null,
+    searchIcon: Boolean = false,
+    singleLine: Boolean = true,
+    isError: Boolean = false,
+    supportingText: String? = null
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = label?.let { { Text(it) } },
+        placeholder = placeholder?.let { { Text(it) } },
+        leadingIcon = if (searchIcon) {
+            { SmIcon(R.drawable.ic_sm_search, Sm.colors.muted) }
+        } else null,
+        singleLine = singleLine,
+        isError = isError,
+        supportingText = supportingText?.let { { Text(it) } },
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Sm.colors.ink,
+            unfocusedBorderColor = Sm.colors.border,
+            errorBorderColor = Sm.colors.cherry,
+            focusedTextColor = Sm.colors.ink,
+            unfocusedTextColor = Sm.colors.ink,
+            cursorColor = Sm.colors.ink,
+            focusedLabelColor = Sm.colors.ink,
+            unfocusedLabelColor = Sm.colors.muted
+        )
+    )
+}
+
 // endregion
 
 // region Agents
 
+private enum class AgentFilter(val label: String) {
+    ALL("All"), ACTIVE("Active"), PENDING("Pending"), OFF("Inactive")
+}
+
+private fun SalesAgentAccount.matches(filter: AgentFilter) = when (filter) {
+    AgentFilter.ALL -> true
+    AgentFilter.ACTIVE -> isActive && isRegistered
+    AgentFilter.PENDING -> isActive && !isRegistered
+    AgentFilter.OFF -> !isActive
+}
+
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun AgentsPage(
     agents: List<SalesAgentAccount>,
     errorMessage: String?,
     statusMessage: String?,
     onSignOut: () -> Unit,
+    bottomBar: @Composable ColumnScope.() -> Unit,
     onAdd: (String, String, (Result<Unit>) -> Unit) -> Unit,
     onToggleActive: (SalesAgentAccount) -> Unit
+) {
+    var showInvite by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf(AgentFilter.ALL) }
+    var search by remember { mutableStateOf("") }
+    val query = search.trim().lowercase(Locale.ROOT)
+    val shown = agents
+        .filter { it.matches(filter) }
+        .filter { query.isBlank() || query in it.displayName.lowercase(Locale.ROOT) || query in it.email.lowercase(Locale.ROOT) }
+        .sortedBy { it.displayName.lowercase(Locale.ROOT) }
+
+    AdminPage(
+        title = "Agents",
+        subtitle = "${agents.count(SalesAgentAccount::isActive)} active of ${agents.size} on the team",
+        errorMessage = errorMessage,
+        onSignOut = onSignOut,
+        bottomBar = bottomBar
+    ) {
+        statusMessage?.let { Banner(it, Tone.Positive) }
+        if (agents.isNotEmpty()) {
+            val registered = agents.count(SalesAgentAccount::isRegistered)
+            SectionCard(title = "Invites that registered") {
+                ProgressBar(registered / agents.size.toFloat())
+                Text(
+                    "$registered of ${agents.size} invited agents have created their account.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Sm.colors.muted
+                )
+            }
+        }
+        PrimaryButton("Invite an agent", onClick = { showInvite = true }, iconRes = R.drawable.ic_sm_plus)
+        if (agents.isNotEmpty()) {
+            AdminTextField(search, { search = it }, placeholder = "Search by name or email", searchIcon = true)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Space.s),
+                verticalArrangement = Arrangement.spacedBy(Space.s)
+            ) {
+                AgentFilter.entries.forEach { item ->
+                    SmChip(
+                        "${item.label} ${agents.count { it.matches(item) }}",
+                        selected = filter == item,
+                        onClick = { filter = item }
+                    )
+                }
+            }
+        }
+        SectionCard(title = "Team") {
+            if (shown.isEmpty()) {
+                EmptyState(
+                    title = if (agents.isEmpty()) "No agents yet" else "Nothing matches",
+                    message = if (agents.isEmpty()) "Invite an agent to get started." else "Try a different search or filter.",
+                    iconRes = R.drawable.ic_sm_agents
+                )
+            }
+            shown.forEachIndexed { index, agent ->
+                if (index > 0) HorizontalDivider(color = Sm.colors.divider)
+                AgentRow(agent, onToggleActive)
+            }
+        }
+    }
+
+    if (showInvite) {
+        InviteSheet(onDismiss = { showInvite = false }, onAdd = onAdd)
+    }
+}
+
+@Composable
+private fun InviteSheet(
+    onDismiss: () -> Unit,
+    onAdd: (String, String, (Result<Unit>) -> Unit) -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
@@ -337,71 +440,38 @@ private fun AgentsPage(
     val isValidEmail = normalizedEmail.length <= 254 &&
         Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()
 
-    AdminPage(
-        title = "Agents",
-        subtitle = "${agents.count(SalesAgentAccount::isActive)} active of ${agents.size} on the team",
-        errorMessage = errorMessage,
-        onSignOut = onSignOut
-    ) {
-        statusMessage?.let { Banner(it, Tone.Positive) }
-        SectionCard(
-            title = "Invite an agent",
-            subtitle = "Add their work email. Share the company ID with them; they register with this email to join."
-        ) {
-            creationError?.let { Banner(it, Tone.Negative) }
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Agent name") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium
-            )
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it.take(254) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Work email") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                isError = email.isNotBlank() && !isValidEmail,
-                supportingText = if (email.isNotBlank() && !isValidEmail) {
-                    { Text("Enter a valid work email address.") }
-                } else null
-            )
-            PrimaryButton(
-                text = if (isCreating) "Adding agent…" else "Add agent",
-                onClick = {
-                    isCreating = true
-                    creationError = null
-                    onAdd(email.trim(), name.trim()) { result ->
-                        isCreating = false
-                        result.onSuccess {
-                            email = ""
-                            name = ""
-                        }.onFailure {
+    SmSheet("Invite an agent", onDismiss = onDismiss) {
+        Text(
+            "Add their work email. Share the company ID with them; they register with this email to join.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Sm.colors.muted
+        )
+        creationError?.let { Banner(it, Tone.Negative) }
+        AdminTextField(name, { name = it }, label = "Agent name")
+        AdminTextField(
+            email,
+            { email = it.take(254) },
+            label = "Work email",
+            isError = email.isNotBlank() && !isValidEmail,
+            supportingText = if (email.isNotBlank() && !isValidEmail) "Enter a valid work email address." else null
+        )
+        PrimaryButton(
+            text = if (isCreating) "Adding agent…" else "Add agent",
+            onClick = {
+                isCreating = true
+                creationError = null
+                onAdd(email.trim(), name.trim()) { result ->
+                    isCreating = false
+                    result.onSuccess { onDismiss() }
+                        .onFailure {
                             creationError = it.message ?: "Could not create this agent. Check the connection and try again."
                         }
-                    }
-                },
-                enabled = isValidEmail && name.isNotBlank(),
-                isLoading = isCreating,
-                icon = Icons.Filled.Add
-            )
-        }
-        SectionCard(title = "Team") {
-            if (agents.isEmpty()) {
-                EmptyState(
-                    title = "No agents yet",
-                    message = "Invite an agent above to get started.",
-                    icon = Icons.Filled.Person
-                )
-            }
-            agents.forEachIndexed { index, agent ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                AgentRow(agent, onToggleActive)
-            }
-        }
+                }
+            },
+            enabled = isValidEmail && name.isNotBlank(),
+            isLoading = isCreating,
+            iconRes = R.drawable.ic_sm_plus
+        )
     }
 }
 
@@ -415,30 +485,48 @@ private fun AgentRow(agent: SalesAgentAccount, onToggleActive: (SalesAgentAccoun
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                .background(Sm.colors.lime, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 agent.displayName.firstOrNull()?.uppercase() ?: "A",
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = Sm.colors.ink,
                 fontWeight = FontWeight.SemiBold
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(agent.displayName, style = MaterialTheme.typography.titleSmall)
-            Text(agent.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(agent.displayName, style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink)
+            Text(agent.email, style = MaterialTheme.typography.bodySmall, color = Sm.colors.muted)
             when {
                 !agent.isActive -> StatusPill("Inactive", Tone.Neutral)
                 agent.isRegistered -> StatusPill("Registered", Tone.Positive)
-                else -> StatusPill("Invitation pending", Tone.Neutral)
+                else -> StatusPill("Invitation pending", Tone.Caution)
             }
         }
-        Switch(
+        SmSwitch(
             checked = agent.isActive,
             onCheckedChange = { onToggleActive(agent) },
             modifier = Modifier.semantics {
                 contentDescription = if (agent.isActive) "${agent.displayName} is active" else "${agent.displayName} is inactive"
             }
+        )
+    }
+}
+
+/** A thin share bar: teal fill on a light teal track. */
+@Composable
+private fun ProgressBar(share: Float) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 12.dp)
+            .background(Sm.colors.tealTrack, RoundedCornerShape(6.dp))
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(share.coerceIn(0f, 1f))
+                .heightIn(min = 12.dp)
+                .background(Sm.colors.teal, RoundedCornerShape(6.dp))
         )
     }
 }
@@ -453,8 +541,112 @@ private fun QuestionsPage(
     configuration: FieldRuleConfiguration,
     errorMessage: String?,
     onSignOut: () -> Unit,
+    bottomBar: @Composable ColumnScope.() -> Unit,
     onAddField: (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit,
     onRequiredChanged: (String, Boolean) -> Unit
+) {
+    var showCustom by remember { mutableStateOf(false) }
+    var showAdd by remember { mutableStateOf(false) }
+    var search by remember { mutableStateOf("") }
+    val query = search.trim().lowercase(Locale.ROOT)
+    val locked = FieldRuleConfiguration.DEFAULT_LOCKED_FIELD_IDS
+    val standard = KnownFields.all.filter { query.isBlank() || query in it.fieldName.lowercase(Locale.ROOT) }
+    val requiredCount = KnownFields.all.count { field -> configuration.rulesFor(field).any { it is Required } }
+
+    AdminPage(
+        title = "Questions",
+        subtitle = "What agents ask, and which answers are required. Changes apply to new sessions.",
+        errorMessage = errorMessage,
+        onSignOut = onSignOut,
+        bottomBar = bottomBar
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            SmChip("Standard", selected = !showCustom, onClick = { showCustom = false })
+            SmChip("Yours ${configuration.customFields.size}", selected = showCustom, onClick = { showCustom = true })
+        }
+        if (!showCustom) {
+            Text(
+                "$requiredCount of ${KnownFields.all.size} required",
+                style = MaterialTheme.typography.bodySmall,
+                color = Sm.colors.muted
+            )
+            AdminTextField(search, { search = it }, placeholder = "Search questions", searchIcon = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                TextButton(onClick = {
+                    KnownFields.all.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, true) }
+                }) { Text("Make all required") }
+                TextButton(onClick = {
+                    KnownFields.all.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, false) }
+                }) { Text("Make all optional") }
+            }
+            SectionCard(subtitle = "Turn a switch off to make a question optional. Locked questions always stay required.") {
+                if (standard.isEmpty()) {
+                    EmptyState("Nothing matches", "Try a different search.", iconRes = R.drawable.ic_sm_questions)
+                }
+                standard.forEachIndexed { index, field ->
+                    if (index > 0) HorizontalDivider(color = Sm.colors.divider)
+                    val required = configuration.rulesFor(field).any { it is Required }
+                    val isLocked = field.fieldId in locked
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Space.s)
+                    ) {
+                        Text(field.fieldName, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink, modifier = Modifier.weight(1f))
+                        if (isLocked) SmIcon(R.drawable.ic_sm_lock, Sm.colors.muted, size = 18.dp, description = "Locked")
+                        SmSwitch(
+                            checked = required,
+                            onCheckedChange = { onRequiredChanged(field.fieldId, it) },
+                            enabled = !isLocked,
+                            modifier = Modifier.semantics {
+                                contentDescription = "${field.fieldName} is " + if (required) "required" else "optional"
+                            }
+                        )
+                    }
+                }
+            }
+        } else {
+            PrimaryButton("Add a question", onClick = { showAdd = true }, iconRes = R.drawable.ic_sm_plus)
+            SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI model was not trained on them.") {
+                if (configuration.customFields.isEmpty()) {
+                    EmptyState("None yet", "Questions you add appear here.", iconRes = R.drawable.ic_sm_questions)
+                }
+                configuration.customFields.forEachIndexed { index, field ->
+                    if (index > 0) HorizontalDivider(color = Sm.colors.divider)
+                    val ruleLabels = AdminRule.entries
+                        .filter { it in field.validationRules.toAdminRules(field.isRequired) }
+                        .map(AdminRule::label)
+                        .let { labels -> if (field.validationRules.any { it is OneOf }) labels + "Approved choices" else labels }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(field.fieldName, style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink)
+                        Text(field.description, style = MaterialTheme.typography.bodySmall, color = Sm.colors.ink)
+                        Text(
+                            "ID ${field.fieldId} · ${field.fieldType} · rules: ${ruleLabels.joinToString().ifBlank { "none" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Sm.colors.muted
+                        )
+                        field.validationRules.filterIsInstance<OneOf>().flatMap { it.choices }
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { Text("Options: ${it.joinToString()}", style = MaterialTheme.typography.bodySmall, color = Sm.colors.ink) }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAdd) {
+        AddQuestionSheet(configuration, onDismiss = { showAdd = false }, onAddField = onAddField)
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun AddQuestionSheet(
+    configuration: FieldRuleConfiguration,
+    onDismiss: () -> Unit,
+    onAddField: (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit
 ) {
     var fieldName by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -477,143 +669,75 @@ private fun QuestionsPage(
     val idTaken = fieldId in KnownFields.all.map { it.fieldId } ||
         fieldId in configuration.customFields.map { it.fieldId }
 
-    AdminPage(
-        title = "Questions",
-        subtitle = "What agents ask, and which answers are required. Changes apply to new sessions.",
-        errorMessage = errorMessage,
-        onSignOut = onSignOut
-    ) {
-        SectionCard(
-            title = "Company questions",
-            subtitle = "Extra questions shown in a last \"Company questions\" section. The AI model was not trained on them."
+    SmSheet("Add a question", onDismiss = onDismiss) {
+        AdminTextField(fieldName, { fieldName = it }, label = "Question name")
+        AdminTextField(description, { description = it }, label = "Instructions for the agent", singleLine = false)
+        Text(
+            when {
+                fieldId.isBlank() -> "Enter a name to create the question's ID."
+                idTaken -> "ID $fieldId is already used. Choose another name."
+                else -> "ID: $fieldId"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (idTaken) Sm.colors.cherry else Sm.colors.muted
+        )
+        Text("ANSWER TYPE", style = smCapsStyle(), color = Sm.colors.muted)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalArrangement = Arrangement.spacedBy(Space.s)
         ) {
-            if (configuration.customFields.isEmpty()) {
-                Text("None yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf("text", "number", "date", "email", "phone", "boolean", "choice").forEach { type ->
+                SmChip(type.replaceFirstChar(Char::uppercase), selected = fieldType == type, onClick = { fieldType = type })
             }
-            configuration.customFields.forEach { field ->
-                val ruleLabels = AdminRule.entries
-                    .filter { it in field.validationRules.toAdminRules(field.isRequired) }
-                    .map(AdminRule::label)
-                    .let { labels -> if (field.validationRules.any { it is OneOf }) labels + "Approved choices" else labels }
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(field.fieldName, style = MaterialTheme.typography.titleSmall)
-                    Text(field.description, style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        "ID ${field.fieldId} · ${field.fieldType} · rules: ${ruleLabels.joinToString().ifBlank { "none" }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    field.validationRules.filterIsInstance<OneOf>().flatMap { it.choices }
-                        .takeIf { it.isNotEmpty() }
-                        ?.let { Text("Options: ${it.joinToString()}", style = MaterialTheme.typography.bodySmall) }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-            Text("Add a question", style = MaterialTheme.typography.titleSmall)
-            OutlinedTextField(fieldName, { fieldName = it }, Modifier.fillMaxWidth(), label = { Text("Question name") }, singleLine = true, shape = MaterialTheme.shapes.medium)
-            OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("Instructions for the agent") }, shape = MaterialTheme.shapes.medium)
-            Text(
-                when {
-                    fieldId.isBlank() -> "Enter a name to create the question's ID."
-                    idTaken -> "ID $fieldId is already used. Choose another name."
-                    else -> "ID: $fieldId"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = if (idTaken) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+        }
+        if (fieldType == "choice") {
+            AdminTextField(
+                choiceOptions,
+                { choiceOptions = it },
+                label = "Approved choices (comma-separated)",
+                supportingText = "Agents will pick one of these."
             )
-            Text("Answer type", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                listOf("text", "number", "date", "email", "phone", "boolean", "choice").forEach { type ->
-                    FilterChip(
-                        selected = fieldType == type,
-                        onClick = { fieldType = type },
-                        label = { Text(type.replaceFirstChar(Char::uppercase)) }
-                    )
-                }
-            }
-            if (fieldType == "choice") {
-                OutlinedTextField(
-                    value = choiceOptions,
-                    onValueChange = { choiceOptions = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Approved choices (comma-separated)") },
-                    supportingText = { Text("Agents will pick one of these.") },
-                    shape = MaterialTheme.shapes.medium
-                )
-            }
-            Text("Checks", style = MaterialTheme.typography.labelLarge)
+        }
+        Text("CHECKS", style = smCapsStyle(), color = Sm.colors.muted)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalArrangement = Arrangement.spacedBy(Space.s)
+        ) {
             AdminRule.entries.forEach { rule ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 40.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = rule in selectedRules,
-                        onCheckedChange = { checked -> selectedRules = if (checked) selectedRules + rule else selectedRules - rule }
-                    )
-                    Text(rule.label, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            PrimaryButton(
-                text = if (isSavingField) "Saving question…" else "Add question",
-                onClick = {
-                    isSavingField = true
-                    onAddField(
-                        fieldId,
-                        fieldName.trim(),
-                        description.trim(),
-                        fieldType.trim().lowercase(Locale.ROOT),
-                        selectedRules,
-                        parsedChoices
-                    ) { result ->
-                        if (result.isSuccess) {
-                            fieldName = ""
-                            description = ""
-                            fieldType = "text"
-                            choiceOptions = ""
-                            selectedRules = setOf(AdminRule.REQUIRED)
-                        }
-                        isSavingField = false
-                    }
-                },
-                enabled = fieldId.isNotBlank() && fieldName.isNotBlank() && description.isNotBlank() &&
-                    (fieldType != "choice" || parsedChoices.isNotEmpty()) && !idTaken,
-                isLoading = isSavingField,
-                icon = Icons.Filled.Add
-            )
-            if (isSavingField) {
-                Text(
-                    "Waiting for the database to confirm the question. Keep this screen open.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                SmChip(
+                    rule.label,
+                    selected = rule in selectedRules,
+                    onClick = { selectedRules = if (rule in selectedRules) selectedRules - rule else selectedRules + rule }
                 )
             }
         }
-        SectionCard(
-            title = "Required questions",
-            subtitle = "Turn a switch off to make a question optional. Some identity questions always stay required."
-        ) {
-            KnownFields.all.forEachIndexed { index, field ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                val required = configuration.rulesFor(field).any { it is Required }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(field.fieldName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = required,
-                        onCheckedChange = { onRequiredChanged(field.fieldId, it) },
-                        modifier = Modifier.semantics {
-                            contentDescription = "${field.fieldName} is " + if (required) "required" else "optional"
-                        }
-                    )
+        PrimaryButton(
+            text = if (isSavingField) "Saving question…" else "Add question",
+            onClick = {
+                isSavingField = true
+                onAddField(
+                    fieldId,
+                    fieldName.trim(),
+                    description.trim(),
+                    fieldType.trim().lowercase(Locale.ROOT),
+                    selectedRules,
+                    parsedChoices
+                ) { result ->
+                    isSavingField = false
+                    if (result.isSuccess) onDismiss()
                 }
-            }
+            },
+            enabled = fieldId.isNotBlank() && fieldName.isNotBlank() && description.isNotBlank() &&
+                (fieldType != "choice" || parsedChoices.isNotEmpty()) && !idTaken,
+            isLoading = isSavingField,
+            iconRes = R.drawable.ic_sm_plus
+        )
+        if (isSavingField) {
+            Text(
+                "Waiting for the database to confirm the question. Keep this screen open.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Sm.colors.muted
+            )
         }
     }
 }
@@ -622,6 +746,11 @@ private fun QuestionsPage(
 
 // region Company
 
+private val INDUSTRY_CHOICES = listOf(
+    "banking" to "Banking",
+    "telecom" to "Telecommunications"
+)
+
 @Composable
 private fun CompanyPage(
     companyId: String,
@@ -629,27 +758,74 @@ private fun CompanyPage(
     isSaving: Boolean,
     errorMessage: String?,
     onSignOut: () -> Unit,
+    bottomBar: @Composable ColumnScope.() -> Unit,
     onSaveIndustry: (String) -> Unit
 ) {
     var selectedIndustry by remember(industry) { mutableStateOf(industry) }
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
     AdminPage(
         title = "Company",
-        subtitle = "Company ID $companyId",
+        subtitle = "Your company's settings",
         errorMessage = errorMessage,
-        onSignOut = onSignOut
+        onSignOut = onSignOut,
+        bottomBar = bottomBar
     ) {
         SectionCard(
-            title = "Onboarding industry",
-            subtitle = "Agents in this company use this industry's onboarding form. Agents cannot sign in until it is set."
+            title = "Company ID",
+            subtitle = "Agents register with this ID and the work email you added on the Agents page."
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                listOf("banking" to "Banking", "telecom" to "Telecommunications").forEach { (value, label) ->
-                    FilterChip(
-                        selected = selectedIndustry == value,
-                        onClick = { selectedIndustry = value },
-                        enabled = !isSaving,
-                        label = { Text(label) }
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+                Text(
+                    companyId,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Sm.colors.ink,
+                    modifier = Modifier.weight(1f)
+                )
+                SecondaryButton(
+                    text = if (copied) "Copied" else "Copy",
+                    onClick = {
+                        clipboard.setText(AnnotatedString(companyId))
+                        copied = true
+                    },
+                    iconRes = R.drawable.ic_sm_copy
+                )
+            }
+        }
+        if (industry == null) {
+            Banner(
+                "Agents cannot sign in until you choose an industry.",
+                Tone.Caution,
+                title = "Industry not set"
+            )
+        }
+        SectionCard(
+            title = "Onboarding industry",
+            subtitle = "Agents in this company use this industry's onboarding form."
+        ) {
+            INDUSTRY_CHOICES.forEach { (value, label) ->
+                val chosen = selectedIndustry == value
+                Surface(
+                    onClick = { if (!isSaving) selectedIndustry = value },
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (chosen) Sm.colors.ink else Sm.colors.white,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, if (chosen) Sm.colors.ink else Sm.colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        Modifier.padding(Space.l),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Space.m)
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (chosen) Sm.colors.cream else Sm.colors.ink,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (value == industry) StatusPill("Saved", Tone.Positive, showIcon = true)
+                        else if (chosen) StatusPill("Not saved", Tone.Caution)
+                    }
                 }
             }
             PrimaryButton(
@@ -661,13 +837,6 @@ private fun CompanyPage(
                 onClick = { selectedIndustry?.let(onSaveIndustry) },
                 enabled = selectedIndustry != null && selectedIndustry != industry,
                 isLoading = isSaving
-            )
-        }
-        SectionCard(title = "Inviting agents") {
-            Text(
-                "Agents register with the company ID \"$companyId\" and the work email you added on the Agents page.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

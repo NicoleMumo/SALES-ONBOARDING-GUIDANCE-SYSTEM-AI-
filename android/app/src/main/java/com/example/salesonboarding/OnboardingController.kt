@@ -221,7 +221,7 @@ class OnboardingFormController(
     private val entryStore: FieldEntryStore,
     private val predictor: NextFieldPredictor? = null,
     private val industry: String = "telecom",
-    private val context: String = "individual",
+    val context: String = "individual",
     private val agentId: String = "unknown-agent",
     playbook: OnboardingPlaybook? = null,
     initialModelUnavailable: Boolean = false,
@@ -234,6 +234,8 @@ class OnboardingFormController(
      * the older hand-set rule in [CompletionRiskScorer] is used instead.
      */
     private val riskModel: TrainedCompletionRiskModel? = null,
+    /** When the customer agreed on the consent screen; saved with a new session. */
+    private val consentAtMillis: Long? = null,
     private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
     /** When the form opened: the first answer's time is counted from here. */
@@ -282,6 +284,9 @@ class OnboardingFormController(
                 this.playbook,
                 agentEmail
             )
+            consentAtMillis?.let {
+                (entryStore as? OnboardingSessionStore)?.recordConsent(sessionId, agentId, it)
+            }
         }
         scope.launch {
             stateFlow.collect { state ->

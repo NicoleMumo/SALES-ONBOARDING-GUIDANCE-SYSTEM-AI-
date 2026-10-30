@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Android 7-11 show this while the app starts: the dark launch screen with the mark. -->
     <style name="Theme.SalesOnboarding" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">@color/app_primary</item>
-        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:colorAccent">@color/sm_ink</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@color/app_background</item>
+        <item name="android:navigationBarColor">@color/sm_white</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

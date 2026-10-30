@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Match LightColors in Ui.kt; shown before the app draws its first screen. -->
-    <color name="app_primary">#FF0B6B4F</color>
-    <color name="app_background">#FFF5F7F5</color>
+    <!-- SalesMesh theme: teal and cherry. The same values live in SmPalette (Ui.kt). -->
+    <color name="sm_ink">#123636</color>
+    <color name="sm_muted">#4A6663</color>
+    <color name="sm_cream">#FEFFE0</color>
+    <color name="sm_white">#FFFFFF</color>
+    <color name="sm_lime">#D0E86E</color>
+    <color name="sm_line">#E3E8B5</color>
 </resources>

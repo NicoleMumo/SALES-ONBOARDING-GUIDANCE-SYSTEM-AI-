@@ -2,7 +2,6 @@ package com.example.salesonboarding
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,7 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -48,14 +46,9 @@ import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -179,13 +172,92 @@ fun UnifiedLoginScreen(
         }
     }
 
+    SignInFrame(modifier) {
+        RoleSwitch(state.role, enabled, colors, fonts) { role ->
+            state = state.copy(role = role, errorMessage = null)
+            onRoleSelected(role)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Agents sign in to a company, so the login logic needs its ID.
+            if (isAgent) {
+                SignInField(
+                    label = "Company ID",
+                    value = state.companyId,
+                    onValueChange = { state = state.copy(companyId = it.trim(), errorMessage = null) },
+                    icon = Icons.Outlined.Home,
+                    enabled = enabled,
+                    colors = colors,
+                    fonts = fonts
+                )
+            }
+            SignInField(
+                label = "Email",
+                value = state.email,
+                onValueChange = { state = state.copy(email = it, errorMessage = null) },
+                icon = Icons.Outlined.Email,
+                enabled = enabled,
+                colors = colors,
+                fonts = fonts,
+                keyboardType = KeyboardType.Email
+            )
+            SignInField(
+                label = "Password",
+                value = state.password,
+                onValueChange = { state = state.copy(password = it, errorMessage = null) },
+                icon = Icons.Outlined.Lock,
+                enabled = enabled,
+                colors = colors,
+                fonts = fonts,
+                isPassword = true,
+                onDone = ::submit
+            )
+        }
+        state.errorMessage?.let { message ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Outlined.Warning, contentDescription = null, tint = colors.action, modifier = Modifier.size(18.dp))
+                Text(message, color = colors.action, style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.Medium, fontSize = 14.sp))
+            }
+        }
+        SignInButton(state.isSubmitting, colors, fonts, onClick = ::submit)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(enabled = enabled, role = Role.Button, onClick = if (isAgent) onRegisterAgent else onRegisterAdmin)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (isAgent) "New agent? Create account" else "Register",
+                    color = colors.action,
+                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                )
+            }
+        }
+
+    }
+}
+
+/**
+ * The sign-in look shared by sign-in and registration: the photo with the brand, and the
+ * cream sheet over it holding [content]. On short screens the photo shrinks first.
+ */
+@Composable
+private fun SignInFrame(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val colors = LocalSignInColors.current
+    val fonts = rememberSignInFonts()
     DarkSystemBarIcons()
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(colors.window)
     ) {
-        // On short screens the photo gives up height first, so the form keeps its room.
         val photoHeight = (maxHeight * 0.5f).coerceIn(200.dp, 420.dp)
         val sheetTop = photoHeight - 40.dp
         val screenHeight = maxHeight
@@ -207,78 +279,9 @@ fun UnifiedLoginScreen(
                         .background(colors.sheet, SheetShape)
                         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
                         .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    RoleSwitch(state.role, enabled, colors, fonts) { role ->
-                        state = state.copy(role = role, errorMessage = null)
-                        onRoleSelected(role)
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Agents sign in to a company, so the login logic needs its ID.
-                        if (isAgent) {
-                            SignInField(
-                                label = "Company ID",
-                                value = state.companyId,
-                                onValueChange = { state = state.copy(companyId = it.trim(), errorMessage = null) },
-                                icon = Icons.Outlined.Home,
-                                enabled = enabled,
-                                colors = colors,
-                                fonts = fonts
-                            )
-                        }
-                        SignInField(
-                            label = "Email",
-                            value = state.email,
-                            onValueChange = { state = state.copy(email = it, errorMessage = null) },
-                            icon = Icons.Outlined.Email,
-                            enabled = enabled,
-                            colors = colors,
-                            fonts = fonts,
-                            keyboardType = KeyboardType.Email
-                        )
-                        SignInField(
-                            label = "Password",
-                            value = state.password,
-                            onValueChange = { state = state.copy(password = it, errorMessage = null) },
-                            icon = Icons.Outlined.Lock,
-                            enabled = enabled,
-                            colors = colors,
-                            fonts = fonts,
-                            isPassword = true,
-                            onDone = ::submit
-                        )
-                    }
-                    state.errorMessage?.let { message ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics { liveRegion = LiveRegionMode.Polite },
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Outlined.Warning, contentDescription = null, tint = colors.action, modifier = Modifier.size(18.dp))
-                            Text(message, color = colors.action, style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.Medium, fontSize = 14.sp))
-                        }
-                    }
-                    SignInButton(state.isSubmitting, colors, fonts, onClick = ::submit)
-                    if (!isAgent) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Box(
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable(enabled = enabled, role = Role.Button, onClick = onRegisterAdmin)
-                                    .padding(horizontal = 16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "Register",
-                                    color = colors.action,
-                                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                                )
-                            }
-                        }
-                    }
-                }
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    content = content
+                )
             }
         }
     }
@@ -335,7 +338,7 @@ private fun SignInPhoto(height: Dp, colors: SignInColors, fonts: SignInFonts) {
                 color = colors.ink,
                 style = TextStyle(
                     fontFamily = fonts.wordmark,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 32.sp,
                     letterSpacing = 0.01.em
                 ),
@@ -503,7 +506,13 @@ private fun SignInField(
 
 /** "Sign in" on the left; a lime square with an arrow (a spinner while signing in) on the right. */
 @Composable
-private fun SignInButton(isSubmitting: Boolean, colors: SignInColors, fonts: SignInFonts, onClick: () -> Unit) {
+private fun SignInButton(
+    isSubmitting: Boolean,
+    colors: SignInColors,
+    fonts: SignInFonts,
+    label: String = "Sign in",
+    onClick: () -> Unit
+) {
     val shape = RoundedCornerShape(22.dp)
     Row(
         modifier = Modifier
@@ -517,7 +526,7 @@ private fun SignInButton(isSubmitting: Boolean, colors: SignInColors, fonts: Sig
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "Sign in",
+            label,
             color = colors.onAction,
             style = TextStyle(
                 fontFamily = fonts.text,
@@ -588,6 +597,8 @@ fun AccountRegistrationScreen(
     requiresCompanyId: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalSignInColors.current
+    val fonts = rememberSignInFonts()
     var companyId by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -595,6 +606,7 @@ fun AccountRegistrationScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSubmitting by remember { mutableStateOf(false) }
     var registered by remember { mutableStateOf(false) }
+    val enabled = !isSubmitting
     BackHandler(enabled = !isSubmitting, onBack = onBackToSignIn)
 
     fun submit() {
@@ -622,48 +634,89 @@ fun AccountRegistrationScreen(
         }
     }
 
-    AuthFrame(modifier) {
+    SignInFrame(modifier) {
+        val heading = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 22.sp)
+        val body = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 21.sp)
         if (registered) {
-            Text("Registration complete", style = MaterialTheme.typography.headlineSmall)
-            Banner(completionMessage, Tone.Positive)
-            PrimaryButton("Back to sign in", onClick = onBackToSignIn)
-            return@AuthFrame
+            Text("Registration complete", color = colors.ink, style = heading)
+            Text(completionMessage, color = colors.fieldLabel, style = body)
+            SignInButton(isSubmitting = false, colors = colors, fonts = fonts, label = "Back to sign in", onClick = onBackToSignIn)
+            return@SignInFrame
         }
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        Text(instructions, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (requiresCompanyId) {
-            AuthTextField(
-                value = companyId,
-                onValueChange = { companyId = it.trim(); errorMessage = null },
-                label = "Company ID",
-                enabled = !isSubmitting
+        Text(title, color = colors.ink, style = heading)
+        Text(instructions, color = colors.fieldLabel, style = body)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (requiresCompanyId) {
+                SignInField(
+                    label = "Company ID",
+                    value = companyId,
+                    onValueChange = { companyId = it.trim(); errorMessage = null },
+                    icon = Icons.Outlined.Home,
+                    enabled = enabled,
+                    colors = colors,
+                    fonts = fonts
+                )
+            }
+            SignInField(
+                label = "Email",
+                value = email,
+                onValueChange = { email = it; errorMessage = null },
+                icon = Icons.Outlined.Email,
+                enabled = enabled,
+                colors = colors,
+                fonts = fonts,
+                keyboardType = KeyboardType.Email
+            )
+            SignInField(
+                label = "Choose a password",
+                value = password,
+                onValueChange = { password = it; errorMessage = null },
+                icon = Icons.Outlined.Lock,
+                enabled = enabled,
+                colors = colors,
+                fonts = fonts,
+                isPassword = true
+            )
+            SignInField(
+                label = "Confirm password",
+                value = confirmedPassword,
+                onValueChange = { confirmedPassword = it; errorMessage = null },
+                icon = Icons.Outlined.Lock,
+                enabled = enabled,
+                colors = colors,
+                fonts = fonts,
+                isPassword = true,
+                onDone = ::submit
             )
         }
-        AuthTextField(
-            value = email,
-            onValueChange = { email = it; errorMessage = null },
-            label = "Email address",
-            enabled = !isSubmitting,
-            keyboardType = KeyboardType.Email
-        )
-        PasswordField(
-            value = password,
-            onValueChange = { password = it; errorMessage = null },
-            label = "Choose a password (at least $MIN_PASSWORD_LENGTH characters)",
-            enabled = !isSubmitting,
-            imeAction = ImeAction.Next
-        )
-        PasswordField(
-            value = confirmedPassword,
-            onValueChange = { confirmedPassword = it; errorMessage = null },
-            label = "Confirm password",
-            enabled = !isSubmitting,
-            onDone = ::submit
-        )
-        errorMessage?.let { Banner(it, Tone.Negative) }
-        PrimaryButton("Create account", onClick = ::submit, isLoading = isSubmitting)
-        TextButton(onClick = onBackToSignIn, modifier = Modifier.fillMaxWidth(), enabled = !isSubmitting) {
-            Text("Back to sign in")
+        Text("At least $MIN_PASSWORD_LENGTH characters.", color = colors.fieldLabel, style = body.copy(fontSize = 13.sp))
+        errorMessage?.let { message ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Outlined.Warning, contentDescription = null, tint = colors.action, modifier = Modifier.size(18.dp))
+                Text(message, color = colors.action, style = body.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp))
+            }
+        }
+        SignInButton(isSubmitting, colors, fonts, label = "Create account", onClick = ::submit)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(enabled = enabled, role = Role.Button, onClick = onBackToSignIn)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Back to sign in",
+                    color = colors.action,
+                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                )
+            }
         }
     }
 }
@@ -672,110 +725,12 @@ private const val MIN_PASSWORD_LENGTH = 8
 
 // endregion
 
-// region Shared parts of the sign-in screens
-
-/** The brand header and one card, scrollable and kept above the keyboard. */
-@Composable
-private fun AuthFrame(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = Space.l, vertical = Space.xl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Space.xl)
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.s)) {
-            AppMark(size = 64.dp)
-            Text("SalesMesh", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "Consistent customer onboarding, made simple.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 440.dp),
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(Space.xl),
-                verticalArrangement = Arrangement.spacedBy(Space.l),
-                content = content
-            )
-        }
-    }
-}
-
-@Composable
-private fun AuthTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    enabled: Boolean,
-    keyboardType: KeyboardType = KeyboardType.Text
-) {
-    val focusManager = LocalFocusManager.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        singleLine = true,
-        enabled = enabled,
-        shape = MaterialTheme.shapes.medium,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
-        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
-    )
-}
-
-/** A password box with Show/Hide. The keyboard's Done key runs [onDone] (sign in, create account). */
-@Composable
-private fun PasswordField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    enabled: Boolean,
-    imeAction: ImeAction = ImeAction.Done,
-    onDone: () -> Unit = {}
-) {
-    val focusManager = LocalFocusManager.current
-    var visible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        singleLine = true,
-        enabled = enabled,
-        shape = MaterialTheme.shapes.medium,
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction),
-        keyboardActions = KeyboardActions(
-            onNext = { focusManager.moveFocus(FocusDirection.Down) },
-            onDone = {
-                focusManager.clearFocus()
-                onDone()
-            }
-        ),
-        trailingIcon = {
-            TextButton(onClick = { visible = !visible }, enabled = enabled) {
-                Text(if (visible) "Hide" else "Show")
-            }
-        }
-    )
-}
+// region Previews
 
 @Preview(name = "Sign in", showBackground = true, heightDp = 900)
 @Composable
 private fun SignInPreview() {
-    SalesOnboardingTheme(darkTheme = false) {
+    SalesOnboardingTheme {
         UnifiedLoginScreen(onLogin = { _, _, _, _, _ -> }, onRegisterAdmin = {}, onRegisterAgent = {})
     }
 }

@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var selectedContext by remember { mutableStateOf<String?>(null) }
                 var consentGiven by remember { mutableStateOf(false) }
+                // When the customer agreed in this run of the form; saved with the new session.
+                var consentAtMillis by remember { mutableStateOf<Long?>(null) }
                 var onboardingSessionId by remember { mutableStateOf<String?>(null) }
                 var resumedSession by remember { mutableStateOf<StoredOnboardingSession?>(null) }
                 var fieldRuleConfiguration by remember { mutableStateOf(FieldRuleConfiguration()) }
@@ -194,7 +196,6 @@ class MainActivity : ComponentActivity() {
                                 resumedSession = null
                             },
                             onViewSessions = { showAgentSessions = true },
-                            companyIndustry = companyIndustry,
                             onSignOut = ::signOut,
                             modifier = Modifier.padding(innerPadding)
                         )
@@ -213,7 +214,10 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (!consentGiven) {
                         OnboardingConsentScreen(
-                            onConsent = { consentGiven = true },
+                            onConsent = {
+                                consentGiven = true
+                                consentAtMillis = System.currentTimeMillis()
+                            },
                             onBack = {
                                 selectedIndustry = null
                                 selectedContext = null
@@ -277,6 +281,7 @@ class MainActivity : ComponentActivity() {
                                     playbook = playbook,
                                     initialModelUnavailable = predictorAttempt.isFailure,
                                     riskModel = riskModel,
+                                    consentAtMillis = consentAtMillis,
                                     initialValues = resumedSession
                                         ?.takeIf { it.sessionId == onboardingSessionId }
                                         ?.entries
