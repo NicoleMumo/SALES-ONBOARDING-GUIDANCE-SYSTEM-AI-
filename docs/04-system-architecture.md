@@ -1,248 +1,67 @@
-# 04 - System architecture
+# System architecture
 
-How the parts of SalesMesh fit together. The diagrams are written in Mermaid, so
-GitHub draws them on this page.
+SalesMesh is **an Android app plus Firebase**, Google's ready-made cloud service.
+There is no server of our own. The AI runs on the phone.
 
-## 1. The big picture
-
-There is one phone app and one cloud database. The AI runs **on the phone**, so a
-customer's answers never leave the device to be scored. The Python side is only
-used offline, to make data and train the models.
+## Overview
 
 ```mermaid
 flowchart LR
-    subgraph Phone["Android phone: the SalesMesh app"]
-        UI["Screens<br/>(Jetpack Compose)"]
-        LOGIC["Form logic<br/>checks, progress, drafts"]
-        AI["On-device AI<br/>next question + risk warning"]
-        OCR["ID photo reader<br/>(Google ML Kit, on the phone)"]
-        UI --> LOGIC
-        LOGIC --> AI
-        UI --> OCR
+    subgraph Phone["Android phone (the app)"]
+        UI["1. Screens"] --> LOGIC["2. Logic and AI"]
     end
-
-    subgraph Cloud["Firebase (Google cloud)"]
-        AUTH["Authentication<br/>email + password,<br/>admin and company claims"]
-        DB[("Realtime Database<br/>one branch per company")]
-        RULES{{"Access rules"}}
-        RULES --- DB
-    end
-
-    subgraph Offline["Your computer (not shipped)"]
-        SIM["Simulated data<br/>ml/dataset.py"]
-        TRAIN["Training<br/>ml/next_field_model.py"]
-        MODELS[/"Model files<br/>ml/models/"/]
-        SIM --> TRAIN --> MODELS
-    end
-
-    LOGIC <-->|sign in| AUTH
-    LOGIC <-->|sessions, answers, settings| RULES
-    MODELS -. "copied into the app by the build" .-> AI
+    LOGIC <--> DATA[("3. Firebase<br/>sign-in + database")]
+    TRAIN["Python training<br/>(offline, on a computer)"] -. "model files" .-> LOGIC
 ```
 
-## 1b. The standard components, and where SalesMesh has them
+## The parts
 
-Most system architecture guides list the same building blocks. This is how
-SalesMesh fits them. It is a **client app plus a managed cloud backend**, not a
-set of servers we run ourselves, so some blocks do not exist here on purpose.
-
-| Standard component | In SalesMesh | Notes |
+| Part | What it is in SalesMesh | Technology |
 | --- | --- | --- |
-| Clients and user interface | The Android app (Jetpack Compose screens) | Agents and admins use the same app; the screens differ by role |
-| API gateway / load balancer | Not needed | The app talks to Firebase directly over its own secure connection. Google handles routing, TLS and scaling |
-| Application / business logic | Inside the app: form logic, answer checks, risk warning, consistency measure | No separate server. See the layers in section 3 |
-| Data storage | Firebase Realtime Database (NoSQL, one branch per company), plus the phone's offline copy | No cache engine such as Redis |
-| Messaging / event broker | Not needed | Nothing runs in the background between services. The app writes records straight to the database |
-| AI / ML | Two small models run on the phone; training happens offline on a computer | Section 7 |
-| Infrastructure | Google's cloud for Firebase; the agent's own Android phone | We run no servers, containers or virtual machines |
-| Security and authentication | Firebase Authentication, admin and company claims, database access rules | Section 6 |
+| **Client (user interface)** | The screens agents and admins use | Kotlin, Jetpack Compose |
+| **Business logic** | Answer checks, progress, next-question suggestion, risk warning, consistency measure. Runs on the phone. | Kotlin, TensorFlow Lite |
+| **Data storage** | Sessions, answers, agents, settings. One branch per company. | Firebase Realtime Database |
+| **Security** | Sign-in, company walls, access rules | Firebase Authentication and rules |
+| **Infrastructure** | Google runs the cloud side. The agent's phone runs the app. | Firebase |
+| **AI training** | Makes simulated data and trains the two models. Not part of the app. | Python |
 
-**Monolith or microservices?** Neither word fits well. The app is one
-**monolith** (one module, one package), and the backend is a managed service, so
-there are no microservices to look after. That is the right size for one team and a
-pilot. It is also why there is no gateway or message broker to explain.
+Left out on purpose: a separate server, API gateway and message queue. Firebase
+handles those jobs, so there is nothing of our own to run.
 
-**Purpose:** give every agent the same checked form, so onboarding is consistent,
-and show admins how consistently the team follows it.
+## Layers inside the app
 
-## 2. Who uses it
+Each layer only calls the one below it.
 
-| Person | What they do | What they can see |
+| Layer | Does | Files |
 | --- | --- | --- |
-| **Sales agent** | Onboards customers with the form | Only their own sessions |
-| **Admin** | Manages agents, questions and industry; reads results | Everything in their own company, nothing from other companies |
-| **Project owner** | Creates the first admin (sets the admin and company claims in Firebase) | The Firebase console |
+| 1. Presentation | Shows screens, takes taps and typing | `Auth`, `AgentScreens`, `OnboardingForm`, `FormQuestions`, `SessionHistoryScreen`, `AdminScreens`, `AdminOverview`, `Ui` |
+| 2. Logic | Checks answers, suggests the next question, works out risk and consistency | `OnboardingController`, `Fields`, `Validation`, `Insights`, `NextFieldPredictor` |
+| 3. Data | Saves and loads from Firebase, holds the model files | `FirebaseFieldEntryStore`, `AdminDataStore` |
 
-## 3. The layers
+Code is in `android/app/src/main/java/com/example/salesonboarding/`.
 
-The app has three layers. A layer may only call the one below it, so a screen
-never talks to Firebase directly and the checks never draw anything.
-
-```mermaid
-flowchart TB
-    subgraph P["1. Presentation layer: what the user sees"]
-        direction LR
-        AUTHUI["Auth<br/>sign in, register"]
-        AGENT["AgentScreens<br/>home, customer type, consent"]
-        FORM["OnboardingForm + FormQuestions<br/>the form"]
-        HIST["SessionHistoryScreen<br/>lists, session page"]
-        ADMIN["AdminScreens + AdminOverview<br/>5 admin pages"]
-        UIKIT["Ui<br/>colours, Jost, shared parts"]
-    end
-
-    subgraph L["2. Logic layer: the rules, no screens, no Firebase"]
-        direction LR
-        CTRL["OnboardingController<br/>state, progress, drafts"]
-        FIELDS["Fields<br/>question catalogue, playbooks"]
-        VALID["Validation<br/>answer checks"]
-        INSIGHT["Insights<br/>risk warning, consistency"]
-        PRED["NextFieldPredictor<br/>runs the TFLite model"]
-    end
-
-    subgraph D["3. Data layer: where information is kept"]
-        direction LR
-        ENTRY["FirebaseFieldEntryStore<br/>sessions and answers"]
-        ADMINSTORE["AdminDataStore<br/>agents, rules, analytics, membership"]
-        ASSETS[("App assets<br/>onboarding_model.tflite<br/>risk_model.json")]
-    end
-
-    subgraph X["External services"]
-        direction LR
-        FBAUTH["Firebase Authentication"]
-        FBDB[("Firebase Realtime Database")]
-        MLKIT["Google ML Kit<br/>ID photo reader"]
-    end
-
-    P --> L
-    L --> D
-    ENTRY --> FBDB
-    ADMINSTORE --> FBDB
-    ADMINSTORE --> FBAUTH
-    PRED --> ASSETS
-    INSIGHT --> ASSETS
-    FORM -.-> MLKIT
-```
-
-| Layer | Files | Job | Must not |
-| --- | --- | --- | --- |
-| Presentation | `MainActivity`, `Auth`, `AgentScreens`, `OnboardingForm`, `FormQuestions`, `SessionHistoryScreen`, `AdminScreens`, `AdminOverview`, `Ui` | Show screens, take taps and typing, pass them down | Decide whether an answer is valid |
-| Logic | `OnboardingController`, `Fields`, `Validation`, `Insights`, `NextFieldPredictor` | Check answers, track progress, suggest the next question, work out the risk and consistency | Draw anything or call Firebase |
-| Data | `FirebaseFieldEntryStore`, `AdminDataStore`, the model files in `assets/` | Save and load sessions, agents, settings; hold the trained models | Contain rules about the form |
-
-Three honest exceptions: `MainActivity.kt` creates the Firebase stores and hands
-them to the screens, `Auth.kt` mixes the sign-in screens with the Firebase
-account checks, and `Fields.kt` holds both the question catalogue and the admin's
-rule changes. Splitting them is possible but would not change how the app behaves.
-
-Each store is an interface (`AdminDataStore`, `OnboardingSessionStore`,
-`SessionHistoryStore`) with a Firebase version behind it. That is what lets the
-Android tests run the logic without a database.
-
-## 4. What happens during one onboarding
-
-```mermaid
-sequenceDiagram
-    actor A as Agent
-    participant App as App
-    participant AI as On-device AI
-    participant DB as Firebase
-
-    A->>App: Choose customer type
-    A->>App: Customer gives consent
-    App->>DB: Start session (company, agent, industry, consent time)
-    loop Each question
-        A->>App: Type an answer, then leave the box
-        App->>App: Check the answer
-        App->>DB: Save draft + pass/fail record (never the answer text in the record)
-        App->>AI: Which question next? Is the customer likely to give up?
-        AI-->>App: Suggested next question, risk level
-        App-->>A: Error message, or suggestion and warning
-    end
-    A->>App: Review and submit
-    App->>DB: Mark completed, keep only valid answers
-```
-
-## 5. What is stored in the database
-
-Everything for a company lives under its own branch. Another company's branch is
-not readable, which the access rules enforce.
+## What is stored
 
 ```
-companyMemberships/{agentUid}            who belongs to which company, active or not
 companies/{companyId}/
-├── settings/industry                    banking or telecom
-├── agentInvitations/{email}             invited agents
-├── fieldRuleOverrides/{fieldId}         which standard questions are required
-├── fieldDefinitions/{fieldId}           the company's own questions
-└── onboardingSessions/{sessionId}/
-    ├── (details)                        agent, industry, status, times, consent time and agent
-    ├── playbookSnapshot                 the questions used, frozen at the start
-    ├── entries/{fieldId}                the answers
-    ├── validation/{fieldId}             latest pass/fail per question
-    └── events                           one record per check: type, question, time
+    settings, agentInvitations, fieldRuleOverrides, fieldDefinitions
+    onboardingSessions/{sessionId}/  answers, checks, consent time, frozen question list
+companyMemberships/{agentUid}        which company each agent belongs to
 ```
 
-Not saved anywhere: the ID photo, the text read from it, and the time spent per
-question (used only in memory by the risk warning).
+Not saved: the ID photo and the text read from it.
 
-## 6. Security in layers
+## Security
 
-| Layer | What it does | Where |
-| --- | --- | --- |
-| Sign-in | Email and password; admins carry `admin` and `companyId` claims | Firebase Authentication |
-| Invitation | An agent can only join with an email an admin invited, for that company | `AdminDataStore`, rules |
-| Active check | A switched-off agent loses access | `companyMemberships`, rules |
-| Company wall | Every read and write is limited to the person's own company | `firebase/database.rules.json` |
-| Agent wall | Agents read only sessions where they are the agent | rules |
-| Locked questions | Seven compliance questions can never be made optional | `FieldRuleConfiguration` |
-| No stored secrets | No service-account keys or customer data in the repository | convention + `.gitignore` |
+- Everyone signs in. Admins carry an admin and company mark.
+- Agents join only with an email an admin invited.
+- Database rules keep each company to its own branch, and agents to their own sessions.
+- Seven compliance questions can never be made optional.
 
-Still to do before real data: a full test of the rules, email verification, a
-retention plan. See the README's known limits.
+Still to do before real data: test the rules fully, turn on email verification,
+decide how long data is kept. See the [README](../README.md#known-limits).
 
-## 7. The AI side
+## More detail
 
-```mermaid
-flowchart LR
-    G["dataset.py<br/>simulated sessions<br/>(3 datasets, different seeds)"] --> N["next_field_model.py<br/>Transformer"]
-    G --> R["risk model<br/>logistic regression"]
-    N --> T["onboarding_model.tflite<br/>+ preprocessing_meta.json"]
-    R --> J["risk_model.json<br/>14 weights, 2 thresholds"]
-    T --> APP["app assets"]
-    J --> APP
-    C["consistency.py<br/>plain counting"] -. "same rule written again in Kotlin (Insights.kt)" .-> APP
-```
-
-| Piece | Job | Where it runs |
-| --- | --- | --- |
-| Next-question Transformer | Suggests which question comes next | Phone (TensorFlow Lite) |
-| Risk model | Warns when a customer may give up | Phone (weights read from JSON) |
-| Consistency measure | Counts corrected answers and out-of-order steps | Phone and admin screens (not AI) |
-| ID photo reader | Shows printed text from a photo to help typing | Phone (Google ML Kit) |
-
-Both models were trained on **simulated** data only. A build step copies the
-files in `ml/models/` into the app, and a check keeps the two copies identical.
-
-## 8. Building and checking
-
-```mermaid
-flowchart LR
-    DEV["Developer<br/>branch + pull request"] --> CI["GitHub Actions<br/>build + Android tests"]
-    DEV --> LOCAL["Local checks<br/>Gradle tests + Python tests"]
-    CI --> MAIN2["main branch"]
-```
-
-CI currently runs the Android build and tests. Running the Python tests there
-and testing the Firebase rules are planned (Phase 5).
-
-## 9. Why it is built this way
-
-- **AI on the phone:** answers are not sent anywhere to be scored, it works
-  without a connection, and there is no server to run.
-- **One Firebase branch per company:** a simple wall between companies that the
-  rules can check in one line.
-- **Plain counting for consistency:** an admin can check any number by hand. An
-  AI model for this was tried and failed its pass mark.
-- **Frozen question list per session:** changing a setting later never rewrites
-  old sessions.
-- **One Android module:** small enough that splitting it would add work and no benefit.
+- [How the app works](02-how-the-app-works.md): screens and saved data
+- [AI, data and results](03-ai-data-and-results.md): the models
