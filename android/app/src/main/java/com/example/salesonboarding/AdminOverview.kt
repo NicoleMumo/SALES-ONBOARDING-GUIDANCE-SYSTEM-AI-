@@ -1,23 +1,26 @@
 package com.example.salesonboarding
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -57,7 +61,14 @@ private enum class OverviewSheet(val label: String) {
 }
 
 /** One of the four bars; tapping it shows [detail] underneath. */
-private data class OverviewBar(val label: String, val share: Double, val detail: String)
+private data class OverviewBar(
+    val label: String,
+    val share: Double,
+    val title: String,
+    val detail: String,
+    val note: String?,
+    val fill: androidx.compose.ui.graphics.Color
+)
 
 /**
  * The admin's first page: one big number (sessions started), four bars that each explain
@@ -124,68 +135,112 @@ private fun OverviewContent(analytics: OnboardingAnalytics, agents: List<SalesAg
     val bars = buildList {
         add(
             OverviewBar(
-                "Finished", analytics.completionRate,
-                "${analytics.completedCount} of ${analytics.sessionCount} sessions were completed." +
-                    if (analytics.completedCount > 0) {
-                        " On average they took ${"%.0f".format(analytics.averageCompletionMinutes)} minutes."
-                    } else ""
+                label = "Finished",
+                share = analytics.completionRate,
+                title = "Sessions finished",
+                detail = "${analytics.completedCount} of ${analytics.sessionCount} started sessions were finished.",
+                note = if (analytics.completedCount > 0) {
+                    "A finished session takes about ${"%.0f".format(analytics.averageCompletionMinutes)} minutes on average."
+                } else null,
+                fill = Sm.colors.teal
             )
         )
         add(
             OverviewBar(
-                "Orderly",
-                if (report.sessionCount == 0) -1.0 else report.followedStandardShare,
-                if (report.sessionCount == 0) "No completed sessions to measure yet." else
-                    "${report.followedStandardCount} of ${report.sessionCount} completed sessions had at most " +
-                        "${SessionConsistencyCalculator.MAX_FAILED_CHECKS} corrected answers and at most " +
-                        "${SessionConsistencyCalculator.MAX_STEPS_OUT_OF_PLACE} questions out of the standard order. " +
-                        "A different order is not automatically wrong."
+                label = "Orderly",
+                share = if (report.sessionCount == 0) -1.0 else report.followedStandardShare,
+                title = "Orderly sessions",
+                detail = if (report.sessionCount == 0) "No finished sessions to measure yet." else
+                    "${report.followedStandardCount} of ${report.sessionCount} finished sessions followed the standard.",
+                note = if (report.sessionCount == 0) null else
+                    "At most ${SessionConsistencyCalculator.MAX_FAILED_CHECKS} corrected answers and " +
+                        "${SessionConsistencyCalculator.MAX_STEPS_OUT_OF_PLACE} questions out of order. " +
+                        "A different order is not automatically wrong.",
+                fill = Sm.colors.ink
             )
         )
         add(
             OverviewBar(
-                "Filled", analytics.averageReadinessPercent / 100,
-                "On average ${"%.0f".format(analytics.averageReadinessPercent)}% of the required answers are filled in, across all sessions."
+                label = "Filled",
+                share = analytics.averageReadinessPercent / 100,
+                title = "Answers filled in",
+                detail = "On average ${"%.0f".format(analytics.averageReadinessPercent)}% of the required answers are filled in.",
+                note = "Across all sessions, finished or not.",
+                fill = Sm.colors.lime
             )
         )
         add(
             OverviewBar(
-                "Unfinished", 1 - analytics.completionRate,
-                analytics.commonPausePoint?.let { "Most unfinished sessions stop at: $it." }
-                    ?: "Sessions that were started but not completed."
+                label = "Unfinished",
+                share = 1 - analytics.completionRate,
+                title = "Sessions not finished",
+                detail = "${analytics.sessionCount - analytics.completedCount} of ${analytics.sessionCount} started sessions were not finished.",
+                note = analytics.commonPausePoint?.let { "Most of them stop at: $it." },
+                fill = Sm.colors.cherry
             )
         )
     }
+    val chosen = bars[selectedBar]
 
-    SectionCard {
-        Text("SESSIONS STARTED", style = smCapsStyle(), color = Sm.colors.muted)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(
             "${analytics.sessionCount}",
             style = MaterialTheme.typography.displayLarge.copy(fontSize = 64.sp, lineHeight = 68.sp),
+            fontWeight = FontWeight.SemiBold,
             color = Sm.colors.ink
         )
-        bars.forEachIndexed { index, bar ->
-            ShareBar(bar, selected = index == selectedBar, onClick = { selectedBar = index })
+        Text(
+            buildString {
+                append("sessions started")
+                if (analytics.completedCount > 0) {
+                    append(" · ${"%.0f".format(analytics.averageCompletionMinutes)} min average")
+                }
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = Sm.colors.muted
+        )
+    }
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = Sm.colors.cream,
+        border = BorderStroke(1.5.dp, Sm.colors.line),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.padding(horizontal = Space.m, vertical = Space.l),
+            horizontalArrangement = Arrangement.spacedBy(Space.s)
+        ) {
+            bars.forEachIndexed { index, bar ->
+                PillBar(
+                    bar,
+                    selected = index == selectedBar,
+                    onClick = { selectedBar = index },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
-        Surface(shape = RoundedCornerShape(14.dp), color = Sm.colors.cream, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                bars[selectedBar].detail,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Sm.colors.ink,
-                modifier = Modifier.padding(Space.m)
-            )
+    }
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            Box(Modifier.size(10.dp).background(chosen.fill, CircleShape))
+            Text(chosen.title, style = MaterialTheme.typography.titleMedium, color = Sm.colors.ink)
         }
-        if (report.earlierSessionsLeftOut > 0) {
+        Text(chosen.detail, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink)
+        chosen.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Sm.colors.muted) }
+        if (selectedBar == 1 && report.earlierSessionsLeftOut > 0) {
             Text(
-                "${report.earlierSessionsLeftOut} earlier completed sessions are not counted in Orderly: that version " +
+                "${report.earlierSessionsLeftOut} earlier finished sessions are not counted: that version " +
                     "checked answers while they were typed, so a real correction cannot be told from a pause.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
         }
-        if (report.sessionsWithoutChecks > 0) {
+        if (selectedBar == 1 && report.sessionsWithoutChecks > 0) {
             Text(
-                "${report.sessionsWithoutChecks} completed sessions have no saved answer checks and are not counted in Orderly.",
+                "${report.sessionsWithoutChecks} finished sessions have no saved answer checks and are not counted.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
@@ -290,41 +345,60 @@ private fun WeeklyTrend(weeks: List<WeeklyConsistency>) {
 
 // region Chart parts
 
-/** A labelled share bar; a negative share means "nothing to measure" and shows a dash. */
+/**
+ * One tall pill: the fill rises from the bottom to the share, with the percentage inside it.
+ * A negative share means "nothing to measure" and shows an empty pill with a dash.
+ */
 @Composable
-private fun ShareBar(bar: OverviewBar, selected: Boolean, onClick: () -> Unit) {
+private fun PillBar(bar: OverviewBar, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val known = bar.share >= 0
-    val shape = RoundedCornerShape(14.dp)
+    val pill = RoundedCornerShape(50)
+    val onFill = if (bar.fill == Sm.colors.lime) Sm.colors.ink else Sm.colors.white
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (selected) Sm.colors.cream else Sm.colors.white, shape)
-            .border(1.5.dp, if (selected) Sm.colors.ink else Sm.colors.divider, shape)
+        modifier = modifier
             .clickable(onClick = onClick)
-            .padding(Space.m)
             .semantics { contentDescription = "${bar.label}: ${if (known) percent(bar.share) else "not measured yet"}" },
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Space.s)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(bar.label, style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink, modifier = Modifier.weight(1f))
-            Text(if (known) percent(bar.share) else "—", style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink)
-        }
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(12.dp)
-                .background(Sm.colors.tealTrack, RoundedCornerShape(6.dp))
-                .clearAndSetSemantics { } // the text above already says it
+                .height(220.dp)
+                .clip(pill)
+                .background(Sm.colors.track)
+                .then(if (selected) Modifier.border(2.dp, Sm.colors.ink, pill) else Modifier)
+                .clearAndSetSemantics { }, // the label below already says it
+            contentAlignment = Alignment.BottomCenter
         ) {
             if (known) {
                 Box(
                     Modifier
-                        .fillMaxWidth(bar.share.toFloat().coerceIn(0f, 1f))
-                        .fillMaxHeight()
-                        .background(chartMarkColor(), RoundedCornerShape(6.dp))
-                )
+                        .fillMaxWidth()
+                        .fillMaxHeight(bar.share.toFloat().coerceIn(0.2f, 1f))
+                        .padding(if (selected) 3.dp else 0.dp)
+                        .clip(pill)
+                        .background(bar.fill),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Text(
+                        percent(bar.share),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = onFill,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+            } else {
+                Text("—", color = Sm.colors.muted, modifier = Modifier.padding(bottom = 12.dp))
             }
         }
+        Text(
+            bar.label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = Sm.colors.ink
+        )
     }
 }
 
