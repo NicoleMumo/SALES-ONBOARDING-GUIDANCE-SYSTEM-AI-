@@ -87,6 +87,7 @@ How these were tested, and their limits: [AI, data and results](docs/03-ai-data-
 1. [Set up and run](docs/01-set-up-and-run.md): Firebase, first admin and agent, building, testing
 2. [How the app works](docs/02-how-the-app-works.md): screens, what is saved, where things are in the code
 3. [AI, data and results](docs/03-ai-data-and-results.md): the data, the models, retraining
+4. [System architecture](docs/04-system-architecture.md): diagrams of the parts, the data stored, security and the AI pipeline
 
 ## Credits
 
