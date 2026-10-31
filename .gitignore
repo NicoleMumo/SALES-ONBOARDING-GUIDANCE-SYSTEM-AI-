@@ -1,7 +1,7 @@
 
 banking_synthetic_sessions.csv
 telecom_synthetic_sessions.csv
-app/google-services.json
+android/app/google-services.json
 .gradle/
 .gradle-user-home/
 **/build/
@@ -19,3 +19,6 @@ node_modules/
 firebase-debug.log
 firebase-debug.*.log
 ml/data/
+
+# Obsidian settings (local)
+.obsidian/

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ draws its own launch screen from these two items (icon only, no text). -->
+    <style name="Theme.SalesOnboarding" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/sm_ink</item>
+        <item name="android:windowBackground">@color/sm_white</item>
+        <item name="android:windowSplashScreenBackground">@color/sm_ink</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/sm_white</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

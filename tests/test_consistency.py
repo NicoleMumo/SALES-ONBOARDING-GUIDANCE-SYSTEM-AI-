@@ -20,7 +20,7 @@ from consistency import (  # noqa: E402
 )
 
 PLAYBOOK_SOURCE = (
-    ROOT / "app" / "src" / "main" / "java" / "com" / "example" / "salesonboarding"
+    ROOT / "android" / "app" / "src" / "main" / "java" / "com" / "example" / "salesonboarding"
     / "Fields.kt"
 )
 

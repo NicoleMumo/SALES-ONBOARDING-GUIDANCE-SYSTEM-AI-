@@ -26,4 +26,6 @@ jobs:
         with:
           packages: platform-tools
       - run: cp app/google-services.example.json app/google-services.json
+        working-directory: android
       - run: bash ./gradlew :app:testDebugUnitTest
+        working-directory: android

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- From the SalesMesh design handoff (24 dp, stroke 2, round caps). Tinted in code. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M6.0,3.0 h12.0 a2.0,2.0 0 0 1 2.0,2.0 v14.0 a2.0,2.0 0 0 1 -2.0,2.0 h-12.0 a2.0,2.0 0 0 1 -2.0,-2.0 v-14.0 a2.0,2.0 0 0 1 2.0,-2.0 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M8 8h2M14 8h2M8 12h2M14 12h2M10 21v-4h4v4"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

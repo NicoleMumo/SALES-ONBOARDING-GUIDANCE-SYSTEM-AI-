@@ -47,15 +47,17 @@ The details, limits and how each result was tested are in
 
 ## Quick start
 
-1. Open this folder in Android Studio (JDK 17) and let Gradle sync.
+1. Open the **android** folder in Android Studio (JDK 17) and let Gradle sync.
 2. Connect your own Firebase project and save its `google-services.json` as
-   `app/google-services.json` (not included). See
+   `android/app/google-services.json` (not included). See
    [01 - Set up and run](docs/01-set-up-and-run.md).
 3. Build and test from PowerShell:
 
    ```powershell
+   cd android
    .\gradlew.bat :app:assembleDebug
    .\gradlew.bat :app:testDebugUnitTest
+   cd ..
    python -m unittest discover -s tests
    ```
 
@@ -66,17 +68,13 @@ repository.
 
 | Folder or file | What it contains |
 | --- | --- |
-| `app/` | The Android app (Kotlin, Jetpack Compose, Firebase, TensorFlow Lite) and its tests. |
+| `android/` | Everything for the Android app (Kotlin, Jetpack Compose, Firebase, TensorFlow Lite): the `app/` module with its tests, and the Gradle build files. Open this folder in Android Studio. |
 | `ml/` | The AI side: simulated-data generator and checker, the models' code, the training notebook, `requirements.txt`. |
 | `ml/models/` | The model files the app loads (copied into the app by the build). |
 | `firebase/` | Database access rules (still to be tested and deployed) and an early rules test that needs rewriting. |
 | `tests/` | Python tests. |
 | `docs/` | The three guides below. |
 | `legacy/` | Earlier and replaced files, kept with notes on why ([legacy/README.md](legacy/README.md)). |
-
-The Gradle files in the top folder (`build.gradle.kts`, `settings.gradle.kts`,
-`gradle.properties`, `gradlew`, `gradlew.bat`, `gradle/`) are required there by
-Android Studio.
 
 ## Guides
 
@@ -93,4 +91,4 @@ Android Studio.
 
 - Sign-in photo: "Minimalist wooden desk and laptop with empty chair", Kaboompics.
 - Fonts: Jost and Cormorant Garamond, SIL Open Font License 1.1 (licence texts
-  in `app/src/main/assets/licenses/`).
+  in `android/app/src/main/assets/licenses/`).

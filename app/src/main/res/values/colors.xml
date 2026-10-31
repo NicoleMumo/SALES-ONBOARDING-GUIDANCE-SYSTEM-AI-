@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Match LightColors in Ui.kt; shown before the app draws its first screen. -->
-    <color name="app_primary">#FF0B6B4F</color>
-    <color name="app_background">#FFF5F7F5</color>
-</resources>
