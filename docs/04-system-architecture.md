@@ -40,6 +40,31 @@ flowchart LR
     MODELS -. "copied into the app by the build" .-> AI
 ```
 
+## 1b. The standard components, and where SalesMesh has them
+
+Most system architecture guides list the same building blocks. This is how
+SalesMesh fits them. It is a **client app plus a managed cloud backend**, not a
+set of servers we run ourselves, so some blocks do not exist here on purpose.
+
+| Standard component | In SalesMesh | Notes |
+| --- | --- | --- |
+| Clients and user interface | The Android app (Jetpack Compose screens) | Agents and admins use the same app; the screens differ by role |
+| API gateway / load balancer | Not needed | The app talks to Firebase directly over its own secure connection. Google handles routing, TLS and scaling |
+| Application / business logic | Inside the app: form logic, answer checks, risk warning, consistency measure | No separate server. See the layers in section 3 |
+| Data storage | Firebase Realtime Database (NoSQL, one branch per company), plus the phone's offline copy | No cache engine such as Redis |
+| Messaging / event broker | Not needed | Nothing runs in the background between services. The app writes records straight to the database |
+| AI / ML | Two small models run on the phone; training happens offline on a computer | Section 7 |
+| Infrastructure | Google's cloud for Firebase; the agent's own Android phone | We run no servers, containers or virtual machines |
+| Security and authentication | Firebase Authentication, admin and company claims, database access rules | Section 6 |
+
+**Monolith or microservices?** Neither word fits well. The app is one
+**monolith** (one module, one package), and the backend is a managed service, so
+there are no microservices to look after. That is the right size for one team and a
+pilot. It is also why there is no gateway or message broker to explain.
+
+**Purpose:** give every agent the same checked form, so onboarding is consistent,
+and show admins how consistently the team follows it.
+
 ## 2. Who uses it
 
 | Person | What they do | What they can see |
