@@ -154,6 +154,7 @@ How these were tested: [AI, data and results](docs/03-ai-data-and-results.md).
 2. [How the app works](docs/02-how-the-app-works.md): screens, what is saved, where things are in the code
 3. [AI, data and results](docs/03-ai-data-and-results.md): the data, the models, retraining
 4. [System architecture](docs/04-system-architecture.md): the parts, the layers, what is stored and security, on one page
+5. [Privacy note](docs/05-privacy-note.md): what is collected, who sees it, and the decisions still open
 
 ---
 
