@@ -1,57 +1,57 @@
 # SalesMesh
 
-SalesMesh is an Android app for companies whose sales agents sign up customers
-in the field, for bank accounts or telecom services in Kenya. Onboarding done by
-many agents tends to be inconsistent: questions are skipped, asked in different
-orders, or answered wrongly. SalesMesh gives every agent the company's standard
-form, checks each answer, suggests the next question with an on-device AI model,
-warns when a customer may give up, and shows admins how consistently the team
-follows the process.
+An Android app that helps sales agents sign up customers (bank accounts or
+telecom services in Kenya) the same way every time. It gives every agent the
+company's standard form, checks each answer, suggests the next question with an
+on-device AI model, warns when a customer may give up, and shows admins how
+consistently the team follows the process.
 
-## Status
+> **Status: research prototype.** The AI models were trained and tested on
+> simulated sessions, not real customers. The app is not ready for real customer
+> data yet (see [Known limits](#known-limits)).
 
-- **Simulated data only.** The models were trained and tested on simulated
-  sessions, never on real customers or agents. Their results show the methods
-  work on a realistic simulation, not how well they work in the field.
-- **Not ready for real customer data.** The Firebase access rules still need to
-  be tested and deployed, agent email verification is turned off for testing,
-  and there is no data-retention plan yet.
-- **Identity checks are manual.** The app reads text from a document photo to
-  help typing, but it does no KYC, selfie, liveness or face-match check and
-  approves no one.
+## Features
 
-## What it does
+**Agents**
+- Sign in to their company, choose the customer type, record the customer's consent
+- Fill in the form section by section; each answer is checked when the agent leaves the box
+- See a suggested next question and a warning if the customer may not finish
+- Review, submit, or save a draft and continue later
 
-**For agents:** sign in to their company; choose the customer type; record the
-customer's consent; fill in the form section by section, with each answer
-checked when they leave the box; see the AI's "Suggested next" question and a
-warning if the customer may not finish; review every answer; submit. Unfinished
-sessions are saved as drafts and can be continued later.
+**Admins**
+- Overview: sessions started, finished, orderly, filled, and unfinished
+- Invite and switch agents on or off
+- Read every session; choose which questions are required; add the company's own
+- Set the company's industry
 
-**For admins:** an overview of how the team is doing (share of sessions that
-followed the standard, finishing rate, time, the most corrected questions,
-agents compared, a weekly trend); invite and manage agents; read all sessions;
-add company questions and choose which questions are required; set the company's
-industry.
+## How the folders fit together
 
-## Results (simulated data, agents never seen in training)
+```
+ ml/  (Python)                      firebase/                 android/  (Kotlin app)
+ make simulated data  ──train──►  database rules  ◄──read/write──  the app
+ train the two models                                        ▲
+        │                                                    │
+        └── models/ ──── copied in by the build ─────────────┘
+```
 
-| What | Result |
+| Folder | What is in it |
 | --- | --- |
-| Next-question suggestion | Transformer **95.0%** right, against 86.5% for the app's rule without AI and 93.0% for a lookup table (best possible 97.9%) |
-| Risk warning | Trained model ROC-AUC **0.71 to 0.74** on three datasets, against 0.55 to 0.59 for the old hand-set rule (0.5 is guessing) |
-| Consistency measure | Plain counting (at most 2 corrected answers, at most 2 questions out of order); an anomaly-detection model was tried and failed its pass mark |
+| `android/` | The app (Kotlin, Jetpack Compose, Firebase, TensorFlow Lite) and its build files. **Open this folder in Android Studio.** |
+| `ml/` | Python code that makes the simulated data and trains the two AI models. `ml/models/` holds the trained files the app loads. |
+| `firebase/` | The database access rules and a test for them. |
+| `tests/` | Python tests for `ml/`. |
+| `docs/` | The guides (below). |
+| `legacy/` | Old and replaced files, kept for reference only. |
+| `.github/` | Automatic checks that run on every pull request. |
 
-The details, limits and how each result was tested are in
-[03 - AI, data and results](docs/03-ai-data-and-results.md).
+## Getting started
 
-## Quick start
+You need Android Studio (JDK 17), Python 3, and your own Firebase project.
 
-1. Open the **android** folder in Android Studio (JDK 17) and let Gradle sync.
-2. Connect your own Firebase project and save its `google-services.json` as
-   `android/app/google-services.json` (not included). See
-   [01 - Set up and run](docs/01-set-up-and-run.md).
-3. Build and test from PowerShell:
+1. Open the `android` folder in Android Studio and let Gradle sync.
+2. Save your Firebase file as `android/app/google-services.json` (not included).
+   Steps: [Set up and run](docs/01-set-up-and-run.md).
+3. Run the checks:
 
    ```powershell
    cd android
@@ -61,34 +61,35 @@ The details, limits and how each result was tested are in
    python -m unittest discover -s tests
    ```
 
-Never add Firebase service-account keys or real customer data to this
-repository.
+Never add Firebase service-account keys or real customer data to this repository.
 
-## Project layout
+## Results (simulated data)
 
-| Folder or file | What it contains |
+| What | Result |
 | --- | --- |
-| `android/` | Everything for the Android app (Kotlin, Jetpack Compose, Firebase, TensorFlow Lite): the `app/` module with its tests, and the Gradle build files. Open this folder in Android Studio. |
-| `ml/` | The AI side: simulated-data generator and checker, the models' code, the training notebook, `requirements.txt`. |
-| `ml/models/` | The model files the app loads (copied into the app by the build). |
-| `firebase/` | Database access rules (still to be tested and deployed) and an early rules test that needs rewriting. |
-| `tests/` | Python tests. |
-| `docs/` | The three guides below. |
-| `legacy/` | Earlier and replaced files, kept with notes on why ([legacy/README.md](legacy/README.md)). |
+| Next-question suggestion | AI model right **95.0%** of the time, against 86.5% for a fixed rule |
+| Risk warning | Trained model ROC-AUC **0.71 to 0.74**, against 0.55 to 0.59 for the old hand-set rule (0.5 is guessing) |
+| Consistency measure | Plain counting, not AI: at most 2 corrected answers and 2 questions out of order |
+
+How these were tested, and their limits: [AI, data and results](docs/03-ai-data-and-results.md).
+
+## Known limits
+
+- Models were never tested on real agents or customers.
+- The Firebase rules still need a full test and deployment before real data.
+- Agent email verification is off for testing.
+- Identity checks are manual: the app reads text from a document photo to help
+  typing, but does no KYC, selfie or face-match check.
+- No data-retention plan yet.
 
 ## Guides
 
-1. [01 - Set up and run](docs/01-set-up-and-run.md): Firebase, the first admin
-   and agent, building, testing, and the access checks to do before real data.
-2. [02 - How the app works](docs/02-how-the-app-works.md): the agent's session,
-   the admin's pages, the consistency measure, what is saved, and where things
-   are in the code.
-3. [03 - AI, data and results](docs/03-ai-data-and-results.md): the simulated
-   data, the two models and the rejected one, all results, retraining, and what
-   is not yet shown.
+1. [Set up and run](docs/01-set-up-and-run.md): Firebase, first admin and agent, building, testing
+2. [How the app works](docs/02-how-the-app-works.md): screens, what is saved, where things are in the code
+3. [AI, data and results](docs/03-ai-data-and-results.md): the data, the models, retraining
+4. [System architecture](docs/04-system-architecture.md): diagrams of the parts, the data stored, security and the AI pipeline
 
 ## Credits
 
 - Sign-in photo: "Minimalist wooden desk and laptop with empty chair", Kaboompics.
-- Fonts: Jost and Cormorant Garamond, SIL Open Font License 1.1 (licence texts
-  in `android/app/src/main/assets/licenses/`).
+- Font: Jost, SIL Open Font License 1.1 (licence text in `android/app/src/main/assets/licenses/`).

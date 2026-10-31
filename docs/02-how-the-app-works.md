@@ -46,21 +46,24 @@ Back button goes back one step wherever the screen has a back arrow.
 
 Admins see five pages in a bottom navigation bar:
 
-- **Overview**: the share of completed sessions that followed the standard (see
-  below), sessions started and finished, average time and progress, where
-  unfinished sessions stop, a weekly trend, the most corrected questions, the
-  questions most often answered out of order, and agents compared. Every chart
-  has a one-line caption, and the weekly chart has a "Show numbers" table.
+- **Overview**: the number of sessions started, and four tall bars: Finished,
+  Orderly (followed the standard, see below), Filled (required answers filled
+  in) and Unfinished. Tap a bar to read what it means. Under **More details**
+  are the weekly trend (with a "Show numbers" table), the most corrected
+  questions, the questions most often answered out of order, and agents
+  compared. A bar with nothing to measure shows a dash, never a made-up number.
 - **Agents**: invite agents by email, see whether each has registered, and turn
   an agent off or on.
-- **Sessions**: search and filter all of the company's sessions and read their
-  answers (read-only).
-- **Questions**: add company questions (name, instructions, answer type, checks,
-  choices) and choose which standard questions are required. Seven questions
+- **Sessions**: search and filter all of the company's sessions. Tap one to open
+  its own page with every saved answer (read-only).
+- **Questions**: the standard questions of the company's industry, grouped
+  (Identity, Contact, Business, Money, Service), with a switch for which are
+  required. Add, edit or delete the company's own questions (name,
+  instructions, answer type, checks, choices). Seven questions
   always stay required: full name, date of birth, ID type, ID number, politically
   exposed person status, US person status, and acceptance of the terms.
-- **Company**: set the onboarding industry and see the company ID to give to
-  agents.
+- **Company**: copy the company ID to give to agents, and set the onboarding
+  industry (agents cannot sign in until it is set).
 
 ## The consistency measure
 
@@ -151,7 +154,7 @@ All app code is in one package, `android/app/src/main/java/com/example/salesonbo
 | `NextFieldPredictor.kt` | Runs the next-question model (TensorFlow Lite). |
 | `Insights.kt` | The risk warning (trained model and hand-set fallback) and the consistency measure. |
 | `FirebaseFieldEntryStore.kt` | Saves sessions and answers. |
-| `SessionHistoryScreen.kt` | Session lists for agents and admins. |
+| `SessionHistoryScreen.kt` | Session lists and the session page, for agents and admins. |
 | `AdminDataStore.kt` | Admin data: agents, question rules, company industry, overview numbers. |
 | `AdminScreens.kt` | The admin pages behind the bottom navigation bar. |
 | `AdminOverview.kt` | The admin overview and its charts. |
@@ -159,5 +162,5 @@ All app code is in one package, `android/app/src/main/java/com/example/salesonbo
 
 Android Studio previews show the sign-in screen (`Auth.kt`), the customer choice
 (`AgentScreens.kt`), the agent form (`OnboardingForm.kt`), the admin overview
-(`AdminOverview.kt`) and the shared building blocks in light and dark (`Ui.kt`)
+(`AdminOverview.kt`) and the shared building blocks (`Ui.kt`)
 without running the app.
