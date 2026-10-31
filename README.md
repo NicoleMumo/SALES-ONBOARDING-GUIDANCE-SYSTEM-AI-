@@ -62,10 +62,15 @@ each answer is checked, and admins can see how consistently the team follows it.
 
 You need Android Studio (JDK 17), Python 3, and your own Firebase project.
 
-1. Open the **`android`** folder in Android Studio (not the repo top folder) and let Gradle sync.
-2. Save your Firebase file as `android/app/google-services.json` (not included).
-   Full steps, including the first admin: [Set up and run](docs/01-set-up-and-run.md).
-3. Run the checks:
+1. Clone the project:
+
+   ```bash
+   git clone https://github.com/NicoleMumo/SALES-ONBOARDING-GUIDANCE-SYSTEM-AI-.git
+   ```
+
+2. Open the **`android`** folder in Android Studio (not the repo top folder) and let Gradle sync.
+3. Add your Firebase settings (see [Configuration](#configuration)).
+4. Run the checks:
 
    ```powershell
    cd android
@@ -76,6 +81,16 @@ You need Android Studio (JDK 17), Python 3, and your own Firebase project.
    ```
 
 Never add Firebase service-account keys or real customer data to this repository.
+
+### Configuration
+
+| What | Where |
+| --- | --- |
+| Your Firebase file | Save it as `android/app/google-services.json`. It is private and not in Git. |
+| Database address | Set in `MainActivity.kt` (`SalesMeshApplication`). Change it if your database has another URL. |
+| Sign-in method | Turn on **Email/Password** in Firebase Authentication. |
+| Database rules | Deploy `firebase/database.rules.json`. |
+| First admin | A project owner gives the account its admin and company marks. Steps: [Set up and run](docs/01-set-up-and-run.md). |
 
 ---
 
@@ -139,6 +154,25 @@ How these were tested: [AI, data and results](docs/03-ai-data-and-results.md).
 2. [How the app works](docs/02-how-the-app-works.md): screens, what is saved, where things are in the code
 3. [AI, data and results](docs/03-ai-data-and-results.md): the data, the models, retraining
 4. [System architecture](docs/04-system-architecture.md): the parts, the layers, what is stored and security, on one page
+
+---
+
+## Contributing
+
+`main` is protected, so changes go through a pull request.
+
+1. Make a branch, for example `fix/57-short-name` or `docs/59-short-name`.
+2. Run the checks from Getting Started.
+3. Open a pull request with a short, plain description of what changed.
+
+## Support
+
+Found a problem or have a question? [Open an issue](https://github.com/NicoleMumo/SALES-ONBOARDING-GUIDANCE-SYSTEM-AI-/issues).
+
+## License
+
+No licence has been chosen yet, so all rights are reserved. The Jost font is used
+under the SIL Open Font License 1.1.
 
 ---
 
