@@ -210,8 +210,8 @@ private fun OverviewContent(analytics: OnboardingAnalytics, agents: List<SalesAg
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            Modifier.padding(horizontal = Space.m, vertical = Space.l),
-            horizontalArrangement = Arrangement.spacedBy(Space.s)
+            Modifier.padding(horizontal = Space.s, vertical = Space.l),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             bars.forEachIndexed { index, bar ->
                 PillBar(
@@ -395,9 +395,11 @@ private fun PillBar(bar: OverviewBar, selected: Boolean, onClick: () -> Unit, mo
         }
         Text(
             bar.label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = Sm.colors.ink
+            color = Sm.colors.ink,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
