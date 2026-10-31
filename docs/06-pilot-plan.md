@@ -1,6 +1,10 @@
 # Pilot plan and feedback form
 
-A small, safe trial of SalesMesh with a few real agents and **made-up customers**.
+A small, safe trial of SalesMesh. **The users are the agents and the admin.** The
+agent fills in the form on a customer's behalf, so the customer never touches the
+app. For the pilot, each agent signs up **made-up test customers**, played by you
+or a sheet of fake details.
+
 It answers one question: can people who did not build the app use it, and does it
 help them?
 
@@ -9,7 +13,7 @@ help them?
 | | |
 | --- | --- |
 | **Who** | 1 admin and 3 to 5 sales agents (people who do customer sign-ups, or could) |
-| **Customers** | Made-up only. Never real names, real ID numbers or real phone numbers |
+| **Test customers** | Made-up only (the agent enters their details). Never real names, real ID numbers or real phone numbers |
 | **Where** | Each person's own Android phone, or one you lend them |
 | **How long** | About 30 minutes per agent, plus 10 minutes for the admin |
 | **You do** | Set up, then watch and take notes. Do not help unless they are stuck for over a minute |
@@ -27,11 +31,11 @@ help them?
 Email verification is not needed for a pilot with made-up customers. Turn it on
 before any real data ([Privacy note](05-privacy-note.md)).
 
-## Made-up customers
+## Test customers
 
-Prepare 5 simple customers. Use obviously fake details, for example:
+Prepare 5 made-up customers for each agent to sign up. Use obviously fake details, for example:
 
-| # | Type | What to test |
+| Test customer # | Type | What to test |
 | --- | --- | --- |
 | 1 | Banking, individual | A normal, complete sign-up |
 | 2 | Banking, business | The extra business questions |
@@ -42,7 +46,7 @@ Prepare 5 simple customers. Use obviously fake details, for example:
 ## What each agent does (30 minutes)
 
 1. Sign in. If new, create an account. *(Note any trouble.)*
-2. Do customers 1 to 5 above, one after another.
+2. Sign up test customers 1 to 5 above, one after another, as if the customer were sitting next to them.
 3. Notice the "Suggested next" question and the warning banner when they appear.
 4. Fill in the feedback form.
 
@@ -55,9 +59,9 @@ Prepare 5 simple customers. Use obviously fake details, for example:
 
 ## What you record while watching (observer sheet)
 
-One row per customer, per agent.
+One row per test customer, per agent.
 
-| Agent | Customer # | Finished? (Y/N) | Minutes | Mistakes made | Where they got stuck | Asked for help? |
+| Agent | Test customer # | Finished? (Y/N) | Minutes | Mistakes made | Where they got stuck | Asked for help? |
 | --- | --- | --- | --- | --- | --- | --- |
 |  |  |  |  |  |  |  |
 
@@ -86,7 +90,7 @@ Give one to each person. Takes 3 minutes. Circle 1 to 5: **1 = strongly disagree
 | 4. The "Suggested next" question was useful. | | | | | |
 | 5. The warning banner (if I saw one) was useful. | | | | | |
 | 6. It was quick enough, not slow. | | | | | |
-| 7. I would use this with real customers. | | | | | |
+| 7. I would use this app when signing up real customers. | | | | | |
 | 8. The screens looked clear and easy to read. | | | | | |
 
 **Open questions** (a sentence is enough):
@@ -107,10 +111,10 @@ These are suggestions to decide before the pilot. Change them if you want.
 
 | Measure | Target |
 | --- | --- |
-| Customers 1 to 3 finished without help | at least 80% |
+| Sign-ups of test customers 1 to 3 that the agent finished without help | at least 80% |
 | Average rating on questions 1 to 8 | at least 4 out of 5 |
 | Crashes or lost answers | none |
-| "I would use this with real customers" (question 7) | most people answer 4 or 5 |
+| "I would use this app when signing up real customers" (question 7) | most people answer 4 or 5 |
 
 With only 3 to 5 people these are signs, not proof. The report should say so.
 
