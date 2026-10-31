@@ -19,3 +19,6 @@ node_modules/
 firebase-debug.log
 firebase-debug.*.log
 ml/data/
+
+# Obsidian settings (local)
+.obsidian/
