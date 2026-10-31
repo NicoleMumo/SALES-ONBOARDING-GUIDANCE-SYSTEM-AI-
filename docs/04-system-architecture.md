@@ -48,46 +48,70 @@ flowchart LR
 | **Admin** | Manages agents, questions and industry; reads results | Everything in their own company, nothing from other companies |
 | **Project owner** | Creates the first admin (sets the admin and company claims in Firebase) | The Firebase console |
 
-## 3. Inside the app
+## 3. The layers
 
-One Android module, one package (`com.example.salesonboarding`). Screens call
-logic; logic calls stores; only the stores talk to Firebase.
+The app has three layers. A layer may only call the one below it, so a screen
+never talks to Firebase directly and the checks never draw anything.
 
 ```mermaid
 flowchart TB
-    MAIN["MainActivity<br/>chooses the screen"]
-
-    subgraph Screens["Screens"]
+    subgraph P["1. Presentation layer: what the user sees"]
+        direction LR
         AUTHUI["Auth<br/>sign in, register"]
         AGENT["AgentScreens<br/>home, customer type, consent"]
         FORM["OnboardingForm + FormQuestions<br/>the form"]
-        HIST["SessionHistoryScreen<br/>lists and session page"]
+        HIST["SessionHistoryScreen<br/>lists, session page"]
         ADMIN["AdminScreens + AdminOverview<br/>5 admin pages"]
-        UIKIT["Ui<br/>colours, Jost font, shared parts"]
+        UIKIT["Ui<br/>colours, Jost, shared parts"]
     end
 
-    subgraph Logic["Logic (no screens)"]
-        CTRL["OnboardingController<br/>state, checks, suggestions, drafts"]
-        FIELDS["Fields<br/>question catalogue, rules, playbooks"]
+    subgraph L["2. Logic layer: the rules, no screens, no Firebase"]
+        direction LR
+        CTRL["OnboardingController<br/>state, progress, drafts"]
+        FIELDS["Fields<br/>question catalogue, playbooks"]
         VALID["Validation<br/>answer checks"]
-        INSIGHT["Insights<br/>risk warning, consistency measure"]
-        PRED["NextFieldPredictor<br/>TensorFlow Lite"]
+        INSIGHT["Insights<br/>risk warning, consistency"]
+        PRED["NextFieldPredictor<br/>runs the TFLite model"]
     end
 
-    subgraph Stores["Stores (Firebase)"]
+    subgraph D["3. Data layer: where information is kept"]
+        direction LR
         ENTRY["FirebaseFieldEntryStore<br/>sessions and answers"]
-        ADMINSTORE["AdminDataStore<br/>agents, rules, analytics"]
+        ADMINSTORE["AdminDataStore<br/>agents, rules, analytics, membership"]
+        ASSETS[("App assets<br/>onboarding_model.tflite<br/>risk_model.json")]
     end
 
-    MAIN --> AUTHUI & AGENT & FORM & HIST & ADMIN
-    FORM --> CTRL
-    CTRL --> FIELDS & VALID & INSIGHT & PRED
-    CTRL --> ENTRY
-    HIST --> ENTRY
-    ADMIN --> ADMINSTORE
-    AUTHUI --> ADMINSTORE
-    Screens -.-> UIKIT
+    subgraph X["External services"]
+        direction LR
+        FBAUTH["Firebase Authentication"]
+        FBDB[("Firebase Realtime Database")]
+        MLKIT["Google ML Kit<br/>ID photo reader"]
+    end
+
+    P --> L
+    L --> D
+    ENTRY --> FBDB
+    ADMINSTORE --> FBDB
+    ADMINSTORE --> FBAUTH
+    PRED --> ASSETS
+    INSIGHT --> ASSETS
+    FORM -.-> MLKIT
 ```
+
+| Layer | Files | Job | Must not |
+| --- | --- | --- | --- |
+| Presentation | `MainActivity`, `Auth`, `AgentScreens`, `OnboardingForm`, `FormQuestions`, `SessionHistoryScreen`, `AdminScreens`, `AdminOverview`, `Ui` | Show screens, take taps and typing, pass them down | Decide whether an answer is valid |
+| Logic | `OnboardingController`, `Fields`, `Validation`, `Insights`, `NextFieldPredictor` | Check answers, track progress, suggest the next question, work out the risk and consistency | Draw anything or call Firebase |
+| Data | `FirebaseFieldEntryStore`, `AdminDataStore`, the model files in `assets/` | Save and load sessions, agents, settings; hold the trained models | Contain rules about the form |
+
+Three honest exceptions: `MainActivity.kt` creates the Firebase stores and hands
+them to the screens, `Auth.kt` mixes the sign-in screens with the Firebase
+account checks, and `Fields.kt` holds both the question catalogue and the admin's
+rule changes. Splitting them is possible but would not change how the app behaves.
+
+Each store is an interface (`AdminDataStore`, `OnboardingSessionStore`,
+`SessionHistoryStore`) with a Firebase version behind it. That is what lets the
+Android tests run the logic without a database.
 
 ## 4. What happens during one onboarding
 
