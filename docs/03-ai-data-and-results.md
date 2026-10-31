@@ -89,8 +89,9 @@ session, so it is for analysis only; no method sees it. Results are saved in
 
 - When agents kept to the standard order, the model was no better than the lookup
   (5 steps against 1, McNemar z = 1.6).
-- Almost all of its advantage is in sessions that left the standard order: 350 of the
-  355 steps where it beat the lookup are there (z = 16.5).
+- Almost all of its advantage over the lookup is in sessions that left the standard
+  order: 350 of the 355 steps where it beat the lookup are there (z = 16.5). Against
+  the app's rule the gain is wider spread: 1,004 of 1,449 wins (69%) are there.
 - So the model works as a safety net for agents who go off-script, not as a
   replacement for the standard order. The departures were written into the
   simulator, so this still needs checking with real agents.
