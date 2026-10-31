@@ -73,6 +73,29 @@ suggestion, choosing only among the questions the app allows):
   answers in the app on an Android emulator.
 - Two full training runs gave 95.0% and 95.2%: read it as "about 95%".
 
+**Where the gain comes from.** `ml/offscript_breakdown.py` rebuilds the same 16,533
+steps, scores the shipped TensorFlow Lite file the way the app calls it (it reproduces
+the 95.0%, 86.5% and 93.0% above), and splits the steps by session. A session "left the
+standard order" if at least one question was out of place. That label uses the whole
+session, so it is for analysis only; no method sees it. Results are saved in
+`ml/models/offscript_report.json`.
+
+| Sessions | Steps (sessions) | App's rule | Best lookup | Transformer |
+| --- | --- | --- | --- | --- |
+| Kept the standard order | 8,790 (643) | 92.7% | 97.6% | 97.7% |
+| Left the standard order | 7,743 (539) | 79.5% | 87.8% | 92.0% |
+| Banking | 8,612 (601) | 83.2% | 92.8% | 95.0% |
+| Telecom | 7,921 (581) | 90.1% | 93.3% | 95.0% |
+
+- When agents kept to the standard order, the model was no better than the lookup
+  (5 steps against 1, McNemar z = 1.6).
+- Almost all of its advantage over the lookup is in sessions that left the standard
+  order: 350 of the 355 steps where it beat the lookup are there (z = 16.5). Against
+  the app's rule the gain is wider spread: 1,004 of 1,449 wins (69%) are there.
+- So the model works as a safety net for agents who go off-script, not as a
+  replacement for the standard order. The departures were written into the
+  simulator, so this still needs checking with real agents.
+
 **Pass mark.** It was written after the first results were seen, so it describes
 what was reached rather than a prediction: in at least two full runs, beat the
 app's rule by at least 5 points, beat the lookup on the same steps by more than
