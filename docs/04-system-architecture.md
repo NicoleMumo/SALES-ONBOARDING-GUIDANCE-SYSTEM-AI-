@@ -58,7 +58,7 @@ Not saved: the ID photo and the text read from it.
 - Database rules keep each company to its own branch, and agents to their own sessions.
 - Seven compliance questions can never be made optional.
 
-Still to do before real data: test the rules fully, turn on email verification,
+Still to do before real data: deploy the tested rules to your Firebase project, turn on email verification,
 decide how long data is kept. See the [README](../README.md#known-limits).
 
 ## More detail

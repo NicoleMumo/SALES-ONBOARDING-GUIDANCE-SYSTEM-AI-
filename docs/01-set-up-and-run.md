@@ -101,14 +101,15 @@ The Python tests check the simulated-data generator, the consistency measure
 and the risk-model features, and that the Python copy of the app's question
 order still matches the Kotlin source.
 
-Continuous integration (`.github/workflows/ci.yml`) compiles the Python code and
-runs the Android unit tests on every push. It does not run the Python tests yet.
+Continuous integration (`.github/workflows/ci.yml`) runs on every push and pull
+request: it compiles the Python code, runs the Python tests, runs the Android unit
+tests, and runs the Firebase rules tests (see section 6).
 
 ## 6. Check access before real data
 
-The rules file existing does not mean the rules are deployed or correct. Test
-them with the Firebase Emulator or a separate test project, with at least two
-companies, each with an admin and an agent. Check that:
+The rules file existing does not mean the rules are deployed. The rules are
+tested automatically against the Firebase Emulator, with two companies, each with
+an admin and agents. The 38 tests check that:
 
 - Company A cannot read or change anything of Company B.
 - An agent cannot read another agent's sessions.
@@ -117,13 +118,24 @@ companies, each with an admin and an agent. Check that:
 - Agents can only create and update their own sessions, and only while a
   session is in progress.
 
-`firebase/database.rules.test.js` (run from the `firebase/` folder with
-`npm run test:database-rules`, which needs Node and the Firebase CLI) is an
-early test file. It checks an older database
-layout with paths at the root (`onboardingSessions/`, `salesAgents/`), not the
-current `companies/{companyId}/` layout, so it does not test the current rules
-and two of its three checks would fail. It needs to be rewritten for the current
-layout and the checks above.
+- Signed-out visitors can do nothing.
+- An admin can change only their own company's settings, questions and
+  invitations, and the industry can only be banking or telecom.
+- A deactivated agent loses access to settings and sessions.
+- A completed session cannot be changed, and a session cannot change owner or
+  company.
+
+To run them yourself, from the `firebase/` folder (needs Node 20 and Java 21):
+
+```powershell
+npm install
+npm run test:database-rules
+```
+
+The tests are in `firebase/database.rules.test.js`. They passed here, and they
+fail when a rule is deliberately weakened (checked by hand). Passing tests do not
+deploy anything: you still need to deploy `database.rules.json` to your own
+Firebase project.
 
 ## Common problems
 
