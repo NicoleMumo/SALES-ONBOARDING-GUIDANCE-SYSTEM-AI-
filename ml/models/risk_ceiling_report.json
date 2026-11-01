@@ -6,7 +6,7 @@
       "warnings": {
         "app_rule": {
           "test_auc": 0.5874,
-          "test_average_precision": 0.1169,
+          "test_average_precision": 0.117,
           "at_amber": {
             "precision": 0.136,
             "recall": 0.282,
@@ -20,49 +20,49 @@
           "best_f1_on_test_upper_bound": 0.203
         },
         "shipped_model": {
-          "test_auc": 0.7346,
-          "test_average_precision": 0.2398,
+          "test_auc": 0.7366,
+          "test_average_precision": 0.2457,
           "at_amber": {
-            "precision": 0.227,
-            "recall": 0.467,
-            "f1": 0.306
-          },
-          "at_validation_best": {
-            "precision": 0.247,
-            "recall": 0.418,
-            "f1": 0.31
-          },
-          "best_f1_on_test_upper_bound": 0.311
-        },
-        "richer_inputs": {
-          "test_auc": 0.7361,
-          "test_average_precision": 0.2447,
-          "at_amber": {
-            "precision": 0.23,
-            "recall": 0.467,
-            "f1": 0.308
-          },
-          "at_validation_best": {
-            "precision": 0.222,
-            "recall": 0.498,
+            "precision": 0.229,
+            "recall": 0.464,
             "f1": 0.307
           },
-          "best_f1_on_test_upper_bound": 0.318
+          "at_validation_best": {
+            "precision": 0.209,
+            "recall": 0.526,
+            "f1": 0.299
+          },
+          "best_f1_on_test_upper_bound": 0.314
         },
-        "hidden_traits_ceiling": {
+        "richer_inputs": {
           "test_auc": 0.7378,
-          "test_average_precision": 0.2208,
+          "test_average_precision": 0.2489,
           "at_amber": {
-            "precision": 0.22,
-            "recall": 0.48,
-            "f1": 0.301
+            "precision": 0.235,
+            "recall": 0.467,
+            "f1": 0.313
           },
           "at_validation_best": {
-            "precision": 0.203,
-            "recall": 0.602,
-            "f1": 0.303
+            "precision": 0.221,
+            "recall": 0.506,
+            "f1": 0.308
           },
-          "best_f1_on_test_upper_bound": 0.305
+          "best_f1_on_test_upper_bound": 0.319
+        },
+        "hidden_traits_ceiling": {
+          "test_auc": 0.7456,
+          "test_average_precision": 0.2367,
+          "at_amber": {
+            "precision": 0.231,
+            "recall": 0.479,
+            "f1": 0.312
+          },
+          "at_validation_best": {
+            "precision": 0.208,
+            "recall": 0.617,
+            "f1": 0.311
+          },
+          "best_f1_on_test_upper_bound": 0.314
         }
       }
     },
@@ -71,8 +71,8 @@
       "test_abandoned_share": 0.1655,
       "warnings": {
         "app_rule": {
-          "test_auc": 0.5653,
-          "test_average_precision": 0.1902,
+          "test_auc": 0.5649,
+          "test_average_precision": 0.1901,
           "at_amber": {
             "precision": 0.185,
             "recall": 0.39,
@@ -81,54 +81,54 @@
           "at_validation_best": {
             "precision": 0.188,
             "recall": 0.922,
-            "f1": 0.313
+            "f1": 0.312
           },
-          "best_f1_on_test_upper_bound": 0.313
+          "best_f1_on_test_upper_bound": 0.312
         },
         "shipped_model": {
-          "test_auc": 0.7213,
-          "test_average_precision": 0.3536,
+          "test_auc": 0.724,
+          "test_average_precision": 0.3589,
           "at_amber": {
-            "precision": 0.351,
-            "recall": 0.454,
-            "f1": 0.396
+            "precision": 0.35,
+            "recall": 0.46,
+            "f1": 0.398
           },
           "at_validation_best": {
-            "precision": 0.36,
-            "recall": 0.437,
-            "f1": 0.394
+            "precision": 0.364,
+            "recall": 0.441,
+            "f1": 0.399
           },
-          "best_f1_on_test_upper_bound": 0.398
+          "best_f1_on_test_upper_bound": 0.401
         },
         "richer_inputs": {
-          "test_auc": 0.7252,
-          "test_average_precision": 0.3569,
+          "test_auc": 0.7286,
+          "test_average_precision": 0.3647,
           "at_amber": {
             "precision": 0.353,
-            "recall": 0.468,
-            "f1": 0.402
+            "recall": 0.47,
+            "f1": 0.403
           },
           "at_validation_best": {
             "precision": 0.345,
-            "recall": 0.479,
-            "f1": 0.401
+            "recall": 0.497,
+            "f1": 0.407
           },
-          "best_f1_on_test_upper_bound": 0.405
+          "best_f1_on_test_upper_bound": 0.408
         },
         "hidden_traits_ceiling": {
-          "test_auc": 0.7461,
-          "test_average_precision": 0.3492,
+          "test_auc": 0.7532,
+          "test_average_precision": 0.3769,
           "at_amber": {
-            "precision": 0.36,
-            "recall": 0.481,
-            "f1": 0.411
+            "precision": 0.368,
+            "recall": 0.528,
+            "f1": 0.433
           },
           "at_validation_best": {
-            "precision": 0.359,
-            "recall": 0.495,
-            "f1": 0.416
+            "precision": 0.374,
+            "recall": 0.503,
+            "f1": 0.429
           },
-          "best_f1_on_test_upper_bound": 0.428
+          "best_f1_on_test_upper_bound": 0.438
         }
       }
     },
@@ -138,7 +138,7 @@
       "warnings": {
         "app_rule": {
           "test_auc": 0.5493,
-          "test_average_precision": 0.1636,
+          "test_average_precision": 0.1638,
           "at_amber": {
             "precision": 0.166,
             "recall": 0.245,
@@ -146,59 +146,59 @@
           },
           "at_validation_best": {
             "precision": 0.161,
-            "recall": 0.902,
+            "recall": 0.903,
             "f1": 0.274
           },
           "best_f1_on_test_upper_bound": 0.274
         },
         "shipped_model": {
-          "test_auc": 0.7144,
-          "test_average_precision": 0.2962,
+          "test_auc": 0.716,
+          "test_average_precision": 0.2988,
           "at_amber": {
-            "precision": 0.307,
-            "recall": 0.388,
-            "f1": 0.342
+            "precision": 0.311,
+            "recall": 0.389,
+            "f1": 0.346
           },
           "at_validation_best": {
-            "precision": 0.315,
-            "recall": 0.373,
-            "f1": 0.342
-          },
-          "best_f1_on_test_upper_bound": 0.351
-        },
-        "richer_inputs": {
-          "test_auc": 0.7187,
-          "test_average_precision": 0.3052,
-          "at_amber": {
-            "precision": 0.316,
-            "recall": 0.401,
-            "f1": 0.354
-          },
-          "at_validation_best": {
-            "precision": 0.324,
-            "recall": 0.378,
-            "f1": 0.349
-          },
-          "best_f1_on_test_upper_bound": 0.356
-        },
-        "hidden_traits_ceiling": {
-          "test_auc": 0.7028,
-          "test_average_precision": 0.2775,
-          "at_amber": {
-            "precision": 0.296,
-            "recall": 0.377,
-            "f1": 0.332
-          },
-          "at_validation_best": {
-            "precision": 0.273,
-            "recall": 0.446,
+            "precision": 0.331,
+            "recall": 0.345,
             "f1": 0.338
           },
-          "best_f1_on_test_upper_bound": 0.346
+          "best_f1_on_test_upper_bound": 0.352
+        },
+        "richer_inputs": {
+          "test_auc": 0.7206,
+          "test_average_precision": 0.3063,
+          "at_amber": {
+            "precision": 0.32,
+            "recall": 0.398,
+            "f1": 0.355
+          },
+          "at_validation_best": {
+            "precision": 0.318,
+            "recall": 0.401,
+            "f1": 0.355
+          },
+          "best_f1_on_test_upper_bound": 0.36
+        },
+        "hidden_traits_ceiling": {
+          "test_auc": 0.7158,
+          "test_average_precision": 0.2819,
+          "at_amber": {
+            "precision": 0.301,
+            "recall": 0.4,
+            "f1": 0.344
+          },
+          "at_validation_best": {
+            "precision": 0.279,
+            "recall": 0.52,
+            "f1": 0.363
+          },
+          "best_f1_on_test_upper_bound": 0.364
         }
       }
     }
   ],
-  "highest_f1_upper_bound": 0.428,
+  "highest_f1_upper_bound": 0.438,
   "planned_f1_target": 0.8
 }

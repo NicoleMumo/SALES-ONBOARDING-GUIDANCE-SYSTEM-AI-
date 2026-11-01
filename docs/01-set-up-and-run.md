@@ -91,7 +91,7 @@ Android unit tests (100 tests), from the `android` folder:
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-Python tests (39 tests; plain Python, no extra packages):
+Python tests (40 tests; plain Python, no extra packages):
 
 ```powershell
 python -m unittest discover -s tests

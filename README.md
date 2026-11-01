@@ -130,7 +130,7 @@ reads and writes its data through Firebase.
 | What | Result |
 | --- | --- |
 | Next-question suggestion | Right **95.0%** of the time, against 86.5% for a fixed rule |
-| Risk warning | ROC-AUC **0.71 to 0.74**, against 0.55 to 0.59 for the old hand-set rule (0.5 is guessing) |
+| Risk warning | ROC-AUC **0.72 to 0.74**, against 0.55 to 0.59 for the old hand-set rule (0.5 is guessing) |
 | Consistency measure | Plain counting, not AI: at most 2 corrected answers and 2 questions out of order |
 
 How these were tested: [AI, data and results](docs/03-ai-data-and-results.md).

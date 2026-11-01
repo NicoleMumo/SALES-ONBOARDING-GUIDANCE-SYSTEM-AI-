@@ -7,8 +7,9 @@ current hand-set risk rule, and the training of the risk model that replaces it.
 
 Every feature here must be computable by the Android app at the moment it would
 warn the agent. The app holds, for each step so far, exactly four things (see
-`CompletionRiskEvent` in the app): the step's duration in minutes, whether its
-check passed, whether it was a revisit, and the progress percent afterwards.
+`CompletionRiskEvent` in the app): the minutes since the previous checked answer,
+whether its check passed, whether it was a revisit, and the progress percent
+afterwards.
 Nothing else is used -- in particular no customer answer, no field name, and
 nothing about how the session ends.
 
@@ -273,17 +274,26 @@ def session_features(events, industry, context):
 
 
 def session_steps(events):
-    """Turn one session's CSV rows (in time order) into [Step]s."""
+    """Turn one session's CSV rows (in time order) into [Step]s.
+
+    A step's time is what the app measures: from the previous checked answer (or
+    from opening the form) to this one. In the simulator that is this event's
+    duration plus the agent's response time after the *previous* event. The
+    response time after this event happens later, so counting it here would let
+    the model see a little of the future.
+    """
     steps = []
+    previous_response = 0.0
     for event in events:
         steps.append(
             Step(
-                duration_minutes=float(event["event_duration_minutes"]),
+                duration_minutes=float(event["event_duration_minutes"]) + previous_response,
                 validation_passed=event["validation_status"] == "passed",
                 is_revisit=is_true(event["is_revisit"]),
                 progress_percent=float(event["onboarding_progress"]),
             )
         )
+        previous_response = float(event.get("agent_response_time_minutes") or 0.0)
     return steps
 
 
