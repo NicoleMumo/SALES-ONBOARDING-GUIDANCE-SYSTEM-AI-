@@ -180,6 +180,33 @@ can show whether real abandonment is more predictable.
 python ml/risk_ceiling.py --report ml/models/risk_ceiling_report.json
 ```
 
+**Check with more realistic abandonment (v4).** Real users show strain before
+they give up: error messages, failed connections and long waits are the main
+causes of frustration, and frustration grows with time lost (Ceaparu et al.,
+2004). The generator's `--version v4` adds this: frustration builds with failed
+answers, verification failures and long steps, and eases after answers that
+pass; frustrated or less committed clients slow down and make more mistakes;
+and the chance of giving up rises with that strain. Its effect sizes were set
+before any model was trained, and only one scale was calibrated, so that the
+share of abandoned sessions stays at v3's level (about 18%). `ml/risk_v4_check.py`
+trains the risk model on v4 with the same protocol:
+
+| Seed | Abandoned sessions | ROC-AUC (old rule) | F1 at amber | Failed answers in the last 3 steps, abandoned vs completed |
+| --- | --- | --- | --- | --- |
+| 2026 | 18.1% | 0.738 (0.585) | 0.32 | 12.2% vs 3.0% |
+| 7 | 17.4% | 0.754 (0.573) | 0.36 | 11.4% vs 3.1% |
+| 99 | 18.0% | 0.755 (0.579) | 0.36 | 10.5% vs 2.8% |
+
+Clear warning signs make the ranking a little better (0.74 to 0.75, against
+0.72 to 0.74 on v3), but F1 stays about 0.35: the target scores every step of
+a session that is later abandoned, including its first answers, when a client
+who will give up still looks like any other. The shipped model stays trained
+on v3.
+
+```powershell
+python ml/risk_v4_check.py --report ml/models/risk_v4_check.json
+```
+
 ## Consistency measure, and the model that was rejected
 
 The measure itself (at most 2 corrected answers and at most 2 questions out of
@@ -207,6 +234,7 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 | `onboarding_model_flexible.keras` | Python, to reload the trained model |
 | `risk_model_report.json` | The evidence for the risk results above |
 | `risk_ceiling_report.json` | The evidence for the F1 ceiling above |
+| `risk_v4_check.json` | The evidence for the v4 check above |
 
 The build copies the three app files into `android/app/src/main/assets/`.
 
