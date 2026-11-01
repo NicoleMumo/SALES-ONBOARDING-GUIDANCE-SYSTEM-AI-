@@ -91,15 +91,16 @@ Android unit tests (100 tests), from the `android` folder:
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-Python tests (36 tests; plain Python, no extra packages):
+Python tests (39 tests; plain Python, no extra packages):
 
 ```powershell
 python -m unittest discover -s tests
 ```
 
 The Python tests check the simulated-data generator, the consistency measure
-and the risk-model features, and that the Python copy of the app's question
-order still matches the Kotlin source.
+and the risk-model features (including the extra inputs used for the F1 ceiling
+check), and that the Python copy of the app's question order still matches the
+Kotlin source.
 
 Continuous integration (`.github/workflows/ci.yml`) runs on every push and pull
 request: it compiles the Python code, runs the Python tests, runs the Android unit

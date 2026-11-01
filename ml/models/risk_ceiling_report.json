@@ -1,0 +1,204 @@
+{
+  "datasets": [
+    {
+      "dataset": "onboarding_dataset_v3.csv",
+      "test_abandoned_share": 0.0959,
+      "warnings": {
+        "app_rule": {
+          "test_auc": 0.5874,
+          "test_average_precision": 0.1169,
+          "at_amber": {
+            "precision": 0.136,
+            "recall": 0.282,
+            "f1": 0.184
+          },
+          "at_validation_best": {
+            "precision": 0.114,
+            "recall": 0.904,
+            "f1": 0.203
+          },
+          "best_f1_on_test_upper_bound": 0.203
+        },
+        "shipped_model": {
+          "test_auc": 0.7346,
+          "test_average_precision": 0.2398,
+          "at_amber": {
+            "precision": 0.227,
+            "recall": 0.467,
+            "f1": 0.306
+          },
+          "at_validation_best": {
+            "precision": 0.247,
+            "recall": 0.418,
+            "f1": 0.31
+          },
+          "best_f1_on_test_upper_bound": 0.311
+        },
+        "richer_inputs": {
+          "test_auc": 0.7361,
+          "test_average_precision": 0.2447,
+          "at_amber": {
+            "precision": 0.23,
+            "recall": 0.467,
+            "f1": 0.308
+          },
+          "at_validation_best": {
+            "precision": 0.222,
+            "recall": 0.498,
+            "f1": 0.307
+          },
+          "best_f1_on_test_upper_bound": 0.318
+        },
+        "hidden_traits_ceiling": {
+          "test_auc": 0.7378,
+          "test_average_precision": 0.2208,
+          "at_amber": {
+            "precision": 0.22,
+            "recall": 0.48,
+            "f1": 0.301
+          },
+          "at_validation_best": {
+            "precision": 0.203,
+            "recall": 0.602,
+            "f1": 0.303
+          },
+          "best_f1_on_test_upper_bound": 0.305
+        }
+      }
+    },
+    {
+      "dataset": "onboarding_dataset_v3_seed7.csv",
+      "test_abandoned_share": 0.1655,
+      "warnings": {
+        "app_rule": {
+          "test_auc": 0.5653,
+          "test_average_precision": 0.1902,
+          "at_amber": {
+            "precision": 0.185,
+            "recall": 0.39,
+            "f1": 0.251
+          },
+          "at_validation_best": {
+            "precision": 0.188,
+            "recall": 0.922,
+            "f1": 0.313
+          },
+          "best_f1_on_test_upper_bound": 0.313
+        },
+        "shipped_model": {
+          "test_auc": 0.7213,
+          "test_average_precision": 0.3536,
+          "at_amber": {
+            "precision": 0.351,
+            "recall": 0.454,
+            "f1": 0.396
+          },
+          "at_validation_best": {
+            "precision": 0.36,
+            "recall": 0.437,
+            "f1": 0.394
+          },
+          "best_f1_on_test_upper_bound": 0.398
+        },
+        "richer_inputs": {
+          "test_auc": 0.7252,
+          "test_average_precision": 0.3569,
+          "at_amber": {
+            "precision": 0.353,
+            "recall": 0.468,
+            "f1": 0.402
+          },
+          "at_validation_best": {
+            "precision": 0.345,
+            "recall": 0.479,
+            "f1": 0.401
+          },
+          "best_f1_on_test_upper_bound": 0.405
+        },
+        "hidden_traits_ceiling": {
+          "test_auc": 0.7461,
+          "test_average_precision": 0.3492,
+          "at_amber": {
+            "precision": 0.36,
+            "recall": 0.481,
+            "f1": 0.411
+          },
+          "at_validation_best": {
+            "precision": 0.359,
+            "recall": 0.495,
+            "f1": 0.416
+          },
+          "best_f1_on_test_upper_bound": 0.428
+        }
+      }
+    },
+    {
+      "dataset": "onboarding_dataset_v3_seed99.csv",
+      "test_abandoned_share": 0.144,
+      "warnings": {
+        "app_rule": {
+          "test_auc": 0.5493,
+          "test_average_precision": 0.1636,
+          "at_amber": {
+            "precision": 0.166,
+            "recall": 0.245,
+            "f1": 0.198
+          },
+          "at_validation_best": {
+            "precision": 0.161,
+            "recall": 0.902,
+            "f1": 0.274
+          },
+          "best_f1_on_test_upper_bound": 0.274
+        },
+        "shipped_model": {
+          "test_auc": 0.7144,
+          "test_average_precision": 0.2962,
+          "at_amber": {
+            "precision": 0.307,
+            "recall": 0.388,
+            "f1": 0.342
+          },
+          "at_validation_best": {
+            "precision": 0.315,
+            "recall": 0.373,
+            "f1": 0.342
+          },
+          "best_f1_on_test_upper_bound": 0.351
+        },
+        "richer_inputs": {
+          "test_auc": 0.7187,
+          "test_average_precision": 0.3052,
+          "at_amber": {
+            "precision": 0.316,
+            "recall": 0.401,
+            "f1": 0.354
+          },
+          "at_validation_best": {
+            "precision": 0.324,
+            "recall": 0.378,
+            "f1": 0.349
+          },
+          "best_f1_on_test_upper_bound": 0.356
+        },
+        "hidden_traits_ceiling": {
+          "test_auc": 0.7028,
+          "test_average_precision": 0.2775,
+          "at_amber": {
+            "precision": 0.296,
+            "recall": 0.377,
+            "f1": 0.332
+          },
+          "at_validation_best": {
+            "precision": 0.273,
+            "recall": 0.446,
+            "f1": 0.338
+          },
+          "best_f1_on_test_upper_bound": 0.346
+        }
+      }
+    }
+  ],
+  "highest_f1_upper_bound": 0.428,
+  "planned_f1_target": 0.8
+}

@@ -146,6 +146,35 @@ python ml/consistency.py ml/data/onboarding_dataset_v3.csv `
 
 It writes the model only if the pass mark is met.
 
+**Why the planned F1 of 80% was not reached, and cannot be on this data.** The
+proposal planned an F1-score of 80% for the warning. At the amber threshold the
+model reaches 0.31, 0.40 and 0.34 on the three datasets (about 0.35). To see
+whether a better model could do more, `ml/risk_ceiling.py` scores four warnings
+under the same protocol:
+
+| Warning (F1 at amber, per step) | Seed 2026 | Seed 7 | Seed 99 |
+| --- | --- | --- | --- |
+| Old hand-set rule | 0.18 | 0.25 | 0.20 |
+| Shipped model (14 inputs) | 0.31 | 0.40 | 0.34 |
+| Same model with 10 more inputs the app could compute | 0.31 | 0.40 | 0.35 |
+| Model also told the client's hidden traits (ceiling) | 0.30 | 0.41 | 0.33 |
+
+The ceiling model knows what no app can: the client's patience, whether they
+brought their documents, their literacy and phone, and the agent's skill (taken
+from the generator by re-running it with the dataset's seed, which reproduces
+every event). It does no better than the shipped model. Even choosing each
+model's threshold by looking at the test answers, which is not a fair result,
+no warning passes 0.43. The reason is in the simulator: a session ends by a
+chance draw at each step, which rises after failures in a row and once the
+client's patience runs out, so whether a session will be abandoned is partly
+luck until the moment it happens. The shipped model is already at the limit of
+this data; more inputs or a bigger model would not reach 80%. Only real sessions
+can show whether real abandonment is more predictable.
+
+```powershell
+python ml/risk_ceiling.py --report ml/models/risk_ceiling_report.json
+```
+
 ## Consistency measure, and the model that was rejected
 
 The measure itself (at most 2 corrected answers and at most 2 questions out of
@@ -172,6 +201,7 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 | `risk_model.json` | The app (risk warning) |
 | `onboarding_model_flexible.keras` | Python, to reload the trained model |
 | `risk_model_report.json` | The evidence for the risk results above |
+| `risk_ceiling_report.json` | The evidence for the F1 ceiling above |
 
 The build copies the three app files into `android/app/src/main/assets/`.
 
