@@ -1,4 +1,13 @@
+import java.util.Properties
 import org.gradle.api.tasks.Copy
+
+// Release signing details live outside the repository, in the developer's home
+// folder, so the key and its password can never be committed. Without that
+// file the release build is simply left unsigned (as in CI).
+val releaseSigning: Properties? =
+    file("${System.getProperty("user.home")}/.salesmesh-signing/keystore.properties")
+        .takeIf { it.exists() }
+        ?.let { source -> Properties().apply { source.inputStream().use { load(it) } } }
 
 plugins {
     id("com.android.application")
@@ -21,8 +30,22 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseSigning != null) {
+            create("release") {
+                storeFile = file(releaseSigning.getProperty("storeFile"))
+                storePassword = releaseSigning.getProperty("storePassword")
+                keyAlias = releaseSigning.getProperty("keyAlias")
+                keyPassword = releaseSigning.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigning != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
