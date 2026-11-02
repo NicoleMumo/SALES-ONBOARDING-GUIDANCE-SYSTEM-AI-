@@ -48,6 +48,7 @@ Usage:
     python ml/dataset.py generate
     python ml/dataset.py generate --sessions 12000 --seed 7
     python ml/dataset.py generate --noise
+    python ml/dataset.py generate --version v4    # clients show strain before quitting
     python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
     python ml/dataset.py check ml/data/onboarding_dataset_v3.csv --compare path/to/raw.csv
 """
@@ -87,6 +88,55 @@ CONFIG = {
     "base_abandon_hazard": 0.003,
     "timezone": "+03:00",                # East Africa Time
 }
+
+# v4: clients show strain before they give up.
+#
+# In v3 a session ended by a chance draw at each step, so a session about to be
+# abandoned looked like any other until the moment it ended. Real users do not
+# behave like that: error messages, failed connections and long waits are the
+# main causes of user frustration, and frustration grows with the time lost
+# (Ceaparu et al., 2004); form analytics treat slowing down and repeated
+# validation errors as the signs of an upcoming drop-off. v4 therefore gives each
+# client a frustration level and a commitment:
+#   - frustration rises with each failed answer (more for a verification-service
+#     failure) and with each unusually long step, and eases after each answer
+#     that passes;
+#   - a frustrated client hesitates (slower steps) and makes more mistakes;
+#   - a less committed client (shopping around) is slower throughout;
+#   - the chance of giving up rises with frustration and with low commitment, and
+#     half of v3's chance-driven quitting is kept, because some clients still
+#     leave for reasons the session never shows (a phone call, a better offer).
+# The effect sizes below were set from those sources before any model was
+# trained. Only `strain_scale` was then calibrated, and only so that the share
+# of abandoned sessions stays at v3's 17.7% (seed 2026), never on model scores.
+# The project's models are trained on v3 (the default, which switches all of this
+# off and reproduces the v3 datasets exactly); v4 is used by `risk_v4_check.py`
+# to test whether more realistic abandonment changes the risk results.
+V4_BEHAVIOUR = {
+    "commitment_beta": (4.0, 1.5),        # client commitment, 1 = sure to finish (mean 0.73)
+    "slowdown_per_frustration": 0.20,     # +20% step time per unit of frustration
+    "slowdown_uncommitted": 0.50,         # an uncommitted client is up to 50% slower
+    "mistakes_per_frustration": 0.20,     # +20% chance of a failed answer per unit
+    "frustration_per_failure": 1.0,
+    "frustration_per_outage_failure": 0.5,   # extra, when the verification service fails
+    "frustration_per_long_step": 0.5,     # a step over 2.5 times its usual time
+    "calming_per_pass": 0.8,              # frustration kept after an answer passes
+    "chance_weight": 0.5,                 # share of v3's chance-driven quitting kept
+    "strain_scale": 0.24,                 # calibrated: 18.1% of sessions abandoned (v3: 17.7%)
+}
+NO_BEHAVIOUR = {
+    "commitment_beta": None,
+    "slowdown_per_frustration": 0.0,
+    "slowdown_uncommitted": 0.0,
+    "mistakes_per_frustration": 0.0,
+    "frustration_per_failure": 0.0,
+    "frustration_per_outage_failure": 0.0,
+    "frustration_per_long_step": 0.0,
+    "calming_per_pass": 1.0,
+    "chance_weight": 1.0,
+    "strain_scale": 0.0,
+}
+VERSIONS = {"v3": NO_BEHAVIOUR, "v4": V4_BEHAVIOUR}
 
 # Per-field behaviour.
 #   med   median minutes on the field (customer + agent)
@@ -240,13 +290,16 @@ class Agent:
 
 
 class Customer:
-    def __init__(self, rng, industry, context):
+    def __init__(self, rng, industry, context, behaviour=NO_BEHAVIOUR):
         self.id = unique_id(rng, "CUST", 10000, 99999, CUSTOMER_IDS)
         self.literacy = rng.betavariate(2.2, 1.8)
         ready = 0.72 if context == "business" else 0.90
         self.has_documents = rng.random() < ready
         self.patience = rng.lognormvariate(math.log(35 if industry == "banking" else 22), 0.45)
         self.low_end_device = rng.random() < 0.28            # blurrier ID photos
+        # Drawn only in v4, so v3 keeps its exact random stream.
+        beta = behaviour["commitment_beta"]
+        self.commitment = rng.betavariate(*beta) if beta else 1.0
 
 
 def weighted(rng, d):
@@ -310,13 +363,16 @@ def plan_order(rng, industry, context, agent):
     return order, stage_of, len(applicable)
 
 
-def simulate_session(rng, industry, context, agent, customer, start, outages, returning):
+def simulate_session(rng, industry, context, agent, customer, start, outages, returning,
+                     behaviour=NO_BEHAVIOUR):
+    b = behaviour
     order, stage_of, total = plan_order(rng, industry, context, agent)
     err = agent.error_multiplier()
     t = start
     rows = []
     passed = set()
     consecutive_fail = 0
+    frustration = 0.0
     abandoned = False
     escalated_any = False
 
@@ -324,6 +380,7 @@ def simulate_session(rng, industry, context, agent, customer, start, outages, re
         return any(a <= ts <= b for a, b in outages)
 
     def duration_for(field, attempt, kind):
+        nonlocal frustration
         spec = F[field]
         med = spec["med"] * agent.speed * (1.35 - 0.6 * customer.literacy)
         if agent.style == "id_first" and field in OCR_PREFILLED:
@@ -334,7 +391,12 @@ def simulate_session(rng, industry, context, agent, customer, start, outages, re
             med *= 0.65
         if kind == "revisit":
             med *= 0.5
+        # Hesitation: frustrated or uncommitted clients take longer (x1.0 in v3).
+        med *= (1 + b["slowdown_per_frustration"] * frustration) * \
+               (1 + b["slowdown_uncommitted"] * (1 - customer.commitment))
         d = rng.lognormvariate(math.log(max(med, 0.05)), spec["sd"])
+        if d > 2.5 * spec["med"]:
+            frustration += b["frustration_per_long_step"]
         if spec.get("ver") and in_outage(t):
             d *= rng.uniform(2.0, 4.0)
         if rng.random() < CONFIG["interruption_probability"]:
@@ -351,6 +413,7 @@ def simulate_session(rng, industry, context, agent, customer, start, outages, re
         if spec.get("ver") and in_outage(t) and rng.random() < CONFIG["outage_fail_probability"]:
             return True, REASONS[2]
         p = spec["fail"] * err * (0.5 ** attempt)
+        p *= 1 + b["mistakes_per_frustration"] * frustration
         if field == "identification_document" and customer.low_end_device:
             p *= 1.5
         if agent.style == "id_first" and field in OCR_PREFILLED:
@@ -406,9 +469,15 @@ def simulate_session(rng, industry, context, agent, customer, start, outages, re
 
     def abandon_now():
         elapsed = (t - start).total_seconds() / 60
-        h = CONFIG["base_abandon_hazard"] + 0.03 * consecutive_fail ** 1.5
+        w = b["chance_weight"]
+        h = CONFIG["base_abandon_hazard"] + w * 0.03 * consecutive_fail ** 1.5
         if elapsed > customer.patience:
-            h += 0.02 * (elapsed / customer.patience)
+            h += w * 0.02 * (elapsed / customer.patience)
+        # v4: strain the session shows (both terms are 0 in v3).
+        h += b["strain_scale"] * (
+            0.012 * frustration ** 2 * (1.6 - customer.commitment)
+            + 0.010 * (1 - customer.commitment)
+        )
         return rng.random() < min(h, 0.9)
 
     for stage, seq in order:
@@ -436,8 +505,12 @@ def simulate_session(rng, industry, context, agent, customer, start, outages, re
                 if not failed:
                     passed.add(field)
                     consecutive_fail = 0
+                    frustration *= b["calming_per_pass"]
                     break
                 consecutive_fail += 1
+                frustration += b["frustration_per_failure"]
+                if reason == REASONS[2]:
+                    frustration += b["frustration_per_outage_failure"]
                 if abandon_now() or (reason == REASONS[0] and F[field].get("doc")
                                      and rng.random() < 0.25):
                     abandoned = True
@@ -548,9 +621,12 @@ def to_events(session_id, customer, agent, industry, context, rows, stage_of, to
 # ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
-def generate(n_sessions, seed):
+def generate(n_sessions, seed, version="v3"):
     if n_sessions <= 0:
         raise ValueError("n_sessions must be greater than zero.")
+    if version not in VERSIONS:
+        raise ValueError(f"Unknown version {version!r}; choose from {sorted(VERSIONS)}.")
+    behaviour = VERSIONS[version]
     rng = random.Random(seed)
     AGENT_IDS.clear()
     CUSTOMER_IDS.clear()
@@ -588,14 +664,14 @@ def generate(n_sessions, seed):
             else:
                 industry = weighted(rng, CONFIG["industry_weights"])
                 context = weighted(rng, CONFIG[f"{industry}_context_weights"])
-                customer = Customer(rng, industry, context)
+                customer = Customer(rng, industry, context, behaviour)
                 returning = False
             if returning:
                 customer.has_documents = True            # they came back with the documents
             agent = rng.choice(on_shift)
             start = sample_start_time(rng, day)
             rows, stage_of, total, abandoned, _ = simulate_session(
-                rng, industry, context, agent, customer, start, outages, returning)
+                rng, industry, context, agent, customer, start, outages, returning, behaviour)
             if not rows:
                 continue
             raw.append((customer, agent, industry, context, rows, stage_of, total, abandoned, day))
@@ -862,7 +938,9 @@ def main():
     gen = commands.add_parser("generate", help="write a simulated dataset")
     gen.add_argument("--sessions", type=int, default=8000)
     gen.add_argument("--seed", type=int, default=2026)
-    gen.add_argument("--out", default="ml/data/onboarding_dataset_v3.csv")
+    gen.add_argument("--version", choices=sorted(VERSIONS), default="v3",
+                     help="v3 (default) is the project's dataset; v4 adds client frustration and commitment")
+    gen.add_argument("--out", help="default: ml/data/onboarding_dataset_<version>.csv")
     gen.add_argument("--noise", action="store_true", help="also write <out>_raw.csv with realistic log noise")
 
     check = commands.add_parser("check", help="report dataset quality and lookup baselines")
@@ -879,7 +957,8 @@ def main():
     if args.sessions <= 0:
         gen.error("--sessions must be greater than zero.")
 
-    events = generate(args.sessions, args.seed)
+    args.out = args.out or f"ml/data/onboarding_dataset_{args.version}.csv"
+    events = generate(args.sessions, args.seed, args.version)
     save(events, args.out)
     print(f"wrote {args.out}: {len(events)} events, "
           f"{len({e['session_id'] for e in events})} sessions")

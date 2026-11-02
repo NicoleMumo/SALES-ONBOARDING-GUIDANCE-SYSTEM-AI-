@@ -134,7 +134,7 @@ object CompletionRiskScorer {
  *
  * It answers the same question -- is this session heading for the customer giving
  * up? -- but its weights were learned from simulated sessions instead of chosen by
- * hand, and it was tested on agents it had never seen. On that test it scored 0.71
+ * hand, and it was tested on agents it had never seen. On that test it scored 0.72
  * to 0.74 (ROC-AUC) against 0.55 to 0.59 for the hand-set rule, which is close to
  * guessing. See docs/03-ai-data-and-results.md for the full numbers and limits.
  *

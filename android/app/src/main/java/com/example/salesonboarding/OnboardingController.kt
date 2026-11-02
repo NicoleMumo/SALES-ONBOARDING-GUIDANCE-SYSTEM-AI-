@@ -305,9 +305,10 @@ class OnboardingFormController(
                         val wasRevisited = state.interactionHistory
                             .take(index)
                             .any { it.fieldId == interaction.fieldId }
-                        // The risk model was trained on simulated steps whose time is the whole
-                        // step (asking, answering, typing) and whose progress is answers passed
-                        // out of all the form's questions, so the app measures both the same way.
+                        // The risk model was trained on step times measured as here: from the
+                        // previous checked answer to this one (ml/consistency.py session_steps
+                        // adds the agent's response after the previous step), and on progress
+                        // as answers passed out of all the form's questions.
                         recordRiskEvent(
                             CompletionRiskEvent(
                                 durationMinutes = stepMinutes(state, validatedAt),

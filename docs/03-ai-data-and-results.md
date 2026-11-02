@@ -138,23 +138,28 @@ one that was not; 0.5 is guessing.
 
 | Dataset | Trained model | Old hand-set rule |
 | --- | --- | --- |
-| Seed 2026 | 0.735 | 0.587 |
-| Seed 7 | 0.721 | 0.565 |
-| Seed 99 | 0.714 | 0.549 |
+| Seed 2026 | 0.737 | 0.587 |
+| Seed 7 | 0.724 | 0.565 |
+| Seed 99 | 0.716 | 0.549 |
 
 - The pass mark, fixed before any result was seen, was to beat the old rule by at
   least 0.03 on every dataset. The gains were 0.15 to 0.17.
 - The old hand-set rule is close to guessing; on the first third of a session it
-  scores 0.52.
+  scores 0.51.
 - In practice: the warning thresholds are the riskiest 20% (amber) and 10% (red)
   of steps, measured on validation agents. Warning on the riskiest 20% catches
-  43% of later abandonments, and 30% of those warnings are right; at 10%, it
-  catches 27% and 38% are right. It is better late in a session (0.83) than early
-  (0.71). So it is a useful prompt to offer help, not a prediction to act on alone.
+  44% of later abandonments, and 30% of those warnings are right; at 10%, it
+  catches 27% and 38% are right (averages over the three datasets). On seed 2026
+  it is better late in a session (0.83) than in its first third (0.71). So it is
+  a useful prompt to offer help, not a prediction to act on alone.
 - In the app, each answer the agent finishes is one input to the warning, measured
   the way the training data was: its time runs from the previous checked answer
   (or from opening the form), so it includes asking and listening, not only
-  typing; progress is answers correct out of all the form's questions. If
+  typing. In the simulated data that is the step's duration plus the agent's
+  response after the previous step (`session_steps` in `ml/consistency.py`); the
+  first model left the response time out, so in the app about a quarter of steps
+  reached amber instead of a fifth, and it was retrained. Progress is answers
+  correct out of all the form's questions. If
   `risk_model.json` is missing or refused (for example thresholds outside 0 to
   1), the app uses the old hand-set rule.
 - The simulated times are assumptions; real step times may be distributed
@@ -168,6 +173,62 @@ python ml/consistency.py ml/data/onboarding_dataset_v3.csv `
 ```
 
 It writes the model only if the pass mark is met.
+
+**Why the planned F1 of 80% was not reached, and cannot be on this data.** The
+proposal planned an F1-score of 80% for the warning. At the amber threshold the
+model reaches 0.31, 0.40 and 0.35 on the three datasets (about 0.35). To see
+whether a better model could do more, `ml/risk_ceiling.py` scores four warnings
+under the same protocol:
+
+| Warning (F1 at amber, per step) | Seed 2026 | Seed 7 | Seed 99 |
+| --- | --- | --- | --- |
+| Old hand-set rule | 0.18 | 0.25 | 0.20 |
+| Shipped model (14 inputs) | 0.31 | 0.40 | 0.35 |
+| Same model with 10 more inputs the app could compute | 0.31 | 0.40 | 0.36 |
+| Model also told the client's hidden traits (ceiling) | 0.31 | 0.43 | 0.34 |
+
+The ceiling model knows what no app can: the client's patience, whether they
+brought their documents, their literacy and phone, and the agent's skill (taken
+from the generator by re-running it with the dataset's seed, which reproduces
+every event). It does at most 0.04 better than the shipped model. Even choosing
+each model's threshold by looking at the test answers, which is not a fair
+result, no warning passes 0.44. The reason is in the simulator: a session ends by a
+chance draw at each step, which rises after failures in a row and once the
+client's patience runs out, so whether a session will be abandoned is partly
+luck until the moment it happens. The shipped model is already at the limit of
+this data; more inputs or a bigger model would not reach 80%. Only real sessions
+can show whether real abandonment is more predictable.
+
+```powershell
+python ml/risk_ceiling.py --report ml/models/risk_ceiling_report.json
+```
+
+**Check with more realistic abandonment (v4).** Real users show strain before
+they give up: error messages, failed connections and long waits are the main
+causes of frustration, and frustration grows with time lost (Ceaparu et al.,
+2004). The generator's `--version v4` adds this: frustration builds with failed
+answers, verification failures and long steps, and eases after answers that
+pass; frustrated or less committed clients slow down and make more mistakes;
+and the chance of giving up rises with that strain. Its effect sizes were set
+before any model was trained, and only one scale was calibrated, so that the
+share of abandoned sessions stays at v3's level (about 18%). `ml/risk_v4_check.py`
+trains the risk model on v4 with the same protocol:
+
+| Seed | Abandoned sessions | ROC-AUC (old rule) | F1 at amber | Failed answers in the last 3 steps, abandoned vs completed |
+| --- | --- | --- | --- | --- |
+| 2026 | 18.1% | 0.738 (0.585) | 0.32 | 12.2% vs 3.0% |
+| 7 | 17.4% | 0.754 (0.573) | 0.36 | 11.4% vs 3.1% |
+| 99 | 18.0% | 0.755 (0.579) | 0.36 | 10.5% vs 2.8% |
+
+Clear warning signs make the ranking a little better (0.74 to 0.75, against
+0.72 to 0.74 on v3), but F1 stays about 0.35: the target scores every step of
+a session that is later abandoned, including its first answers, when a client
+who will give up still looks like any other. The shipped model stays trained
+on v3.
+
+```powershell
+python ml/risk_v4_check.py --report ml/models/risk_v4_check.json
+```
 
 ## Consistency measure, and the model that was rejected
 
@@ -195,6 +256,8 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 | `risk_model.json` | The app (risk warning) |
 | `onboarding_model_flexible.keras` | Python, to reload the trained model |
 | `risk_model_report.json` | The evidence for the risk results above |
+| `risk_ceiling_report.json` | The evidence for the F1 ceiling above |
+| `risk_v4_check.json` | The evidence for the v4 check above |
 
 The build copies the three app files into `android/app/src/main/assets/`.
 

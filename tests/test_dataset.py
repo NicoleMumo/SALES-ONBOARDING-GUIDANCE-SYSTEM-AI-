@@ -27,6 +27,37 @@ def generator_fields(industry, context):
     ]
 
 
+class GeneratorVersionTests(unittest.TestCase):
+    # Fingerprint of generate(150, 5) taken before v4 was added: v3 must not drift.
+    V3_FINGERPRINT = "8cd83a4f7591892dcaebc4bca360fd4a323f801df0e42e887aabdd744993962c"
+
+    def test_v3_is_the_default_and_reproduces_the_original_generator(self):
+        import hashlib
+        import json
+
+        events = dataset.generate(150, 5)
+        digest = hashlib.sha256(json.dumps(events, sort_keys=True, default=str).encode()).hexdigest()
+        self.assertEqual(self.V3_FINGERPRINT, digest)
+
+    def test_in_v4_clients_struggle_before_they_give_up(self):
+        events = dataset.generate(1500, 11, version="v4")
+        sessions = defaultdict(list)
+        for event in events:
+            sessions[event["session_id"]].append(event)
+        failed = {"abandoned": [], "completed": []}
+        for rows in sessions.values():
+            rows.sort(key=lambda event: event["event_timestamp"])
+            if len(rows) >= 5:
+                outcome = rows[-1]["session_status"]
+                failed[outcome] += [row["validation_status"] == "failed" for row in rows[-4:-1]]
+        share = {k: sum(v) / len(v) for k, v in failed.items()}
+        self.assertGreater(share["abandoned"], 2 * share["completed"])
+
+    def test_an_unknown_version_is_rejected(self):
+        with self.assertRaises(ValueError):
+            dataset.generate(10, 1, version="v9")
+
+
 class OnboardingDataGeneratorTests(unittest.TestCase):
     def test_same_seed_produces_identical_events(self):
         first = dataset.generate(80, seed=42)

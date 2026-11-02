@@ -1,0 +1,77 @@
+{
+  "version": "v4",
+  "datasets": [
+    {
+      "seed": 2026,
+      "abandoned_sessions": 0.181,
+      "test_auc": {
+        "model": 0.7376,
+        "app_rule": 0.585,
+        "gain_over_app_rule": 0.1526
+      },
+      "at_amber": {
+        "precision": 0.253,
+        "recall": 0.438,
+        "f1": 0.32
+      },
+      "warning_signs_last_3_steps": {
+        "abandoned": {
+          "failed_share": 0.122,
+          "minutes_per_step": 1.98
+        },
+        "completed": {
+          "failed_share": 0.03,
+          "minutes_per_step": 1.55
+        }
+      }
+    },
+    {
+      "seed": 7,
+      "abandoned_sessions": 0.174,
+      "test_auc": {
+        "model": 0.7536,
+        "app_rule": 0.5733,
+        "gain_over_app_rule": 0.1803
+      },
+      "at_amber": {
+        "precision": 0.286,
+        "recall": 0.49,
+        "f1": 0.361
+      },
+      "warning_signs_last_3_steps": {
+        "abandoned": {
+          "failed_share": 0.114,
+          "minutes_per_step": 1.89
+        },
+        "completed": {
+          "failed_share": 0.031,
+          "minutes_per_step": 1.59
+        }
+      }
+    },
+    {
+      "seed": 99,
+      "abandoned_sessions": 0.18,
+      "test_auc": {
+        "model": 0.7549,
+        "app_rule": 0.5789,
+        "gain_over_app_rule": 0.176
+      },
+      "at_amber": {
+        "precision": 0.293,
+        "recall": 0.463,
+        "f1": 0.359
+      },
+      "warning_signs_last_3_steps": {
+        "abandoned": {
+          "failed_share": 0.105,
+          "minutes_per_step": 1.87
+        },
+        "completed": {
+          "failed_share": 0.028,
+          "minutes_per_step": 1.52
+        }
+      }
+    }
+  ]
+}

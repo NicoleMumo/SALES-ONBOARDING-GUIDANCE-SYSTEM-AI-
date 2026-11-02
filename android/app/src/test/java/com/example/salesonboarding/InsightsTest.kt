@@ -163,25 +163,25 @@ class TrainedCompletionRiskModelTest {
      * the unit-test classpath; the reader itself is a thin wrapper around this.
      */
     private val shippedWeights = listOf(
-        0.029819, 0.31253, 0.190293, -0.028253, 0.015226, 0.024499,
-        0.056975, -0.033293, -1.070033, 0.127716, -0.020178, -0.02873,
-        -0.49848, 1.319212
+        0.019052, 0.278298, 0.229784, -0.017021, 0.020249, 0.008575,
+        0.24316, -0.034196, -1.125423, -0.055778, 0.022621, -0.03554,
+        -0.493892, 1.317107
     )
 
     private val model = requireNotNull(
         TrainedCompletionRiskModel.fromParts(
             featureNames = TrainedCompletionRiskModel.FEATURE_NAMES,
             weights = shippedWeights,
-            intercept = 1.120239,
-            mediumRiskThreshold = 0.6086,
-            highRiskThreshold = 0.7112
+            intercept = 1.099164,
+            mediumRiskThreshold = 0.6054,
+            highRiskThreshold = 0.7132
         )
     )
 
     @Test
     fun scoresMatchThePythonModelThatProducedTheWeights() {
         val cases = listOf(
-            Triple(listOf(event(1.0, true, false, 10.0)), true to false, 0.5127210042),
+            Triple(listOf(event(1.0, true, false, 10.0)), true to false, 0.4946024597),
             Triple(
                 listOf(
                     event(2.0, true, false, 10.0),
@@ -189,17 +189,17 @@ class TrainedCompletionRiskModelTest {
                     event(1.5, true, false, 20.0)
                 ),
                 true to false,
-                0.5103873386
+                0.4946669074
             ),
             Triple(
                 listOf(event(20.0, false, false, 5.0), event(18.0, false, true, 5.0)),
                 false to false,
-                0.8556951047
+                0.9349005272
             ),
             Triple(
                 (1..10).map { event(2.0, true, false, it * 5.0) },
                 true to true,
-                0.6933542757
+                0.6860293714
             ),
             Triple(
                 listOf(
@@ -209,7 +209,7 @@ class TrainedCompletionRiskModelTest {
                     event(1.0, true, false, 40.0)
                 ),
                 false to false,
-                0.5093270429
+                0.4586657982
             )
         )
 
@@ -313,9 +313,9 @@ class TrainedCompletionRiskModelTest {
         fun build(
             names: List<String> = TrainedCompletionRiskModel.FEATURE_NAMES,
             weights: List<Double> = shippedWeights,
-            intercept: Double = 1.120239,
-            medium: Double = 0.6086,
-            high: Double = 0.7112
+            intercept: Double = 1.099164,
+            medium: Double = 0.6054,
+            high: Double = 0.7132
         ) = TrainedCompletionRiskModel.fromParts(names, weights, intercept, medium, high)
 
         assertNotNull("the shipped values must still load", build())

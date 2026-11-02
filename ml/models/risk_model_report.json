@@ -1,7 +1,7 @@
 {
   "datasets": [
     {
-      "dataset": "..\\..\\data\\onboarding_dataset_v3.csv",
+      "dataset": "ml\\data\\onboarding_dataset_v3.csv",
       "rows": {
         "train": 79469,
         "test": 16740,
@@ -13,25 +13,25 @@
         "validation": 0.1315
       },
       "validation_auc": {
-        "logistic_regression": 0.7098,
-        "gradient_boosting": 0.6861,
-        "app_rule": 0.5741
+        "logistic_regression": 0.7092,
+        "gradient_boosting": 0.6805,
+        "app_rule": 0.5735
       },
       "chosen_model": "logistic_regression",
       "test_auc": {
-        "model": 0.7346,
+        "model": 0.7366,
         "app_rule": 0.5874,
-        "gain_over_app_rule": 0.1472
+        "gain_over_app_rule": 0.1492
       },
       "test_average_precision": {
-        "model": 0.2398,
-        "app_rule": 0.1169
+        "model": 0.2457,
+        "app_rule": 0.117
       },
       "passes_mark": true,
-      "export_matches_sklearn_to": 2.220446049250313e-16
+      "export_matches_sklearn_to": 3.3306690738754696e-16
     },
     {
-      "dataset": "..\\..\\data\\onboarding_dataset_v3_seed7.csv",
+      "dataset": "ml\\data\\onboarding_dataset_v3_seed7.csv",
       "rows": {
         "validation": 17734,
         "train": 79011,
@@ -43,25 +43,25 @@
         "test": 0.1655
       },
       "validation_auc": {
-        "logistic_regression": 0.7359,
-        "gradient_boosting": 0.7083,
-        "app_rule": 0.5816
+        "logistic_regression": 0.7363,
+        "gradient_boosting": 0.7171,
+        "app_rule": 0.5808
       },
       "chosen_model": "logistic_regression",
       "test_auc": {
-        "model": 0.7213,
-        "app_rule": 0.5653,
-        "gain_over_app_rule": 0.156
+        "model": 0.724,
+        "app_rule": 0.5649,
+        "gain_over_app_rule": 0.1591
       },
       "test_average_precision": {
-        "model": 0.3536,
-        "app_rule": 0.1902
+        "model": 0.3589,
+        "app_rule": 0.1901
       },
       "passes_mark": true,
       "export_matches_sklearn_to": 3.3306690738754696e-16
     },
     {
-      "dataset": "..\\..\\data\\onboarding_dataset_v3_seed99.csv",
+      "dataset": "ml\\data\\onboarding_dataset_v3_seed99.csv",
       "rows": {
         "train": 78948,
         "test": 16189,
@@ -73,19 +73,19 @@
         "validation": 0.1353
       },
       "validation_auc": {
-        "logistic_regression": 0.7471,
-        "gradient_boosting": 0.7393,
-        "app_rule": 0.5582
+        "logistic_regression": 0.7468,
+        "gradient_boosting": 0.7287,
+        "app_rule": 0.5583
       },
       "chosen_model": "logistic_regression",
       "test_auc": {
-        "model": 0.7144,
+        "model": 0.716,
         "app_rule": 0.5493,
-        "gain_over_app_rule": 0.1651
+        "gain_over_app_rule": 0.1667
       },
       "test_average_precision": {
-        "model": 0.2962,
-        "app_rule": 0.1636
+        "model": 0.2988,
+        "app_rule": 0.1638
       },
       "passes_mark": true,
       "export_matches_sklearn_to": 5.551115123125783e-16

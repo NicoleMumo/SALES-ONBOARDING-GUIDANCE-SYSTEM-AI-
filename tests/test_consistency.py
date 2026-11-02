@@ -124,6 +124,16 @@ class RowBuildingTests(unittest.TestCase):
         self.assertFalse(steps[0].validation_passed)
         self.assertTrue(steps[0].is_revisit)
 
+    def test_step_time_matches_the_app_and_never_uses_a_later_response(self):
+        """The app times a step from the previous check, so it includes the agent's
+        response after the previous event, but not the response after this one."""
+        first = dict(self.event(duration="2.0"), agent_response_time_minutes="0.5")
+        second = dict(self.event(duration="3.0"), agent_response_time_minutes="9.0")
+
+        steps = session_steps([first, second])
+
+        self.assertEqual([2.0, 3.5], [step.duration_minutes for step in steps])
+
     def test_one_row_per_step_except_the_last(self):
         events = [self.event(), self.event(), self.event(session_status="abandoned")]
 
