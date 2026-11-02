@@ -1,0 +1,89 @@
+{
+  "dataset": "onboarding_dataset_v3.csv",
+  "note": "Simulated data. Session labels use the whole session and are for analysis only; no method sees them.",
+  "all_steps": {
+    "steps": 16533,
+    "sessions": 1182,
+    "model": 95.0,
+    "rule": 86.5,
+    "lookup": 93.0,
+    "model_vs_rule": {
+      "only_model_right": 1449,
+      "only_rule_right": 41,
+      "z": 36.5
+    },
+    "model_vs_lookup": {
+      "only_model_right": 355,
+      "only_lookup_right": 30,
+      "z": 16.6
+    }
+  },
+  "standard_order_sessions": {
+    "steps": 8790,
+    "sessions": 643,
+    "model": 97.7,
+    "rule": 92.7,
+    "lookup": 97.6,
+    "model_vs_rule": {
+      "only_model_right": 445,
+      "only_rule_right": 5,
+      "z": 20.7
+    },
+    "model_vs_lookup": {
+      "only_model_right": 5,
+      "only_lookup_right": 1,
+      "z": 1.6
+    }
+  },
+  "off_script_sessions": {
+    "steps": 7743,
+    "sessions": 539,
+    "model": 92.0,
+    "rule": 79.5,
+    "lookup": 87.8,
+    "model_vs_rule": {
+      "only_model_right": 1004,
+      "only_rule_right": 36,
+      "z": 30.0
+    },
+    "model_vs_lookup": {
+      "only_model_right": 350,
+      "only_lookup_right": 29,
+      "z": 16.5
+    }
+  },
+  "banking": {
+    "steps": 8612,
+    "sessions": 601,
+    "model": 95.0,
+    "rule": 83.2,
+    "lookup": 92.8,
+    "model_vs_rule": {
+      "only_model_right": 1038,
+      "only_rule_right": 20,
+      "z": 31.3
+    },
+    "model_vs_lookup": {
+      "only_model_right": 198,
+      "only_lookup_right": 7,
+      "z": 13.3
+    }
+  },
+  "telecom": {
+    "steps": 7921,
+    "sessions": 581,
+    "model": 95.0,
+    "rule": 90.1,
+    "lookup": 93.3,
+    "model_vs_rule": {
+      "only_model_right": 411,
+      "only_rule_right": 21,
+      "z": 18.8
+    },
+    "model_vs_lookup": {
+      "only_model_right": 157,
+      "only_lookup_right": 23,
+      "z": 10.0
+    }
+  }
+}
