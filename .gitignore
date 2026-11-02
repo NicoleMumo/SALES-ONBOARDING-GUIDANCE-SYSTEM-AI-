@@ -28,3 +28,9 @@ android/gradle/gradle-daemon-jvm.properties
 
 # Firebase emulator logs
 *-debug.log
+
+# Release signing keys and built installers must never be committed
+*.jks
+*.keystore
+keystore.properties
+*.apk

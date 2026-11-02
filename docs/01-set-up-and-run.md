@@ -83,6 +83,44 @@ The build copies the model files from `ml/models/` into the app (Gradle task
 `syncOnboardingModelAssets`). Edit the files in `ml/models/`, not the copies in
 `android/app/src/main/assets/`.
 
+### Signed release APK (to share the app)
+
+The app is shared as a signed release APK, not through Google Play. The signing
+key stays outside the repository, in your home folder, so it can never be
+committed:
+
+```powershell
+mkdir $HOME\.salesmesh-signing
+keytool -genkeypair -keystore $HOME\.salesmesh-signing\salesmesh-release.jks `
+  -storetype PKCS12 -alias salesmesh -keyalg RSA -keysize 2048 -validity 10000 `
+  -dname "CN=SalesMesh"
+```
+
+Then create `$HOME\.salesmesh-signing\keystore.properties`:
+
+```properties
+storeFile=C:/Users/<you>/.salesmesh-signing/salesmesh-release.jks
+storePassword=<the password you chose>
+keyAlias=salesmesh
+keyPassword=<the password you chose>
+```
+
+Build it (the release check needs Java 17 or 21; it fails on Java 25):
+
+```powershell
+cd android
+.\gradlew.bat :app:assembleRelease "-Dorg.gradle.java.home=C:\Program Files\Java\jdk-21"
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`. Without
+`keystore.properties` the release build is simply left unsigned. Keep a backup
+of the `.salesmesh-signing` folder: an update must be signed with the same key.
+A phone that has the debug build installed must uninstall it first, because the
+two builds are signed with different keys.
+
+If Gradle cannot download on Windows because of certificate errors (PKIX),
+add `"-Djavax.net.ssl.trustStoreType=Windows-ROOT"` to the command.
+
 ## 5. Run the tests
 
 Android unit tests (100 tests), from the `android` folder:
