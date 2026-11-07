@@ -1,10 +1,12 @@
 package com.example.salesonboarding
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -44,6 +46,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,9 +67,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.io.File
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -381,10 +386,30 @@ private fun ConfirmInput(field: FormField, value: String, onChoose: (String) -> 
 
 // region Reading text from a document photo
 
+/** Folder in the app's private cache that holds the document photo while it is read. */
+private const val ID_PHOTO_DIR = "id_photos"
+
 /**
- * "Read from photo": on the identification document question, the agent can choose a photo
- * of the document and the phone reads its printed text (Google ML Kit, on the phone). The
- * text is shown to compare with the card; it is never put into an answer, uploaded or saved.
+ * A fresh file for the next document photo. Any earlier photo is deleted first, so the
+ * folder never holds more than the one photo being read.
+ */
+internal fun newIdPhotoFile(cacheDir: File): File {
+    clearIdPhotos(cacheDir)
+    val dir = File(cacheDir, ID_PHOTO_DIR).apply { mkdirs() }
+    return File(dir, "document_${System.currentTimeMillis()}.jpg")
+}
+
+/** Deletes every document photo the app has taken. */
+internal fun clearIdPhotos(cacheDir: File) {
+    File(cacheDir, ID_PHOTO_DIR).listFiles()?.forEach { it.delete() }
+}
+
+/**
+ * "Take document photo": on the identification document question, the agent photographs the
+ * document from inside the app and the phone reads its printed text (Google ML Kit, on the
+ * phone). The photo is written to the app's private cache, never to the phone's gallery, and is
+ * deleted as soon as it has been read. The text is shown to compare with the card; it is never
+ * put into an answer, uploaded or saved.
  */
 @Composable
 fun DocumentOcrScanner(
@@ -398,13 +423,21 @@ fun DocumentOcrScanner(
     var isScanning by remember { mutableStateOf(false) }
     var extractedText by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    // Kept across the camera screen, which can recreate this activity.
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     val isDisposed = remember(recognizer) { AtomicBoolean(false) }
 
     DisposableEffect(recognizer) {
         onDispose {
             isDisposed.set(true)
             recognizer.close()
+            clearIdPhotos(context.cacheDir)
         }
+    }
+
+    fun discardPhoto() {
+        clearIdPhotos(context.cacheDir)
+        if (!isDisposed.get()) pendingPhotoPath = null
     }
 
     fun reportScanError(message: String) {
@@ -414,41 +447,64 @@ fun DocumentOcrScanner(
         }
     }
 
-    val imagePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null && !isDisposed.get()) {
-            isScanning = true
-            extractedText = ""
-            errorMessage = null
-            try {
-                val image = InputImage.fromFilePath(context, uri)
-                recognizer.process(image)
-                    .addOnSuccessListener { result ->
-                        if (!isDisposed.get()) {
-                            extractedText = result.text.trim()
-                            if (extractedText.isBlank()) {
-                                errorMessage = "No readable text found. Try a clear, well-lit document photo."
-                            }
+    val camera = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { taken ->
+        val photo = pendingPhotoPath?.let(::File)
+        if (!taken || photo == null || !photo.exists() || isDisposed.get()) {
+            discardPhoto()
+            return@rememberLauncherForActivityResult
+        }
+        isScanning = true
+        extractedText = ""
+        errorMessage = null
+        try {
+            val image = InputImage.fromFilePath(context, Uri.fromFile(photo))
+            recognizer.process(image)
+                .addOnSuccessListener { result ->
+                    if (!isDisposed.get()) {
+                        extractedText = result.text.trim()
+                        if (extractedText.isBlank()) {
+                            errorMessage = "No readable text found. Try a clear, well-lit document photo."
                         }
                     }
-                    .addOnFailureListener {
-                        if (!isDisposed.get()) {
-                            errorMessage = "Could not read this image. Try a clearer document photo."
-                        }
+                }
+                .addOnFailureListener {
+                    if (!isDisposed.get()) {
+                        errorMessage = "Could not read this photo. Try a clearer document photo."
                     }
-                    .addOnCompleteListener {
-                        if (!isDisposed.get()) {
-                            isScanning = false
-                        }
+                }
+                .addOnCompleteListener {
+                    discardPhoto()
+                    if (!isDisposed.get()) {
+                        isScanning = false
                     }
-            } catch (_: IOException) {
-                reportScanError("Could not open this image. Choose another document photo.")
-            } catch (_: SecurityException) {
-                reportScanError("Could not access this image. Choose another document photo.")
-            } catch (_: IllegalArgumentException) {
-                reportScanError("This image could not be opened. Choose another document photo.")
-            }
+                }
+        } catch (_: IOException) {
+            discardPhoto()
+            reportScanError("Could not open this photo. Take the document photo again.")
+        } catch (_: SecurityException) {
+            discardPhoto()
+            reportScanError("Could not access this photo. Take the document photo again.")
+        } catch (_: IllegalArgumentException) {
+            discardPhoto()
+            reportScanError("This photo could not be opened. Take the document photo again.")
+        }
+    }
+
+    fun takePhoto() {
+        val photo = newIdPhotoFile(context.cacheDir)
+        pendingPhotoPath = photo.absolutePath
+        errorMessage = null
+        try {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.idphotos", photo)
+            camera.launch(uri)
+        } catch (_: ActivityNotFoundException) {
+            discardPhoto()
+            reportScanError("No camera app is available on this phone.")
+        } catch (_: IllegalArgumentException) {
+            discardPhoto()
+            reportScanError("The camera could not be opened. Try again.")
         }
     }
 
@@ -457,13 +513,13 @@ fun DocumentOcrScanner(
             modifier = Modifier
                 .padding(top = 10.dp)
                 .heightIn(min = 44.dp)
-                .clickable(enabled = !isScanning, role = Role.Button) { imagePicker.launch("image/*") },
+                .clickable(enabled = !isScanning, role = Role.Button) { takePhoto() },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             SmIcon(R.drawable.ic_sm_id_card, c.ink, size = 20.dp)
             Text(
-                if (isScanning) "Reading…" else "Read from photo",
+                if (isScanning) "Reading…" else "Take document photo",
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Medium,
                     textDecoration = TextDecoration.Underline
@@ -472,7 +528,7 @@ fun DocumentOcrScanner(
             )
         }
         Text(
-            "Read on this phone. Not uploaded or saved. It does not check identity.",
+            "Read on this phone, then deleted. Not uploaded or saved. It does not check identity.",
             style = MaterialTheme.typography.bodySmall,
             color = c.muted
         )
