@@ -117,10 +117,12 @@ Each session is stored at `companies/{companyId}/onboardingSessions/{sessionId}`
 Time spent per question and revisits feed the in-app risk warning. They are
 worked out in memory and are not saved.
 
-The ID photo reader (on the "Identification document" question) reads printed
-text from a photo the agent chooses, on the phone, using Google ML Kit. It shows
-the text for the agent to compare; it does not fill in answers, and neither the
-photo nor the text is uploaded or saved. It is a typing aid, not identity
+The ID photo reader (on the "Identification document" question) opens the camera
+from inside the app. The photo goes into the app's private cache, never the
+phone's gallery, and Google ML Kit reads its printed text on the phone. The photo
+is deleted as soon as it has been read. The text is shown for the agent to
+compare; it does not fill in answers, and neither the photo nor the text is
+uploaded or saved. It is a typing aid, not identity
 verification. The app has no KYC/AML service, selfie, liveness or face-match
 check, and records no identity decision; the agent follows the company's own
 manual checks.

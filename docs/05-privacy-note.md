@@ -50,8 +50,9 @@ agents follow the process. Nothing is used for advertising.
 ## The AI and the ID photo
 
 - The AI models run **on the phone**. Answers are not sent anywhere to be scored.
-- The ID photo reader reads text from a photo the agent picks, **on the phone**.
-  The photo and the text it reads are not uploaded or saved.
+- The ID photo reader takes the photo inside the app and reads its text **on the phone**.
+  The photo is kept in the app's private cache, not the phone's gallery, and is deleted
+  as soon as it has been read. The photo and the text it reads are not uploaded or saved.
 - The models were trained on simulated data, not real customers.
 
 ## How long it is kept, and deleting
