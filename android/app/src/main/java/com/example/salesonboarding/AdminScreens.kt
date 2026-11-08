@@ -1,5 +1,9 @@
 package com.example.salesonboarding
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
 import android.util.Patterns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -420,15 +424,29 @@ private fun AdminTextField(
 
 // region Session exports
 
-private enum class SessionExportKind(val filePrefix: String) {
-    SESSIONS("salesmesh-sessions"),
-    TRAINING("salesmesh-training")
+/** The two downloads, described for an administrator who has not seen a CSV file before. */
+private enum class SessionExportKind(val filePrefix: String, val title: String, val detail: String, val button: String) {
+    SESSIONS(
+        filePrefix = "salesmesh-session-summary",
+        title = "Session summary, for your own reports",
+        detail = "A spreadsheet with one row per session: the sales agent, client type, status, when it started " +
+            "and finished, how long it took, how many answers were corrected, and whether it followed the " +
+            "process. Opens in Excel or Google Sheets.",
+        button = "Download summary"
+    ),
+    TRAINING(
+        filePrefix = "salesmesh-model-data",
+        title = "Data to improve SalesMesh's suggestions",
+        detail = "Only needed if the SalesMesh team asks for it. One row per checked answer, with sales agents " +
+            "replaced by codes, used to retrain the app's next-question and risk models. Not useful for reports.",
+        button = "Download model data"
+    )
 }
 
 /**
- * Two buttons that save the company's sessions as a CSV file, in a place the administrator
- * chooses: one row per session for reporting, or one row per checked answer for retraining
- * the models (see [SessionCsvExport]).
+ * "Download records": saves the company's sessions as a spreadsheet file (CSV), in a place the
+ * administrator chooses. Folded by default so the session list stays at the top; each choice
+ * says in plain words what is in the file and who it is for (see [SessionCsvExport]).
  */
 @Composable
 private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Boolean) {
@@ -457,7 +475,7 @@ private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Bo
                 }
                 context.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
                     ?: throw IOException("The file could not be opened.")
-                "Saved $count sessions." to Tone.Positive
+                "Saved $count ${if (count == 1) "session" else "sessions"} to the file you chose." to Tone.Positive
             }.getOrElse { (it.message ?: "Could not save the file. Try again.") to Tone.Negative }
         }
     }
@@ -470,17 +488,50 @@ private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Bo
         saveFile.launch("${kind.filePrefix}-$date.csv")
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            SecondaryButton("Sessions CSV", { export(SessionExportKind.SESSIONS) }, Modifier.weight(1f), enabled = !isExporting)
-            SecondaryButton("Training CSV", { export(SessionExportKind.TRAINING) }, Modifier.weight(1f), enabled = !isExporting)
+    var open by rememberSaveable { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Sm.colors.cream,
+        border = BorderStroke(1.dp, Sm.colors.line)
+    ) {
+        Column(Modifier.padding(Space.m), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .clickable(role = Role.Button) { open = !open }
+                    .semantics { stateDescription = if (open) "Open" else "Closed" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.s)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Download records", style = MaterialTheme.typography.titleMedium, color = Sm.colors.ink)
+                    Text(
+                        "Save these sessions as a spreadsheet file on this phone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Sm.colors.muted
+                    )
+                }
+                SmIcon(if (open) R.drawable.ic_sm_chevron_up else R.drawable.ic_sm_chevron_down, Sm.colors.ink)
+            }
+            if (open) {
+                SessionExportKind.entries.forEach { kind ->
+                    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                        Text(kind.title, style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink)
+                        Text(kind.detail, style = MaterialTheme.typography.bodySmall, color = Sm.colors.mutedStrong)
+                        SecondaryButton(kind.button, { export(kind) }, enabled = !isExporting)
+                    }
+                }
+                Text(
+                    "Neither file holds clients' answers or names. You choose where it is saved; keep it somewhere only " +
+                        "the company can open.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Sm.colors.muted
+                )
+            }
+            message?.let { (text, tone) -> Banner(text, tone) }
         }
-        Text(
-            "No answers or client names are exported. The training file replaces sales agents with codes.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Sm.colors.muted
-        )
-        message?.let { (text, tone) -> Banner(text, tone) }
     }
 }
 

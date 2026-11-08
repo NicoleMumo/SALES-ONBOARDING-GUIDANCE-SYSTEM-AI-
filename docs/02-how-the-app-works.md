@@ -123,11 +123,13 @@ Admins see five pages in a bottom navigation bar:
 - **Agents**: invite agents by email, see whether each has registered, and turn
   an agent off or on.
 - **Sessions**: search and filter all of the company's sessions. Tap one to open
-  its own page with every saved answer (read-only). Two buttons save the
-  sessions as CSV files, in a place the admin chooses:
-  - **Sessions CSV**: one row per session (agent, customer type, status, times,
+  its own page with every saved answer (read-only). **Download records** (folded
+  at the top) saves the sessions as a spreadsheet file (CSV), in a place the
+  admin chooses, with two choices that each say what the file is for:
+  - **Session summary, for your own reports**: one row per session (agent, customer type, status, times,
     answers checked, failed checks, steps out of order, followed the standard).
-  - **Training CSV**: one row per checked answer, in the columns of the training
+  - **Data to improve SalesMesh's suggestions** (only if the SalesMesh team
+    asks for it): one row per checked answer, in the columns of the training
     data (`ml/dataset.py`), so real sessions can retrain the models. Agents are
     replaced by codes (`AGENT-` plus 12 characters). Only sessions with a known
     outcome are included: completed, abandoned (cancelled by the agent or
