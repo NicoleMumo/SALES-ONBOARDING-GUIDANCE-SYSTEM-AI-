@@ -68,10 +68,10 @@ describe("Realtime Database access rules", function () {
 
   // People, as the database sees them (their sign-in token).
   const as = (uid, claims = {}) => testEnv.authenticatedContext(uid, claims).database();
-  const agent1 = () => as("agent-1", { email: "one@acme.com" });
-  const agent2 = () => as("agent-2", { email: "two@acme.com" });
-  const agentOff = () => as("agent-off", { email: "off@acme.com" });
-  const agentBeta = () => as("agent-beta", { email: "bee@beta.com" });
+  const agent1 = () => as("agent-1", { email: "one@acme.com", email_verified: true });
+  const agent2 = () => as("agent-2", { email: "two@acme.com", email_verified: true });
+  const agentOff = () => as("agent-off", { email: "off@acme.com", email_verified: true });
+  const agentBeta = () => as("agent-beta", { email: "bee@beta.com", email_verified: true });
   const adminAcme = () => as("admin-acme", { admin: true, companyId: ACME });
   const adminBeta = () => as("admin-beta", { admin: true, companyId: BETA });
   const signedOut = () => testEnv.unauthenticatedContext().database();
@@ -226,10 +226,15 @@ describe("Realtime Database access rules", function () {
       invitationKey: "new_acme_com",
       ...extra,
     });
-    const newAgent = () => as("agent-new", { email: "new@acme.com" });
+    const newAgent = () => as("agent-new", { email: "new@acme.com", email_verified: true });
 
     it("lets an invited agent join with the invited email", async function () {
       await assertSucceeds(set(ref(newAgent(), "companyMemberships/agent-new"), joining()));
+    });
+
+    it("rejects a join until the agent has verified their email", async function () {
+      const unverified = as("agent-new", { email: "new@acme.com", email_verified: false });
+      await assertFails(set(ref(unverified, "companyMemberships/agent-new"), joining()));
     });
 
     it("rejects a join with no matching invitation", async function () {
@@ -237,7 +242,7 @@ describe("Realtime Database access rules", function () {
     });
 
     it("rejects a join using someone else's invitation", async function () {
-      const thief = as("agent-thief", { email: "thief@acme.com" });
+      const thief = as("agent-thief", { email: "thief@acme.com", email_verified: true });
       await assertFails(
         set(ref(thief, "companyMemberships/agent-thief"), joining({ email: "thief@acme.com" })),
       );
@@ -249,7 +254,7 @@ describe("Realtime Database access rules", function () {
     });
 
     it("rejects a join with a switched-off invitation", async function () {
-      const paused = as("agent-paused", { email: "paused@acme.com" });
+      const paused = as("agent-paused", { email: "paused@acme.com", email_verified: true });
       await assertFails(
         set(
           ref(paused, "companyMemberships/agent-paused"),
@@ -309,6 +314,11 @@ describe("Realtime Database access rules", function () {
           newSession(ACME, "agent-1", { consentAt: 1999 }),
         ),
       );
+    });
+
+    it("blocks a member whose email is not verified from saving sessions", async function () {
+      const unverified = as("agent-1", { email: "one@acme.com" });
+      await assertFails(set(ref(unverified, path(ACME, "onboardingSessions/new")), newSession(ACME, "agent-1")));
     });
 
     it("rejects a session started as another agent", async function () {

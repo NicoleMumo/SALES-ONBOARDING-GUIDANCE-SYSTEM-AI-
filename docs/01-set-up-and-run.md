@@ -107,11 +107,15 @@ await getAuth().setCustomUserClaims(userUid, {
    **Continue with Google** or **Continue with Facebook**, if that account
    uses the invited email.
 
-Agent email verification is turned off while the app is being tested
-(`REQUIRE_AGENT_EMAIL_VERIFICATION` in `Auth.kt`). Turn it on, and require
-`auth.token.email_verified` in the database rules for agent writes, before real
-customer data is used. Until then, someone could register with an invited email
-they do not own.
+Agents must verify their email (`REQUIRE_AGENT_EMAIL_VERIFICATION` in
+`Auth.kt`, and `auth.token.email_verified` in the database rules for joining a
+company, saving sessions and sharing training steps). A new password account
+gets a verification link; an unverified agent who signs in is sent a new link
+and signed out until they open it. Google accounts are already verified.
+Facebook accounts are not, so an invited agent using Facebook is sent a link
+the first time. This stops anyone registering with an invited email they do not
+own. Agents who registered before this was on are asked to verify at their next
+sign-in.
 
 The current sign-in screen shows **Register** only when Administrator is
 selected. The agent registration screen is still in the app, but there is no

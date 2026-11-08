@@ -97,7 +97,6 @@ off stops their access, but keeps the sessions they created.
 | Who the data controller is (the company or you) | It decides who is responsible and who may need to register |
 | Turn Android backup off? | The app can set `allowBackup` to false so phone backups do not copy customer data |
 | Who gets Firebase console access | They can read everything |
-| Turn on email verification for agents | It is off for testing |
 | Deploy the tested rules to your Firebase project | The rules file only protects data once published |
 | How long to keep the anonymised copies in `trainingData/` | They are not personal answers, but a retention period should still be set |
 | Where exported CSV files are kept, and who may hold them | An export leaves Firebase's access rules behind once saved to a phone or drive |

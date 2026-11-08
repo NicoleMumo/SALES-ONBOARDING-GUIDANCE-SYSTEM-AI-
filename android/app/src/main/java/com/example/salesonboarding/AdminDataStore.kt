@@ -150,6 +150,10 @@ interface AdminDataStore {
         email: String,
         onResult: (Result<Unit>) -> Unit
     )
+    /** Whether [email] has an active invitation to [companyId], without joining the company. */
+    fun isInvited(companyId: String, email: String, onResult: (Result<Boolean>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("Invitations cannot be checked here.")))
+    }
     fun observeAgents(onResult: (Result<List<SalesAgentAccount>>) -> Unit)
     fun addAgent(email: String, displayName: String, onResult: (Result<Unit>) -> Unit)
     fun setAgentActive(agentId: String, isActive: Boolean, onResult: (Result<Unit>) -> Unit)
@@ -285,6 +289,29 @@ class FirebaseAdminDataStore(
                     .addOnFailureListener { onResult(Result.failure(it)) }
             }
             .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun isInvited(companyId: String, email: String, onResult: (Result<Boolean>) -> Unit) {
+        val normalizedCompanyId = companyId.trim()
+        val normalizedEmail = email.trim().lowercase(java.util.Locale.ROOT)
+        if (!COMPANY_ID_PATTERN.matches(normalizedCompanyId) || normalizedEmail.isBlank()) {
+            onResult(Result.success(false))
+            return
+        }
+        database.child("companies").child(normalizedCompanyId)
+            .child("agentInvitations").child(emailKey(normalizedEmail)).get()
+            .addOnSuccessListener { snapshot ->
+                val invitedEmail = snapshot.child("email").getValue(String::class.java)
+                    ?.trim()?.lowercase(java.util.Locale.ROOT)
+                onResult(
+                    Result.success(
+                        snapshot.exists() && invitedEmail == normalizedEmail &&
+                            snapshot.child("isActive").getValue(Boolean::class.java) == true
+                    )
+                )
+            }
+            // The rules refuse to show an invitation that is not this person's: not invited.
+            .addOnFailureListener { onResult(Result.success(false)) }
     }
 
     override fun observeAgents(onResult: (Result<List<SalesAgentAccount>>) -> Unit) {

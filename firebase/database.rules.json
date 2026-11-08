@@ -7,7 +7,7 @@
       ".indexOn": ["companyId"],
       "$agentId": {
         ".read": "auth != null && ($agentId == auth.uid || (auth.token.admin == true && data.child('companyId').val() == auth.token.companyId))",
-        ".write": "auth != null && ((auth.token.admin == true && data.child('companyId').val() == auth.token.companyId && newData.child('companyId').val() == auth.token.companyId) || ($agentId == auth.uid && !data.exists() && newData.child('email').val() == auth.token.email && newData.child('isActive').val() == true && root.child('companies').child(newData.child('companyId').val()).child('agentInvitations').child(newData.child('invitationKey').val()).child('email').val() == auth.token.email && root.child('companies').child(newData.child('companyId').val()).child('agentInvitations').child(newData.child('invitationKey').val()).child('isActive').val() == true))",
+        ".write": "auth != null && ((auth.token.admin == true && data.child('companyId').val() == auth.token.companyId && newData.child('companyId').val() == auth.token.companyId) || ($agentId == auth.uid && auth.token.email_verified == true && !data.exists() && newData.child('email').val() == auth.token.email && newData.child('isActive').val() == true && root.child('companies').child(newData.child('companyId').val()).child('agentInvitations').child(newData.child('invitationKey').val()).child('email').val() == auth.token.email && root.child('companies').child(newData.child('companyId').val()).child('agentInvitations').child(newData.child('invitationKey').val()).child('isActive').val() == true))",
         ".validate": "newData.hasChildren(['companyId', 'email', 'displayName', 'isActive', 'invitationKey']) && newData.child('companyId').val().matches(/^[A-Za-z0-9_-]{3,64}$/)"
       }
     },
@@ -46,7 +46,7 @@
           ".indexOn": ["agentId", "startedAt"],
           "$sessionId": {
             ".read": "auth != null && ((auth.token.admin == true && auth.token.companyId == $companyId) || (data.child('companyId').val() == $companyId && data.child('agentId').val() == auth.uid && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true))",
-            ".write": "auth != null && auth.token.admin != true && root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && ((!data.exists() && newData.child('companyId').val() == $companyId && newData.child('agentId').val() == auth.uid && newData.child('status').val() == 'in_progress') || (data.child('companyId').val() == $companyId && data.child('agentId').val() == auth.uid && newData.child('companyId').val() == $companyId && newData.child('agentId').val() == auth.uid && data.child('status').val() == 'in_progress' && (newData.child('status').val() == 'in_progress' || newData.child('status').val() == 'completed' || newData.child('status').val() == 'abandoned')))",
+            ".write": "auth != null && auth.token.admin != true && auth.token.email_verified == true && root.child('companyMemberships').child(auth.uid).child('companyId').val() == $companyId && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && ((!data.exists() && newData.child('companyId').val() == $companyId && newData.child('agentId').val() == auth.uid && newData.child('status').val() == 'in_progress') || (data.child('companyId').val() == $companyId && data.child('agentId').val() == auth.uid && newData.child('companyId').val() == $companyId && newData.child('agentId').val() == auth.uid && data.child('status').val() == 'in_progress' && (newData.child('status').val() == 'in_progress' || newData.child('status').val() == 'completed' || newData.child('status').val() == 'abandoned')))",
             ".validate": "newData.hasChildren(['companyId', 'agentId', 'status']) && newData.child('companyId').val() == $companyId"
           }
         }
@@ -54,7 +54,7 @@
     },
     "trainingData": {
       "$recordId": {
-        ".write": "auth != null && auth.token.admin != true && newData.exists() && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && root.child('companies').child(root.child('companyMemberships').child(auth.uid).child('companyId').val()).child('settings').child('shareForTraining').val() == true",
+        ".write": "auth != null && auth.token.admin != true && auth.token.email_verified == true && newData.exists() && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && root.child('companies').child(root.child('companyMemberships').child(auth.uid).child('companyId').val()).child('settings').child('shareForTraining').val() == true",
         ".validate": "$recordId.matches(/^T[0-9A-F]{32}$/) && newData.hasChildren(['industry', 'context', 'agentCode', 'fieldCount', 'startedAt', 'status', 'updatedAt'])",
         "industry": { ".validate": "newData.val() == 'banking' || newData.val() == 'telecom'" },
         "context": { ".validate": "newData.isString() && newData.val().matches(/^[a-z_]{1,32}$/)" },

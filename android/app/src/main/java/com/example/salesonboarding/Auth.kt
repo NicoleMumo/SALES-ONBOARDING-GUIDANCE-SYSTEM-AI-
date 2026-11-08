@@ -879,7 +879,7 @@ private fun SignInPreview() {
 // them out again, so a half-finished sign-in never leaves a session behind.
 
 /** Must be true, with the matching database rule, before real customer data is used. */
-private const val REQUIRE_AGENT_EMAIL_VERIFICATION = false
+private const val REQUIRE_AGENT_EMAIL_VERIFICATION = true
 
 /** Who signed in, once Firebase and the company records agree they may. */
 data class SignedInUser(
@@ -1050,9 +1050,26 @@ internal fun signInWithProvider(
                 isNew -> if (requestedCompanyId.isBlank()) {
                     removeAndFail("First time here? Enter the company ID from your invitation, then continue with $providerName.")
                 } else {
-                    membershipStore.enrollAgent(requestedCompanyId, user.uid, email) { enrolment ->
-                        enrolment.onSuccess { continueSignIn() }.onFailure {
-                            removeAndFail("$email is not invited to company $requestedCompanyId. Ask your administrator to invite this email, or check the company ID.")
+                    membershipStore.isInvited(requestedCompanyId, email) { invited ->
+                        when {
+                            invited.getOrDefault(false).not() -> removeAndFail(
+                                "$email is not invited to company $requestedCompanyId. Ask your administrator to invite this email, or check the company ID."
+                            )
+                            // Google confirms the email; Facebook does not, so a link is sent first.
+                            user.isEmailVerified -> membershipStore.enrollAgent(requestedCompanyId, user.uid, email) { enrolment ->
+                                enrolment.onSuccess { continueSignIn() }.onFailure {
+                                    signOutAndFail(onResult, IllegalStateException("Could not join company $requestedCompanyId. Try again.", it))
+                                }
+                            }
+                            else -> user.sendEmailVerification().addOnCompleteListener { sent ->
+                                signOutAndFail(
+                                    onResult,
+                                    IllegalStateException(
+                                        if (sent.isSuccessful) "We sent a link to $email. Open it to confirm the email, then enter the company ID and continue with $providerName again."
+                                        else "Confirm $email before signing in. The link could not be sent; try again in a few minutes."
+                                    )
+                                )
+                            }
                         }
                     }
                 }
