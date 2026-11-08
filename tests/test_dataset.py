@@ -184,5 +184,118 @@ class OnboardingDataGeneratorTests(unittest.TestCase):
         self.assertEqual(results["B3 (+ agent id)"], 0.0)
 
 
+class ExportedSessionsTests(unittest.TestCase):
+    # The columns of the app's Training CSV (SessionCsvExport.TRAINING_COLUMNS).
+    APP_COLUMNS = [
+        "session_id", "sales_agent_id", "industry", "context_value", "onboarding_field",
+        "event_name", "event_timestamp", "event_status", "event_duration_minutes",
+        "agent_response_time_minutes", "is_revisit", "previous_onboarding_field",
+        "next_onboarding_field", "validation_status", "failure_reason",
+        "onboarding_progress", "session_status", "split",
+    ]
+
+    def write_export(self, path, agents=20, sessions_per_agent=3):
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self.APP_COLUMNS)
+            writer.writeheader()
+            for a in range(agents):
+                for s in range(sessions_per_agent):
+                    for step, (field, status) in enumerate([("full_name", "in_progress"),
+                                                            ("date_of_birth", "completed")]):
+                        writer.writerow({
+                            "session_id": f"S-{a}-{s}", "sales_agent_id": f"AGENT-{a:012X}",
+                            "industry": "banking", "context_value": "individual",
+                            "onboarding_field": field, "event_name": "entered",
+                            "event_timestamp": f"2026-01-01T08:{step:02d}:00Z", "event_status": "completed",
+                            "event_duration_minutes": "1.00", "agent_response_time_minutes": "0.00",
+                            "is_revisit": "False", "previous_onboarding_field": "",
+                            "next_onboarding_field": "", "validation_status": "passed",
+                            "failure_reason": "", "onboarding_progress": "50.00",
+                            "session_status": status, "split": "",
+                        })
+
+    def test_split_puts_each_sales_agent_in_one_split(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.csv", Path(folder) / "export_split.csv"
+            self.write_export(source)
+
+            counts = dataset.split_exported_sessions(source, out)
+            rows = dataset.read_dataset(out)
+
+        splits_of_agent = defaultdict(set)
+        for row in rows:
+            splits_of_agent[row["sales_agent_id"]].add(row["split"])
+        self.assertTrue(all(len(s) == 1 for s in splits_of_agent.values()))
+        self.assertEqual({"train", "validation", "test"}, {row["split"] for row in rows})
+        self.assertEqual(60, sum(counts.values()))
+
+    def test_an_export_feeds_the_risk_model_rows(self):
+        from consistency import load_split_rows
+
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.csv", Path(folder) / "export_split.csv"
+            self.write_export(source)
+            dataset.split_exported_sessions(source, out)
+            by_split = load_split_rows(out)
+
+        self.assertEqual(60, sum(len(rows) for rows in by_split.values()))
+
+
+class FirebaseCopiesTests(unittest.TestCase):
+    DAY = 24 * 60 * 60 * 1000
+
+    def record(self, status, updated_at, agent="AGENT-0123456789AB"):
+        return {
+            "industry": "banking", "context": "individual", "agentCode": agent, "fieldCount": 4,
+            "startedAt": 0, "status": status, "updatedAt": updated_at,
+            "steps": {
+                "-b": {"fieldId": "contact_phone_number", "passed": False, "t": 120_000},
+                "-a": {"fieldId": "full_name", "passed": True, "t": 60_000},
+                "-c": {"fieldId": "contact_phone_number", "passed": True, "t": 240_000},
+            },
+        }
+
+    def test_copies_become_rows_like_the_apps_training_csv(self):
+        export = {"trainingData": {
+            "TDONE": self.record("completed", 240_000),
+            "TOLD": self.record("in_progress", 240_000),
+            "TNEW": self.record("in_progress", 2 * self.DAY),
+        }}
+
+        rows = dataset.rows_from_firebase(export, now_ms=2 * self.DAY)
+
+        self.assertEqual({"TDONE", "TOLD"}, {row["session_id"] for row in rows})
+        done = [row for row in rows if row["session_id"] == "TDONE"]
+        self.assertEqual(["full_name", "contact_phone_number", "contact_phone_number"],
+                         [row["onboarding_field"] for row in done])
+        self.assertEqual(["1.00", "1.00", "2.00"], [row["event_duration_minutes"] for row in done])
+        self.assertEqual(["False", "False", "True"], [row["is_revisit"] for row in done])
+        self.assertEqual(["25.00", "25.00", "50.00"], [row["onboarding_progress"] for row in done])
+        self.assertEqual("completed", done[-1]["session_status"])
+        self.assertEqual("abandoned", [row for row in rows if row["session_id"] == "TOLD"][-1]["session_status"])
+        self.assertEqual(dataset.APP_TRAINING_COLUMNS, list(rows[0]))
+
+    def test_an_export_of_training_data_alone_is_also_read(self):
+        rows = dataset.rows_from_firebase({"TDONE": self.record("completed", 0)}, now_ms=0)
+        self.assertEqual(3, len(rows))
+
+    def test_conversion_writes_a_split_csv_the_risk_model_can_read(self):
+        import json
+        from consistency import load_split_rows
+
+        export = {"trainingData": {
+            f"T{agent}{n}": self.record("completed", 0, agent=f"AGENT-{agent:012X}")
+            for agent in range(20) for n in range(3)
+        }}
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.json", Path(folder) / "real.csv"
+            source.write_text(json.dumps(export), encoding="utf-8")
+            counts = dataset.from_firebase(source, out, now_ms=0)
+            by_split = load_split_rows(out)
+
+        self.assertEqual(60, sum(counts.values()))
+        self.assertEqual({"train", "validation", "test"}, set(by_split))
+
+
 if __name__ == "__main__":
     unittest.main()

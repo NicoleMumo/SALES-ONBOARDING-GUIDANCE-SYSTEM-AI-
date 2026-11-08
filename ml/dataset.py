@@ -51,15 +51,19 @@ Usage:
     python ml/dataset.py generate --version v4    # clients show strain before quitting
     python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
     python ml/dataset.py check ml/data/onboarding_dataset_v3.csv --compare path/to/raw.csv
+    python ml/dataset.py split path/to/salesmesh-training.csv   # real sessions from the app
+    python ml/dataset.py from-firebase path/to/export.json      # anonymised copies in trainingData/
 """
 
 import argparse
 import csv
+import json
 import math
 import random
+import time
 import uuid
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
 
@@ -697,12 +701,15 @@ def generate(n_sessions, seed, version="v3"):
 
 
 def assign_agent_splits(raw, seed):
+    return splits_by_agent(Counter(agent.id for _, agent, *_ in raw), seed)
+
+
+def splits_by_agent(sessions_per_agent, seed):
     """Put each agent wholly in train, validation or test, about 70/15/15 of sessions.
 
     Agents are shuffled with their own seeded RNG (so the session stream is not
     disturbed), then filled into the splits in that order by session count.
     """
-    sessions_per_agent = Counter(agent.id for _, agent, *_ in raw)
     agent_ids = sorted(sessions_per_agent)
     random.Random(seed + 101).shuffle(agent_ids)
     total = sum(sessions_per_agent.values())
@@ -755,6 +762,111 @@ REQUIRED_COLUMNS = {
     "session_status",
     "split",
 }
+
+
+def split_exported_sessions(path, out, seed=2026):
+    """Fill the split column of a Training CSV exported from the app.
+
+    The app leaves `split` empty. Splitting here works as for the simulated data:
+    each sales agent goes wholly to train, validation or test, about 70/15/15 of
+    sessions. Returns the number of sessions in each split.
+    """
+    rows = read_dataset(Path(path))
+    sessions_of_agent = defaultdict(set)
+    for row in rows:
+        sessions_of_agent[row["sales_agent_id"]].add(row["session_id"])
+    split_of = splits_by_agent(Counter({a: len(s) for a, s in sessions_of_agent.items()}), seed)
+    for row in rows:
+        row["split"] = split_of[row["sales_agent_id"]]
+    save(rows, out)
+    return Counter({split: sum(len(sessions_of_agent[a]) for a, s in split_of.items() if s == split)
+                    for split in ("train", "validation", "test")})
+
+
+ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000
+
+APP_TRAINING_COLUMNS = [
+    "session_id", "sales_agent_id", "industry", "context_value", "onboarding_field",
+    "event_name", "event_timestamp", "event_status", "event_duration_minutes",
+    "agent_response_time_minutes", "is_revisit", "previous_onboarding_field",
+    "next_onboarding_field", "validation_status", "failure_reason",
+    "onboarding_progress", "session_status", "split",
+]
+
+
+def rows_from_firebase(data, now_ms):
+    """Training rows from the app's anonymised session copies (`trainingData/` in Firebase).
+
+    [data] is a Firebase JSON export, of the whole database or of `trainingData` alone.
+    Rows match the app's Training CSV: a step's time runs from the previous check (or the
+    start), so `agent_response_time_minutes` is 0. Only sessions with a known outcome are
+    kept: completed, or unfinished with no step for 24 hours (abandoned).
+    """
+    records = data.get("trainingData", data) if isinstance(data, dict) else {}
+    rows = []
+    for record_id, record in sorted(records.items()):
+        if not isinstance(record, dict):
+            continue
+        steps = sorted((record.get("steps") or {}).values(), key=lambda step: step["t"])
+        if not steps:
+            continue
+        if record.get("status") == "completed":
+            outcome = "completed"
+        elif now_ms - record.get("updatedAt", steps[-1]["t"]) >= ABANDONED_AFTER_MS:
+            outcome = "abandoned"
+        else:
+            continue
+        field_count = record.get("fieldCount") or 0
+        passed_so_far = {}
+        previous_time = record.get("startedAt", steps[0]["t"])
+        for index, step in enumerate(steps):
+            is_revisit = any(earlier["fieldId"] == step["fieldId"] for earlier in steps[:index])
+            passed_so_far[step["fieldId"]] = step["passed"]
+            progress = sum(passed_so_far.values()) * 100 / field_count if field_count else 0.0
+            rows.append({
+                "session_id": record_id,
+                "sales_agent_id": record.get("agentCode", ""),
+                "industry": record.get("industry", ""),
+                "context_value": record.get("context", ""),
+                "onboarding_field": step["fieldId"],
+                "event_name": "revisited" if is_revisit else "entered",
+                "event_timestamp": datetime.fromtimestamp(step["t"] / 1000, timezone.utc)
+                .strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "event_status": "completed" if step["passed"] else "failed",
+                "event_duration_minutes": f"{max(step['t'] - previous_time, 0) / 60000:.2f}",
+                "agent_response_time_minutes": "0.00",
+                "is_revisit": str(is_revisit),
+                "previous_onboarding_field": steps[index - 1]["fieldId"] if index else "",
+                "next_onboarding_field": steps[index + 1]["fieldId"] if index + 1 < len(steps) else "",
+                "validation_status": "passed" if step["passed"] else "failed",
+                "failure_reason": "",
+                "onboarding_progress": f"{progress:.2f}",
+                "session_status": outcome if index == len(steps) - 1 else "in_progress",
+                "split": "",
+            })
+            previous_time = step["t"]
+    return rows
+
+
+def from_firebase(path, out, now_ms, seed=2026):
+    """Convert a Firebase JSON export into a training CSV, split by sales agent."""
+    with open(path, encoding="utf-8") as handle:
+        rows = rows_from_firebase(json.load(handle), now_ms)
+    if not rows:
+        raise ValueError(f"{path} has no anonymised sessions with a known outcome.")
+    sessions_of_agent = defaultdict(set)
+    for row in rows:
+        sessions_of_agent[row["sales_agent_id"]].add(row["session_id"])
+    split_of = splits_by_agent(Counter({a: len(s) for a, s in sessions_of_agent.items()}), seed)
+    for row in rows:
+        row["split"] = split_of[row["sales_agent_id"]]
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=APP_TRAINING_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    return Counter({split: sum(len(sessions_of_agent[a]) for a, s in split_of.items() if s == split)
+                    for split in ("train", "validation", "test")})
 
 
 def read_dataset(path):
@@ -947,11 +1059,35 @@ def main():
     check.add_argument("path", type=Path)
     check.add_argument("--compare", type=Path)
 
+    split = commands.add_parser("split", help="fill the split column of a Training CSV exported from the app")
+    split.add_argument("path", type=Path)
+    split.add_argument("--out", type=Path, help="default: <path>_split.csv")
+    split.add_argument("--seed", type=int, default=2026)
+
+    real = commands.add_parser("from-firebase",
+                               help="turn a Firebase JSON export of trainingData/ into a training CSV")
+    real.add_argument("path", type=Path)
+    real.add_argument("--out", type=Path, default=Path("ml/data/real_sessions.csv"))
+    real.add_argument("--seed", type=int, default=2026)
+
     args = ap.parse_args()
+    if args.command == "from-firebase":
+        counts = from_firebase(args.path, args.out, int(time.time() * 1000), args.seed)
+        print(f"wrote {args.out}: " + ", ".join(f"{name} {counts[name]} sessions" for name in ("train", "validation", "test")))
+        if min(counts.values()) == 0:
+            print("warning: a split is empty; collect sessions from more sales agents before training")
+        return
     if args.command == "check":
         report(args.path)
         if args.compare:
             report(args.compare)
+        return
+    if args.command == "split":
+        out = args.out or args.path.with_name(f"{args.path.stem}_split{args.path.suffix}")
+        counts = split_exported_sessions(args.path, out, args.seed)
+        print(f"wrote {out}: " + ", ".join(f"{name} {counts[name]} sessions" for name in ("train", "validation", "test")))
+        if min(counts.values()) == 0:
+            print("warning: a split is empty; export sessions from more sales agents before training")
         return
 
     if args.sessions <= 0:

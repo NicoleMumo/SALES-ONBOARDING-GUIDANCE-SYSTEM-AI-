@@ -1,6 +1,8 @@
 package com.example.salesonboarding
 
 import android.util.Patterns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,15 +32,20 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 // region Dashboard frame and data
@@ -77,6 +84,8 @@ fun AdminDashboardScreen(
     var configuration by remember(companyId, store) { mutableStateOf(FieldRuleConfiguration()) }
     var companyIndustry by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isSavingCompanyIndustry by remember(companyId, store) { mutableStateOf(false) }
+    var sharesForTraining by remember(companyId, store) { mutableStateOf(false) }
+    var isSavingSharesForTraining by remember(companyId, store) { mutableStateOf(false) }
     var errorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var agentStatusMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isLoadingAnalytics by remember(companyId, store) { mutableStateOf(false) }
@@ -121,6 +130,10 @@ fun AdminDashboardScreen(
         store.loadCompanyIndustry(companyId) {
             if (!isCurrentAdminScope()) return@loadCompanyIndustry
             handle(it) { companyIndustry = it }
+        }
+        store.loadSharesForTraining(companyId) {
+            if (!isCurrentAdminScope()) return@loadSharesForTraining
+            handle(it) { sharesForTraining = it }
         }
         store.observeAgents {
             if (!isCurrentAdminScope()) return@observeAgents
@@ -218,13 +231,16 @@ fun AdminDashboardScreen(
                         HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut)
                     }
                 ) {
-                    SessionHistoryContent(
-                        sessions = sessions,
-                        agents = agents,
-                        isLoading = isLoadingSessions,
-                        errorMessage = sessionsErrorMessage,
-                        onOpenSession = { openSession = it }
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                        SessionExportButtons(store = store, isCurrentScope = ::isCurrentAdminScope)
+                        SessionHistoryContent(
+                            sessions = sessions,
+                            agents = agents,
+                            isLoading = isLoadingSessions,
+                            errorMessage = sessionsErrorMessage,
+                            onOpenSession = { openSession = it }
+                        )
+                    }
                 }
                 AdminSection.QUESTIONS -> QuestionsPage(
                     configuration = configuration,
@@ -308,6 +324,16 @@ fun AdminDashboardScreen(
                                 onCompanyIndustryChanged(industry)
                             }
                         }
+                    },
+                    sharesForTraining = sharesForTraining,
+                    isSavingSharesForTraining = isSavingSharesForTraining,
+                    onSharesForTrainingChanged = { enabled ->
+                        isSavingSharesForTraining = true
+                        store.saveSharesForTraining(enabled) { result ->
+                            if (!isCurrentAdminScope()) return@saveSharesForTraining
+                            isSavingSharesForTraining = false
+                            handle(result) { sharesForTraining = enabled }
+                        }
                     }
                 )
             }
@@ -372,6 +398,74 @@ private fun AdminTextField(
             unfocusedLabelColor = Sm.colors.muted
         )
     )
+}
+
+// endregion
+
+// region Session exports
+
+private enum class SessionExportKind(val filePrefix: String) {
+    SESSIONS("salesmesh-sessions"),
+    TRAINING("salesmesh-training")
+}
+
+/**
+ * Two buttons that save the company's sessions as a CSV file, in a place the administrator
+ * chooses: one row per session for reporting, or one row per checked answer for retraining
+ * the models (see [SessionCsvExport]).
+ */
+@Composable
+private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Boolean) {
+    val context = LocalContext.current
+    // Kept across the file picker, which can recreate this activity.
+    var pendingKind by rememberSaveable { mutableStateOf<SessionExportKind?>(null) }
+    var isExporting by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<Pair<String, Tone>?>(null) }
+
+    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val kind = pendingKind
+        pendingKind = null
+        if (uri == null || kind == null) {
+            isExporting = false
+            return@rememberLauncherForActivityResult
+        }
+        store.loadSessionMetrics { result ->
+            if (!isCurrentScope()) return@loadSessionMetrics
+            isExporting = false
+            message = result.mapCatching { sessions ->
+                val (csv, count) = when (kind) {
+                    SessionExportKind.SESSIONS -> SessionCsvExport.sessionsCsv(sessions) to sessions.size
+                    SessionExportKind.TRAINING -> System.currentTimeMillis().let { now ->
+                        SessionCsvExport.trainingCsv(sessions, now) to SessionCsvExport.trainingSessions(sessions, now).size
+                    }
+                }
+                context.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    ?: throw IOException("The file could not be opened.")
+                "Saved $count sessions." to Tone.Positive
+            }.getOrElse { (it.message ?: "Could not save the file. Try again.") to Tone.Negative }
+        }
+    }
+
+    fun export(kind: SessionExportKind) {
+        pendingKind = kind
+        isExporting = true
+        message = null
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        saveFile.launch("${kind.filePrefix}-$date.csv")
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            SecondaryButton("Sessions CSV", { export(SessionExportKind.SESSIONS) }, Modifier.weight(1f), enabled = !isExporting)
+            SecondaryButton("Training CSV", { export(SessionExportKind.TRAINING) }, Modifier.weight(1f), enabled = !isExporting)
+        }
+        Text(
+            "No answers or client names are exported. The training file replaces sales agents with codes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Sm.colors.muted
+        )
+        message?.let { (text, tone) -> Banner(text, tone) }
+    }
 }
 
 // endregion
@@ -862,7 +956,10 @@ private fun CompanyPage(
     errorMessage: String?,
     onSignOut: () -> Unit,
     bottomBar: @Composable ColumnScope.() -> Unit,
-    onSaveIndustry: (String) -> Unit
+    onSaveIndustry: (String) -> Unit,
+    sharesForTraining: Boolean,
+    isSavingSharesForTraining: Boolean,
+    onSharesForTrainingChanged: (Boolean) -> Unit
 ) {
     var selectedIndustry by remember(industry) { mutableStateOf(industry) }
     val clipboard = LocalClipboardManager.current
@@ -941,6 +1038,26 @@ private fun CompanyPage(
                 enabled = selectedIndustry != null && selectedIndustry != industry,
                 isLoading = isSaving
             )
+        }
+        SectionCard(
+            title = "Improve the system",
+            subtitle = "When on, the consent screen asks each customer whether anonymised steps may be kept. " +
+                "Only steps of customers who agree are saved: which questions were checked, whether they passed, and when. " +
+                "No answers or names. Agents see the change at their next sign-in."
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+                Text(
+                    "Allow sessions to improve the system",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Sm.colors.ink,
+                    modifier = Modifier.weight(1f)
+                )
+                SmSwitch(
+                    checked = sharesForTraining,
+                    onCheckedChange = onSharesForTrainingChanged,
+                    enabled = !isSavingSharesForTraining
+                )
+            }
         }
     }
 }

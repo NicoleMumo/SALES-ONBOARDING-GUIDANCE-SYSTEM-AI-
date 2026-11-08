@@ -31,3 +31,15 @@ class LoginFormValidatorTest {
         assertNull(LoginFormValidator.validate("agent@example.com", "short"))
     }
 }
+
+class PasswordResetTest {
+    @Test
+    fun sentEmailShowsTheNeutralMessage() {
+        assertNull(PasswordReset.failureMessage(null))
+    }
+
+    @Test
+    fun otherErrorsAskThePersonToTryAgain() {
+        assertEquals(PasswordReset.FAILED_MESSAGE, PasswordReset.failureMessage(IllegalStateException("offline")))
+    }
+}

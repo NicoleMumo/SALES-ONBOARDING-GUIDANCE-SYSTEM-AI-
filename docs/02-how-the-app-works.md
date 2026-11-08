@@ -10,14 +10,18 @@ team follows the process.
 ## An agent's session
 
 1. **Sign in.** The agent picks "Sales agent" and enters the company ID, email
-   and password.
+   and password. **Forgot password?** sends a Firebase reset link to the email
+   typed; the app gives the same reply whether or not that email has an account.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
    mobile, broadband, TV, IoT or landline. That choice, plus the company's own
    settings, decides the form (the "playbook").
 3. **Consent.** The agent explains to the customer why the information is
    collected, how document photos are used, the customer's rights, and how
-   answers are kept, then ticks that the customer agreed.
+   answers are kept, then ticks that the customer agreed. If the company allows
+   it (Company page), a second, optional tick asks whether anonymised steps may
+   be used to improve the system; it starts unticked and saying no changes
+   nothing else.
 4. **Fill in the form, section by section.** Banking sections: Customer,
    Identity, Financial, Declarations, Account. Telecom sections: Customer,
    Identity, Service, Activation. Questions a company added come last, under
@@ -55,7 +59,19 @@ Admins see five pages in a bottom navigation bar:
 - **Agents**: invite agents by email, see whether each has registered, and turn
   an agent off or on.
 - **Sessions**: search and filter all of the company's sessions. Tap one to open
-  its own page with every saved answer (read-only).
+  its own page with every saved answer (read-only). Two buttons save the
+  sessions as CSV files, in a place the admin chooses:
+  - **Sessions CSV**: one row per session (agent, customer type, status, times,
+    answers checked, failed checks, steps out of order, followed the standard).
+  - **Training CSV**: one row per checked answer, in the columns of the training
+    data (`ml/dataset.py`), so real sessions can retrain the models. Agents are
+    replaced by codes (`AGENT-` plus 12 characters). Only sessions with a known
+    outcome are included: completed, or unfinished with no check for 24 hours
+    (labelled abandoned). Run `python ml/dataset.py split <file>` to fill the
+    `split` column by agent before training.
+
+  Neither file holds answers or customer names; sessions do not save which
+  answer was given to a check, only the question, pass or fail, and the time.
 - **Questions**: the standard questions of the company's industry, grouped
   (Identity, Contact, Business, Money, Service), with a switch for which are
   required. Add, edit or delete the company's own questions (name,
@@ -63,7 +79,16 @@ Admins see five pages in a bottom navigation bar:
   always stay required: full name, date of birth, ID type, ID number, politically
   exposed person status, US person status, and acceptance of the terms.
 - **Company**: copy the company ID to give to agents, and set the onboarding
-  industry (agents cannot sign in until it is set).
+  industry (agents cannot sign in until it is set). **Allow sessions to improve
+  the system** (off by default) makes the consent screen ask each customer the
+  optional question above. For each customer who agrees, the app saves an
+  anonymised copy of the session to `trainingData/` as the agent works: the
+  industry, customer type, number of questions, the agent as a code, and each
+  check (question, passed or not, time). No answers, names or session ID. The
+  database rules let agents only add these copies; no one can read them in the
+  app. The project owner exports `trainingData` from the Firebase console and
+  runs `python ml/dataset.py from-firebase <export.json>` to get a training CSV,
+  already split by agent.
 
 ## The consistency measure
 

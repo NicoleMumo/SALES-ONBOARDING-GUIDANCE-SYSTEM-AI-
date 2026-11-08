@@ -287,19 +287,26 @@ private val CONSENT_POINTS = listOf(
 /** The complete wording, available behind "Read the full terms". */
 private val FULL_CONSENT_TERMS = listOf(
     "Purpose of Collection" to "Information is collected to set up the customer account and follow your company's onboarding process.",
-    "Document photos" to "If you choose a document photo, text is read on this device to help with data entry. The photo and scan result are not uploaded or saved automatically.",
+    "Document photos" to "If the agent takes a document photo, its text is read on this device to help with data entry. The photo is deleted after reading, and neither the photo nor the text is uploaded or saved.",
     "Customer rights" to "The customer may request review of their submitted details through authorized company channels.",
     "Access and retention" to "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
 )
 
+/** Shown in the full terms only when the company allows it; agreeing is optional. */
+private val TRAINING_TERMS = "Improving the system" to
+    "With the customer's agreement, an anonymised copy of the session's steps is kept to improve the app: which questions were checked, whether each passed, and when. It never includes answers, names or contact details. Saying no does not change the onboarding."
+
 @Composable
 fun OnboardingConsentScreen(
-    onConsent: () -> Unit,
+    onConsent: (trainingAgreed: Boolean) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The company allows anonymised steps to improve the system, so the customer is asked. */
+    askTrainingConsent: Boolean = false
 ) {
     val c = Sm.colors
     var confirmed by remember { mutableStateOf(false) }
+    var trainingAgreed by remember { mutableStateOf(false) }
     var showTerms by remember { mutableStateOf(false) }
 
     AppScreen(
@@ -308,36 +315,23 @@ fun OnboardingConsentScreen(
         onBack = onBack,
         modifier = modifier,
         bottomBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 64.dp)
-                    .toggleable(value = confirmed, role = Role.Checkbox) { confirmed = it },
-                shape = RoundedCornerShape(16.dp),
-                color = c.cream,
-                border = BorderStroke(1.5.dp, c.switchOff)
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Box(
-                        Modifier
-                            .size(30.dp)
-                            .background(c.ink, RoundedCornerShape(9.dp))
-                            .padding(2.dp)
-                            .background(if (confirmed) c.ink else c.white, RoundedCornerShape(7.dp)),
-                        contentAlignment = Alignment.Center
-                    ) { if (confirmed) SmIcon(R.drawable.ic_sm_check, c.lime, size = 17.dp) }
-                    Text(
-                        "Customer has been informed and agrees to proceed",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
-                        color = c.ink
-                    )
-                }
+            if (askTrainingConsent) {
+                ConsentTick(
+                    checked = trainingAgreed,
+                    onCheckedChange = { trainingAgreed = it },
+                    text = "Optional: customer agrees that anonymised steps may be used to improve the system"
+                )
             }
-            PrimaryButton("Start onboarding", onClick = onConsent, enabled = confirmed)
+            ConsentTick(
+                checked = confirmed,
+                onCheckedChange = { confirmed = it },
+                text = "Customer has been informed and agrees to proceed"
+            )
+            PrimaryButton(
+                "Start onboarding",
+                onClick = { onConsent(askTrainingConsent && trainingAgreed) },
+                enabled = confirmed
+            )
         }
     ) {
         Column(Modifier.padding(horizontal = 4.dp)) {
@@ -365,12 +359,47 @@ fun OnboardingConsentScreen(
 
     if (showTerms) {
         SmSheet(title = "Full terms", onDismiss = { showTerms = false }) {
-            FULL_CONSENT_TERMS.forEach { (title, text) ->
+            (if (askTrainingConsent) FULL_CONSENT_TERMS + TRAINING_TERMS else FULL_CONSENT_TERMS).forEach { (title, text) ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(title, style = MaterialTheme.typography.titleSmall)
                     Text(text, style = MaterialTheme.typography.bodyMedium, color = c.mutedStrong)
                 }
             }
+        }
+    }
+}
+
+/** A large tick box with its sentence, the whole row tappable. */
+@Composable
+private fun ConsentTick(checked: Boolean, onCheckedChange: (Boolean) -> Unit, text: String) {
+    val c = Sm.colors
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onCheckedChange),
+        shape = RoundedCornerShape(16.dp),
+        color = c.cream,
+        border = BorderStroke(1.5.dp, c.switchOff)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(30.dp)
+                    .background(c.ink, RoundedCornerShape(9.dp))
+                    .padding(2.dp)
+                    .background(if (checked) c.ink else c.white, RoundedCornerShape(7.dp)),
+                contentAlignment = Alignment.Center
+            ) { if (checked) SmIcon(R.drawable.ic_sm_check, c.lime, size = 17.dp) }
+            Text(
+                text,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+                color = c.ink
+            )
         }
     }
 }

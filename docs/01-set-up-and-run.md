@@ -148,7 +148,7 @@ tests, and runs the Firebase rules tests (see section 6).
 
 The rules file existing does not mean the rules are deployed. The rules are
 tested automatically against the Firebase Emulator, with two companies, each with
-an admin and agents. The 38 tests check that:
+an admin and agents. The 43 tests check that:
 
 - Company A cannot read or change anything of Company B.
 - An agent cannot read another agent's sessions.
@@ -163,6 +163,9 @@ an admin and agents. The 38 tests check that:
 - A deactivated agent loses access to settings and sessions.
 - A completed session cannot be changed, and a session cannot change owner or
   company.
+- Only a company's admin can turn on sharing anonymised steps. Then only its
+  active agents can add copies to `trainingData/`, only in the expected shape (no
+  names or extra fields), and nobody can read or delete them through the app.
 
 To run them yourself, from the `firebase/` folder (needs Node 20 and Java 21):
 

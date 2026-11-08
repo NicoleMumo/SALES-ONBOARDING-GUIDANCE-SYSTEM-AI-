@@ -54,6 +54,17 @@ agents follow the process. Nothing is used for advertising.
   The photo is kept in the app's private cache, not the phone's gallery, and is deleted
   as soon as it has been read. The photo and the text it reads are not uploaded or saved.
 - The models were trained on simulated data, not real customers.
+- **Improving the system** is off unless the company's admin turns it on (Company
+  page). Then the consent screen asks each customer an optional question: may
+  anonymised steps of this session be used to improve the app? It starts unticked.
+  Only for customers who agree, the app saves a copy to `trainingData/`: industry,
+  customer type, number of questions, the agent as a code, and each check (question,
+  passed or not, time). No answers, names, contact details or session ID. The
+  database rules let agents only add these copies; nobody can read them in the app,
+  only the project owner through the Firebase console. The session records whether
+  the customer agreed.
+- An admin can also export a **Training CSV** of their own company's sessions from
+  the Sessions page, with the same columns and no answers or names.
 
 ## How long it is kept, and deleting
 
@@ -76,6 +87,8 @@ off stops their access, but keeps the sessions they created.
 | Who gets Firebase console access | They can read everything |
 | Turn on email verification for agents | It is off for testing |
 | Deploy the tested rules to your Firebase project | The rules file only protects data once published |
+| How long to keep the anonymised copies in `trainingData/` | They are not personal answers, but a retention period should still be set |
+| Where exported CSV files are kept, and who may hold them | An export leaves Firebase's access rules behind once saved to a phone or drive |
 
 ## Customer consent
 

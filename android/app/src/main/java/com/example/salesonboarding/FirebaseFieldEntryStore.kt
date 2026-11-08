@@ -18,7 +18,9 @@ data class StoredOnboardingSession(
     val playbookTitle: String = "",
     val fieldNames: Map<String, String> = emptyMap(),
     val validatedFieldIds: Set<String> = emptySet(),
-    val resumeFieldId: String? = null
+    val resumeFieldId: String? = null,
+    /** The customer agreed that anonymised steps of this session may improve the system. */
+    val trainingConsent: Boolean = false
 )
 
 interface SessionHistoryStore {
@@ -36,6 +38,19 @@ interface OnboardingSessionStore : FieldEntryStore {
     )
     /** Saves that the customer agreed at [atMillis], and which agent recorded it. */
     fun recordConsent(sessionId: String, agentId: String, atMillis: Long) {}
+    /** Saves whether the customer agreed that anonymised steps may improve the system. */
+    fun recordTrainingConsent(sessionId: String, agreed: Boolean) {}
+    /** Starts the anonymised copy of a session (see [TrainingData]). */
+    fun startTrainingRecord(
+        recordId: String,
+        industry: String,
+        context: String,
+        agentCode: String,
+        fieldCount: Int,
+        startedAtMillis: Long
+    ) {}
+    fun appendTrainingStep(recordId: String, fieldId: String, passed: Boolean, atMillis: Long) {}
+    fun markTrainingCompleted(recordId: String) {}
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
     fun appendEvent(sessionId: String, type: String, fieldId: String?)
     fun markCompleted(sessionId: String)
@@ -86,6 +101,7 @@ class FirebaseFieldEntryStore(
     }
 
     private val sessions = database.child("companies").child(companyId).child("onboardingSessions")
+    private val trainingData = database.child("trainingData")
 
     override fun save(entry: FieldEntry) {
         requireValidSessionId(entry.sessionId)
@@ -145,6 +161,50 @@ class FirebaseFieldEntryStore(
         sessions.child(sessionId).updateChildren(
             mapOf("consentAt" to atMillis, "consentBy" to agentId)
         ).reportFailure("Could not save the customer's consent for session '$sessionId'.")
+    }
+
+    override fun recordTrainingConsent(sessionId: String, agreed: Boolean) {
+        requireValidSessionId(sessionId)
+        sessions.child(sessionId).child("trainingConsent").setValue(agreed)
+            .reportFailure("Could not save the training consent for session '$sessionId'.")
+    }
+
+    override fun startTrainingRecord(
+        recordId: String,
+        industry: String,
+        context: String,
+        agentCode: String,
+        fieldCount: Int,
+        startedAtMillis: Long
+    ) {
+        trainingData.child(recordId).updateChildren(
+            mapOf(
+                "industry" to industry,
+                "context" to context,
+                "agentCode" to agentCode,
+                "fieldCount" to fieldCount,
+                "startedAt" to startedAtMillis,
+                "status" to "in_progress",
+                "updatedAt" to System.currentTimeMillis()
+            )
+        ).reportFailure("Could not start the anonymised copy '$recordId'.")
+    }
+
+    override fun appendTrainingStep(recordId: String, fieldId: String, passed: Boolean, atMillis: Long) {
+        requireValidFieldId(fieldId)
+        val stepId = trainingData.child(recordId).child("steps").push().key ?: return
+        trainingData.child(recordId).updateChildren(
+            mapOf(
+                "steps/$stepId" to mapOf("fieldId" to fieldId, "passed" to passed, "t" to atMillis),
+                "updatedAt" to System.currentTimeMillis()
+            )
+        ).reportFailure("Could not save an anonymised step to '$recordId'.")
+    }
+
+    override fun markTrainingCompleted(recordId: String) {
+        trainingData.child(recordId).updateChildren(
+            mapOf("status" to "completed", "updatedAt" to System.currentTimeMillis())
+        ).reportFailure("Could not mark the anonymised copy '$recordId' completed.")
     }
 
     override fun recordValidation(
@@ -389,6 +449,7 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         playbookTitle = child("playbookTitle").getValue(String::class.java).orEmpty(),
         fieldNames = fieldNames,
         validatedFieldIds = validatedFieldIds,
-        resumeFieldId = child("resumeFieldId").getValue(String::class.java)
+        resumeFieldId = child("resumeFieldId").getValue(String::class.java),
+        trainingConsent = child("trainingConsent").getValue(Boolean::class.java) == true
     )
 }

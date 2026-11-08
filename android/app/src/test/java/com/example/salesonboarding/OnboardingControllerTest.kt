@@ -293,6 +293,72 @@ class OnboardingFormControllerTest {
         )
     }
 
+    @Test
+    fun agreedSessionSavesAnAnonymisedCopyOfEachCheck() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            sessionId = "shared-session",
+            fields = listOf(KnownFields.get("full_name"), KnownFields.get("email_address")),
+            scope = backgroundScope,
+            entryStore = store,
+            industry = "banking",
+            context = "individual",
+            agentId = "uid-mary",
+            consentAtMillis = 1_000L,
+            shareForTraining = true
+        )
+
+        controller.answer("full_name", "Jane Mika")
+        controller.answer("email_address", "bad")
+        controller.answer("email_address", "jane@example.com")
+        runCurrent()
+        assertTrue(controller.submit())
+
+        val recordId = TrainingData.recordId("shared-session")
+        assertEquals(true, store.trainingConsent)
+        assertEquals(
+            listOf(recordId, "banking", "individual", TrainingData.agentCode("uid-mary"), 2, 1_000L),
+            store.trainingStart
+        )
+        assertEquals(
+            listOf("full_name" to true, "email_address" to false, "email_address" to true),
+            store.trainingSteps
+        )
+        assertEquals(recordId, store.trainingCompleted)
+    }
+
+    @Test
+    fun sessionWithoutAgreementSavesNoCopy() = runTest {
+        val store = RecordingOnboardingSessionStore()
+        val controller = OnboardingFormController(
+            sessionId = "private-session",
+            fields = listOf(KnownFields.get("full_name")),
+            scope = backgroundScope,
+            entryStore = store
+        )
+
+        controller.answer("full_name", "Jane Mika")
+        runCurrent()
+        assertTrue(controller.submit())
+
+        assertEquals(false, store.trainingConsent)
+        assertEquals(null, store.trainingStart)
+        assertTrue(store.trainingSteps.isEmpty())
+        assertEquals(null, store.trainingCompleted)
+    }
+
+    @Test
+    fun trainingRecordIdsAndAgentCodesMatchTheDatabaseRules() {
+        // firebase/database.rules.json: trainingData/$recordId and agentCode
+        val recordId = TrainingData.recordId("5c1e8f2a-0d4b-4e7a-9a63-2f1b7c90d1aa")
+
+        assertTrue(recordId.matches(Regex("^T[0-9A-F]{32}$")))
+        assertEquals(recordId, TrainingData.recordId("5c1e8f2a-0d4b-4e7a-9a63-2f1b7c90d1aa"))
+        assertTrue(recordId != TrainingData.recordId("another-session"))
+        assertFalse(recordId.contains("5C1E8F2A"))
+        assertTrue(TrainingData.agentCode("uid-mary").matches(Regex("^AGENT-[0-9A-F]{12}$")))
+    }
+
     private data class SessionStart(
         val sessionId: String,
         val agentId: String,
@@ -365,6 +431,34 @@ class OnboardingFormControllerTest {
 
         override fun markCompleted(sessionId: String) {
             completedSessionId = sessionId
+        }
+
+        var trainingConsent: Boolean? = null
+        var trainingStart: List<Any>? = null
+        val trainingSteps = mutableListOf<Pair<String, Boolean>>()
+        var trainingCompleted: String? = null
+
+        override fun recordTrainingConsent(sessionId: String, agreed: Boolean) {
+            trainingConsent = agreed
+        }
+
+        override fun startTrainingRecord(
+            recordId: String,
+            industry: String,
+            context: String,
+            agentCode: String,
+            fieldCount: Int,
+            startedAtMillis: Long
+        ) {
+            trainingStart = listOf(recordId, industry, context, agentCode, fieldCount, startedAtMillis)
+        }
+
+        override fun appendTrainingStep(recordId: String, fieldId: String, passed: Boolean, atMillis: Long) {
+            trainingSteps += fieldId to passed
+        }
+
+        override fun markTrainingCompleted(recordId: String) {
+            trainingCompleted = recordId
         }
 
         override fun getSession(

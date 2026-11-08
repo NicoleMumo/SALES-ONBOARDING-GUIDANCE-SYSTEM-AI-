@@ -102,11 +102,13 @@ fun rememberOnboardingController(
     initialResumeFieldId: String? = null,
     isResumingSession: Boolean = false,
     riskModel: TrainedCompletionRiskModel? = null,
-    consentAtMillis: Long? = null
+    consentAtMillis: Long? = null,
+    shareForTraining: Boolean = false
 ): OnboardingFormController = remember(
     sessionId, scope, entryStore, predictor, industry, context,
     agentUid, fields, playbook, initialModelUnavailable, agentEmail,
-    initialValues, initialResumeFieldId, isResumingSession, riskModel, consentAtMillis
+    initialValues, initialResumeFieldId, isResumingSession, riskModel, consentAtMillis,
+    shareForTraining
 ) {
     OnboardingFormController(
         sessionId,
@@ -124,7 +126,8 @@ fun rememberOnboardingController(
         initialResumeFieldId = initialResumeFieldId,
         isResumingSession = isResumingSession,
         riskModel = riskModel,
-        consentAtMillis = consentAtMillis
+        consentAtMillis = consentAtMillis,
+        shareForTraining = shareForTraining
     )
 }
 
