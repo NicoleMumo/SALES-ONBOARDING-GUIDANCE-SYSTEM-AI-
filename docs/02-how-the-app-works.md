@@ -132,12 +132,16 @@ Each session is stored at `companies/{companyId}/onboardingSessions/{sessionId}`
 
 | Data | What it holds |
 | --- | --- |
-| Session details | company and agent IDs, agent email, industry, customer type, status (`in_progress` or `completed`), start and finish times, `answerChecks: "on_leave"` |
+| Session details | company and agent IDs, agent email, industry, customer type, status (`in_progress` or `completed`), start, consent and finish times, `answerChecks: "on_leave"`, `trainingConsent` |
 | `playbookSnapshot` | a copy of the questions and rules used, so later setting changes do not alter old sessions |
-| `entries/{fieldId}` | the answers: drafts while in progress, then only valid, non-empty answers when completed |
-| `validation/{fieldId}` | the latest check result per question |
+| `entries/{fieldId}` | the answers (`value`, `isValid`, `timestamp`): drafts while in progress, then only valid, non-empty answers when completed |
+| `validation/{fieldId}` | the latest check result per question (`isValid`, `updatedAt`, and `errorMessage` while it fails) |
+
+IDs are not repeated inside a record: the session ID and question ID are the keys
+in its path. Sessions saved before 8 November 2026 still hold those repeats and
+`lastSavedAt`/`consentBy`; the app reads both forms.
 | `events` | one `field_validation_passed` or `field_validation_failed` record per attempt: event type, question ID and time, never the answer |
-| `resumeFieldId`, `lastSavedAt` | where to continue an unfinished session |
+| `resumeFieldId`, `updatedAt` | where to continue an unfinished session, and when it was last saved |
 
 Time spent per question and revisits feed the in-app risk warning. They are
 worked out in memory and are not saved.

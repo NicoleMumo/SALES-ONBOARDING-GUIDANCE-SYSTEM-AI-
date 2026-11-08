@@ -128,8 +128,8 @@ class FirebaseFieldEntryStore(
     ) {
         requireValidSessionId(sessionId)
         sessions.child(sessionId).updateChildren(
+            // The session ID is the key of this record, so it is not stored again inside it.
             mapOf(
-                "sessionId" to sessionId,
                 "companyId" to companyId,
                 "agentId" to agentId,
                 "agentEmail" to agentEmail.trim(),
@@ -159,7 +159,8 @@ class FirebaseFieldEntryStore(
     override fun recordConsent(sessionId: String, agentId: String, atMillis: Long) {
         requireValidSessionId(sessionId)
         sessions.child(sessionId).updateChildren(
-            mapOf("consentAt" to atMillis, "consentBy" to agentId)
+            // The agent who recorded consent is the session's own agentId: no one else can write it.
+            mapOf("consentAt" to atMillis)
         ).reportFailure("Could not save the customer's consent for session '$sessionId'.")
     }
 
@@ -217,7 +218,6 @@ class FirebaseFieldEntryStore(
         requireValidFieldId(fieldId)
         sessions.child(sessionId).child("validation").child(fieldId).setValue(
             mapOf(
-                "fieldId" to fieldId,
                 "isValid" to isValid,
                 "errorMessage" to message,
                 "updatedAt" to System.currentTimeMillis()
@@ -286,7 +286,6 @@ class FirebaseFieldEntryStore(
                     return Transaction.abort()
                 }
                 currentData.child("updatedAt").value = now
-                currentData.child("lastSavedAt").value = now
                 currentData.child("resumeFieldId").value = resumeFieldId
                 entries.forEach { entry ->
                     currentData.child("entries").child(entry.fieldId).value =
@@ -375,10 +374,8 @@ private fun requireEntriesBelongToSession(sessionId: String, entries: List<Field
     }
 }
 
+/** An answer is saved under entries/{fieldId} of its session, so the path already names both. */
 private fun FieldEntry.toDatabaseValue(): Map<String, Any?> = mapOf(
-    "entryId" to entryId,
-    "sessionId" to sessionId,
-    "fieldId" to fieldId,
     "value" to value,
     "timestamp" to timestamp,
     "isValid" to isValid
@@ -422,11 +419,13 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         val fieldName = field.child("fieldName").getValue(String::class.java)
         if (fieldId != null && fieldName != null) fieldId to fieldName else null
     }.toMap()
+    val sessionId = child("sessionId").getValue(String::class.java) ?: key.orEmpty()
     val entries = child("entries").children.mapNotNull { entry ->
-        val fieldId = entry.child("fieldId").getValue(String::class.java) ?: entry.key ?: return@mapNotNull null
+        // Sessions saved before 8 November 2026 also repeat the IDs inside each answer.
+        val fieldId = entry.key ?: entry.child("fieldId").getValue(String::class.java) ?: return@mapNotNull null
         FieldEntry(
-            entryId = entry.child("entryId").getValue(String::class.java).orEmpty(),
-            sessionId = entry.child("sessionId").getValue(String::class.java).orEmpty(),
+            entryId = "$sessionId:$fieldId",
+            sessionId = sessionId,
             fieldId = fieldId,
             value = entry.child("value").getValue(String::class.java),
             timestamp = entry.child("timestamp").getValue(Long::class.java) ?: 0L,
@@ -437,7 +436,7 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         if (field.child("isValid").getValue(Boolean::class.java) == true) field.key else null
     }.toSet()
     return StoredOnboardingSession(
-        sessionId = child("sessionId").getValue(String::class.java) ?: key.orEmpty(),
+        sessionId = sessionId,
         agentId = child("agentId").getValue(String::class.java).orEmpty(),
         industry = child("industry").getValue(String::class.java).orEmpty(),
         context = child("context").getValue(String::class.java).orEmpty(),
