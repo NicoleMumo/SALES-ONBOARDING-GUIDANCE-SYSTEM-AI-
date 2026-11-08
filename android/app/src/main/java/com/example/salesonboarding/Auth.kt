@@ -69,6 +69,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -242,7 +244,7 @@ fun UnifiedLoginScreen(
             state = state.copy(role = role, errorMessage = null, infoMessage = null)
             onRoleSelected(role)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Agents sign in to a company, so the login logic needs its ID.
             if (isAgent) {
                 SignInField(
@@ -298,54 +300,23 @@ fun UnifiedLoginScreen(
                 style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.Medium, fontSize = 14.sp)
             )
         }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-            Box(
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = enabled, role = Role.Button, onClick = ::resetPassword)
-                    .padding(horizontal = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Forgot password?",
-                    color = colors.action,
-                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                )
-            }
-        }
         SignInButton(state.isSubmitting, colors, fonts, onClick = ::submit)
-        if (socialProviders.isNotEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.weight(1f).height(1.dp).background(colors.fieldBorder))
-                Text("or", color = colors.fieldLabel, style = TextStyle(fontFamily = fonts.text, fontSize = 14.sp))
-                Box(Modifier.weight(1f).height(1.dp).background(colors.fieldBorder))
-            }
-            socialProviders.forEach { provider ->
-                SocialButton(provider, enabled, colors, fonts) { socialSubmit(provider) }
-            }
-            Text(
-                if (isAgent) "Only an email your administrator invited can sign in. The first time, enter the company ID above."
-                else "Only an account the Firebase owner gave administrator access can sign in.",
-                color = colors.fieldLabel,
-                style = TextStyle(fontFamily = fonts.text, fontSize = 13.sp, lineHeight = 18.sp)
-            )
+        // Only an invited email (agents) or an account given admin access can get in; a
+        // refused account is told why after it is picked.
+        socialProviders.forEach { provider ->
+            SocialButton(provider, enabled, colors, fonts) { socialSubmit(provider) }
         }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = enabled, role = Role.Button, onClick = if (isAgent) onRegisterAgent else onRegisterAdmin)
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    if (isAgent) "New agent? Create account" else "Register",
-                    color = colors.action,
-                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                )
-            }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SignInLink(
+                if (isAgent) "New agent? Create account" else "Register",
+                enabled, colors, fonts,
+                onClick = if (isAgent) onRegisterAgent else onRegisterAdmin
+            )
+            SignInLink("Forgot password?", enabled, colors, fonts, onClick = ::resetPassword)
         }
 
     }
@@ -353,46 +324,54 @@ fun UnifiedLoginScreen(
 
 /**
  * The sign-in look shared by sign-in and registration: the photo with the brand, and the
- * cream sheet over it holding [content]. On short screens the photo shrinks first.
+ * cream sheet over it holding [content]. The sheet sits at the bottom and the photo takes
+ * whatever height is left, so the whole page fits on the screen. Only when it cannot (the
+ * keyboard is open, or a very short phone) does the photo stop at the logo and the page scroll.
  */
 @Composable
 private fun SignInFrame(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
     val colors = LocalSignInColors.current
     val fonts = rememberSignInFonts()
+    val density = LocalDensity.current
     DarkSystemBarIcons()
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(colors.window)
+            // The sheet pads the navigation bar itself, so only the rest of the keyboard is added.
+            .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
     ) {
-        val photoHeight = (maxHeight * 0.5f).coerceIn(200.dp, 420.dp)
-        val sheetTop = photoHeight - 40.dp
-        val screenHeight = maxHeight
+        val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        // Enough photo to show the logo and wordmark above the sheet.
+        val logoRoom = max(56.dp, statusBar + 12.dp) + 44.dp + 20.dp
+        var sheetHeight by remember { mutableStateOf(0.dp) }
+        val photoHeight = max(maxHeight - sheetHeight, logoRoom) + SheetOverlap
         Column(
             Modifier
                 .fillMaxSize()
-                // The sheet pads the navigation bar itself, so only the rest of the keyboard is added.
-                .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
                 .verticalScroll(rememberScrollState())
         ) {
             Box(Modifier.fillMaxWidth()) {
                 SignInPhoto(photoHeight, colors, fonts)
                 Column(
                     modifier = Modifier
-                        .padding(top = sheetTop)
+                        .padding(top = photoHeight - SheetOverlap)
                         .fillMaxWidth()
-                        .heightIn(min = screenHeight - sheetTop)
+                        .onSizeChanged { sheetHeight = with(density) { it.height.toDp() } }
                         .shadow(24.dp, SheetShape, clip = false)
                         .background(colors.sheet, SheetShape)
                         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-                        .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                        .padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                     content = content
                 )
             }
         }
     }
 }
+
+/** How far the sheet's rounded top reaches over the photo. */
+private val SheetOverlap = 36.dp
 
 private val SheetShape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp)
 
@@ -519,7 +498,7 @@ private fun SignInField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 66.dp)
+            .heightIn(min = 58.dp)
             .clip(shape)
             .background(colors.field)
             .border(if (focused) 2.dp else 1.5.dp, if (focused) colors.ink else colors.fieldBorder, shape)
@@ -533,7 +512,7 @@ private fun SignInField(
     ) {
         Box(
             Modifier
-                .size(42.dp)
+                .size(38.dp)
                 .background(colors.accent, CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -624,7 +603,7 @@ private fun SignInButton(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 60.dp)
+            .heightIn(min = 56.dp)
             .clip(shape)
             .background(colors.action)
             .clickable(enabled = !isSubmitting, role = Role.Button, onClick = onClick)
@@ -663,6 +642,31 @@ private fun SignInButton(
     }
 }
 
+/** A short coloured text link with a 48 dp touch area. */
+@Composable
+private fun SignInLink(
+    text: String,
+    enabled: Boolean,
+    colors: SignInColors,
+    fonts: SignInFonts,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text,
+            color = colors.action,
+            style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        )
+    }
+}
+
 /** "Continue with Google": an outlined button under Sign in. */
 @Composable
 private fun SocialButton(
@@ -676,7 +680,7 @@ private fun SocialButton(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 52.dp)
             .clip(shape)
             .border(1.5.dp, colors.fieldBorder, shape)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -862,11 +866,18 @@ private const val MIN_PASSWORD_LENGTH = 8
 
 // region Previews
 
-@Preview(name = "Sign in", showBackground = true, heightDp = 900)
+/** A Galaxy A54-sized screen, and a small 360 x 640 phone: the page should fit both without scrolling. */
+@Preview(name = "Sign in", showBackground = true, widthDp = 384, heightDp = 854)
+@Preview(name = "Sign in, small phone", showBackground = true, widthDp = 360, heightDp = 640)
 @Composable
 private fun SignInPreview() {
     SalesOnboardingTheme {
-        UnifiedLoginScreen(onLogin = { _, _, _, _, _ -> }, onRegisterAdmin = {}, onRegisterAgent = {})
+        UnifiedLoginScreen(
+            onLogin = { _, _, _, _, _ -> },
+            onRegisterAdmin = {},
+            onRegisterAgent = {},
+            socialProviders = listOf(SocialProvider.GOOGLE)
+        )
     }
 }
 
