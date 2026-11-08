@@ -39,7 +39,7 @@ agents follow the process. Nothing is used for advertising.
   no record of it beyond the address the agent chooses to use. Because this is
   outside Kenya, the company should cover it in its own data-protection notice,
   or agents can simply type the address.
-- **Google or Facebook**, only for an agent or admin who signs in with them:
+- **Google**, only for an agent or admin who signs in with it:
   they confirm the account and give the app its email address. No customer
   data goes to them.
 - **The agent's phone** keeps an offline copy of recent data so the app works

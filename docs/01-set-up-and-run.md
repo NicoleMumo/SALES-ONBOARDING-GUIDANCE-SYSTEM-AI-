@@ -32,15 +32,14 @@ customer information is used.
 
 Never put Firebase service-account keys in the app or in this repository.
 
-### Optional: Google and Facebook sign-in (both free)
+### Optional: Google sign-in (free)
 
-Each button appears on the sign-in screen only once it is set up. Both are free
-on Firebase's no-cost Spark plan. To stay free, do **not** upgrade to "Firebase
-Authentication with Identity Platform", and do **not** turn on phone (SMS)
-sign-in, which is billed per message. Sign in with Apple is not included: it
-needs the paid Apple Developer Program (US$99 a year).
-
-**Google**
+The **Continue with Google** button appears on the sign-in screen only once it
+is set up. It is free on Firebase's no-cost Spark plan. To stay free, do
+**not** upgrade to "Firebase Authentication with Identity Platform", and do
+**not** turn on phone (SMS) sign-in, which is billed per message. Sign in with
+Apple is not included: it needs the paid Apple Developer Program (US$99 a
+year). Facebook was left out to keep Meta's code out of the app.
 
 1. Firebase console > Authentication > Sign-in method > **Google** > Enable.
 2. Project settings > your Android app > **Add fingerprint**: add the SHA-1 of
@@ -49,30 +48,7 @@ needs the paid Apple Developer Program (US$99 a year).
 3. Download `google-services.json` again (it now holds Google's client ID),
    replace `android/app/google-services.json`, and rebuild.
 
-**Facebook**
-
-1. At developers.facebook.com, create an app with **Facebook Login** (free).
-   Under Facebook Login > Android, enter the package
-   `com.example.salesonboarding`, the class
-   `com.example.salesonboarding.MainActivity`, and the key hashes of the debug
-   and release keys.
-2. Firebase console > Authentication > Sign-in method > **Facebook** > Enable,
-   with the Facebook app ID and app secret. Copy the redirect URI Firebase shows
-   into Facebook Login > Settings > Valid OAuth Redirect URIs.
-3. Put the app ID and client token (Facebook: Settings > Advanced) in
-   `android/local.properties`, which is not in Git, then rebuild:
-
-   ```properties
-   facebook.appId=[your Facebook app ID]
-   facebook.clientToken=[your Facebook client token]
-   ```
-
-While the Facebook app is in Development mode, only people given a role on it
-(admins, developers, testers) can log in. Making it Live needs a privacy policy
-web address. Facebook's automatic usage reports, advertising ID and install
-tracking are switched off in the app's manifest.
-
-**Who can get in.** A Google or Facebook account works exactly like a password
+**Who can get in.** A Google account works exactly like a password
 account: an agent's email must match an active invitation (checked by the
 database rules), and an admin needs the custom claims below. A new account
 whose email was not invited is deleted again straight away.
@@ -104,16 +80,13 @@ await getAuth().setCustomUserClaims(userUid, {
 3. The agent creates an account with that email and company ID, then signs in.
    On first sign-in the app checks the invitation and makes them a member.
    Instead of a password, the agent can enter the company ID and tap
-   **Continue with Google** or **Continue with Facebook**, if that account
-   uses the invited email.
+   **Continue with Google**, if that Google account uses the invited email.
 
 Agents must verify their email (`REQUIRE_AGENT_EMAIL_VERIFICATION` in
 `Auth.kt`, and `auth.token.email_verified` in the database rules for joining a
 company, saving sessions and sharing training steps). A new password account
 gets a verification link; an unverified agent who signs in is sent a new link
-and signed out until they open it. Google accounts are already verified.
-Facebook accounts are not, so an invited agent using Facebook is sent a link
-the first time. This stops anyone registering with an invited email they do not
+and signed out until they open it. Google accounts are already verified. This stops anyone registering with an invited email they do not
 own. Agents who registered before this was on are asked to verify at their next
 sign-in.
 

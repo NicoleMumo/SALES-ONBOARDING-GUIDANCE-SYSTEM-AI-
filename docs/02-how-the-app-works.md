@@ -12,13 +12,13 @@ team follows the process.
 1. **Sign in.** The agent picks "Sales agent" and enters the company ID, email
    and password. **Forgot password?** sends a Firebase reset link to the email
    typed; the app gives the same reply whether or not that email has an account.
-   **Continue with Google** or **Continue with Facebook** signs in without a
-   password, but only if that account's email was invited by the company's
+   **Continue with Google** signs in without a password, but only if that
+   Google account's email was invited by the company's
    admin (the same database rules as for passwords decide). The first time, the
    agent enters the company ID; after that it can be left empty. An uninvited
-   account is deleted again at once. Each button appears only when it is set up
+   account is deleted again at once. The button appears only when it is set up
    (see [01-set-up-and-run.md](01-set-up-and-run.md)). An admin can also use
-   Google or Facebook, once the Firebase owner has given that account admin
+   Google, once the Firebase owner has given that account admin
    access.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
@@ -236,7 +236,7 @@ All app code is in one package, `android/app/src/main/java/com/example/salesonbo
 | --- | --- |
 | `MainActivity.kt` | App start and which screen is shown. |
 | `Auth.kt` | Sign-in and registration screens, and the Firebase account checks. |
-| `SocialSignIn.kt` | Continue with Google or Facebook (each shown only when set up). |
+| `SocialSignIn.kt` | Continue with Google (shown only when set up). |
 | `AddressLookup.kt` | Use my location and Find address, through OpenStreetMap's Nominatim. |
 | `AgentScreens.kt` | Agent home, customer choice, and consent. |
 | `OnboardingForm.kt` | The agent's form: sections and step bar, review and finish pages. |

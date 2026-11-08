@@ -9,15 +9,6 @@ val releaseSigning: Properties? =
         .takeIf { it.exists() }
         ?.let { source -> Properties().apply { source.inputStream().use { load(it) } } }
 
-// Facebook sign-in is optional. Its app ID and client token go in android/local.properties
-// (never committed) as facebook.appId and facebook.clientToken; without them the
-// "Continue with Facebook" button is hidden.
-val localSettings = Properties().apply {
-    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-}
-val facebookAppId = localSettings.getProperty("facebook.appId").orEmpty().trim()
-val facebookClientToken = localSettings.getProperty("facebook.clientToken").orEmpty().trim()
-
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
@@ -37,12 +28,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        resValue("string", "facebook_app_id", facebookAppId)
-        resValue("string", "facebook_client_token", facebookClientToken)
-        // Facebook returns to the app through fb<app ID>://; a dummy scheme when it is off.
-        manifestPlaceholders["facebookLoginScheme"] =
-            if (facebookAppId.isEmpty()) "salesmesh-facebook-off" else "fb$facebookAppId"
     }
 
     signingConfigs {
@@ -104,7 +89,6 @@ dependencies {
     implementation("androidx.credentials:credentials:1.3.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
-    implementation("com.facebook.android:facebook-login:17.0.2")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

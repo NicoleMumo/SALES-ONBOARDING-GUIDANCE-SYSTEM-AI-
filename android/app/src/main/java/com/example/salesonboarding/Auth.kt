@@ -165,7 +165,7 @@ fun UnifiedLoginScreen(
     onResetPassword: (email: String, onResult: (String?) -> Unit) -> Unit = { _, onResult ->
         onResult(PasswordReset.FAILED_MESSAGE)
     },
-    /** Google and Facebook, when set up in this build; none hides the "or" part. */
+    /** Google, when set up in this build; none hides the "or" part. */
     socialProviders: List<SocialProvider> = emptyList(),
     onSocialLogin: (
         provider: SocialProvider,
@@ -663,7 +663,7 @@ private fun SignInButton(
     }
 }
 
-/** "Continue with Google" or "Continue with Facebook": an outlined button under Sign in. */
+/** "Continue with Google": an outlined button under Sign in. */
 @Composable
 private fun SocialButton(
     provider: SocialProvider,
@@ -998,7 +998,7 @@ private fun signIn(
 }
 
 /**
- * Signs in with a Google or Facebook account, then applies the same checks as [signIn].
+ * Signs in with a Google account, then applies the same checks as [signIn].
  * A new agent account is kept only if its email was invited to the company: otherwise it is
  * deleted again, so an uninvited person never keeps an account. A new admin account is kept
  * (signed out), because the Firebase owner needs it to give admin access.
@@ -1055,7 +1055,7 @@ internal fun signInWithProvider(
                             invited.getOrDefault(false).not() -> removeAndFail(
                                 "$email is not invited to company $requestedCompanyId. Ask your administrator to invite this email, or check the company ID."
                             )
-                            // Google confirms the email; Facebook does not, so a link is sent first.
+                            // Google confirms the email; any other account is sent a link first.
                             user.isEmailVerified -> membershipStore.enrollAgent(requestedCompanyId, user.uid, email) { enrolment ->
                                 enrolment.onSuccess { continueSignIn() }.onFailure {
                                     signOutAndFail(onResult, IllegalStateException("Could not join company $requestedCompanyId. Try again.", it))
@@ -1145,7 +1145,7 @@ private fun signInAgent(
                         )
                     }
                 }
-                // Google and Facebook sign-in may leave the company ID empty for a returning agent.
+                // Google sign-in may leave the company ID empty for a returning agent.
                 membership.isActive && (requestedCompanyId.isBlank() || membership.companyId == requestedCompanyId) ->
                     loadAgentCompany(membershipStore, user.uid, membership.companyId, onResult)
                 else -> signOutAndFail(
