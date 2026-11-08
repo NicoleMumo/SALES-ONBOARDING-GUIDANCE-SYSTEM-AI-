@@ -1,6 +1,10 @@
 package com.example.salesonboarding
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,15 +26,22 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -42,6 +53,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 
 // region The form, connected to its controller
 
@@ -176,6 +188,13 @@ fun OnboardingForm(
     var submitted by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
+    // The question the guidance panel was asked to open; the section page scrolls to it.
+    var jumpTarget by remember { mutableStateOf<String?>(null) }
+    // Where the agent dragged the panel, kept while moving between sections.
+    var dockX by rememberSaveable { mutableFloatStateOf(0f) }
+    var dockY by rememberSaveable { mutableFloatStateOf(0f) }
+    val preferences = LocalContext.current.getSharedPreferences(FORM_PREFERENCES, Context.MODE_PRIVATE)
+    var autoFollow by remember { mutableStateOf(preferences.getBoolean(AUTO_FOLLOW_KEY, false)) }
 
     fun goTo(target: Int) {
         // Leaving the page checks the box being typed in, and any other unchecked answer.
@@ -188,6 +207,15 @@ fun OnboardingForm(
             val firstOpen = section.fields.firstOrNull { !it.isAnsweredIn(latest) } ?: section.fields.first()
             onSectionOpened(firstOpen.fieldId)
         }
+    }
+
+    /** Opens the section holding [fieldId], then scrolls to that question and focuses it. */
+    fun openField(fieldId: String) {
+        val target = sections.indexOfFirst { section -> section.fields.any { it.fieldId == fieldId } }
+        if (target < 0) return
+        if (target != page) goTo(target)
+        onSectionOpened(fieldId)
+        jumpTarget = fieldId
     }
     // The phone's Back button follows each page's back arrow (see AppScreen).
 
@@ -237,12 +265,32 @@ fun OnboardingForm(
                 onLeave = onLeave,
                 onValueChange = onValueChange,
                 onCheckField = onCheckField,
+                jumpTarget = jumpTarget,
+                onJumpDone = { jumpTarget = null },
+                onOpenField = ::openField,
+                dockOffset = Offset(dockX, dockY),
+                onDockOffsetChange = { dockX = it.x; dockY = it.y },
+                autoFollow = autoFollow,
+                onAutoFollowChange = {
+                    autoFollow = it
+                    preferences.edit().putBoolean(AUTO_FOLLOW_KEY, it).apply()
+                },
                 modifier = modifier
             )
         }
     }
 }
 
+private const val FORM_PREFERENCES = "salesmesh_form"
+private const val AUTO_FOLLOW_KEY = "auto_follow"
+
+/** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
+private const val AUTO_FOLLOW_DELAY_MS = 250L
+
+/** How long the guide smiles after an accepted answer. */
+private const val GUIDE_SMILE_MS = 2000L
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SectionPage(
     playbook: OnboardingPlaybook,
@@ -258,12 +306,51 @@ private fun SectionPage(
     onLeave: () -> Unit,
     onValueChange: (fieldId: String, value: String) -> Unit,
     onCheckField: (fieldId: String) -> Unit,
+    jumpTarget: String?,
+    onJumpDone: () -> Unit,
+    onOpenField: (String) -> Unit,
+    dockOffset: Offset,
+    onDockOffsetChange: (Offset) -> Unit,
+    autoFollow: Boolean,
+    onAutoFollowChange: (Boolean) -> Unit,
     modifier: Modifier
 ) {
     val section = sections[page]
-    // Only the model's pick is offered; without a model the section order is the guide.
-    val suggestedId = guidance.prediction?.fieldId?.takeIf { it == guidance.nextFieldId }
-    val suggestedPage = sections.indexOfFirst { s -> s.fields.any { it.fieldId == suggestedId } }
+    val focusManager = LocalFocusManager.current
+    val allFields = remember(sections) { sections.flatMap { it.fields } }
+    val sectionOf = remember(sections) {
+        sections.flatMap { s -> s.fields.map { it.fieldId to s.title } }.toMap()
+    }
+    val bringers = remember(section) { section.fields.associate { it.fieldId to BringIntoViewRequester() } }
+    val focusers = remember(section) { section.fields.associate { it.fieldId to FocusRequester() } }
+    val latestGuidance by rememberUpdatedState(guidance)
+    var followRequests by remember { mutableIntStateOf(0) }
+    // The guide smiles for a moment after each accepted answer.
+    val checks = state.interactionHistory.filter { it.validationPassed != null }
+    var justPassed by remember { mutableStateOf(false) }
+    LaunchedEffect(checks.size) {
+        if (checks.lastOrNull()?.validationPassed == true) {
+            justPassed = true
+            delay(GUIDE_SMILE_MS)
+            justPassed = false
+        }
+    }
+
+    // Scroll to the question the panel opened, and put the cursor in it if it is a text box.
+    LaunchedEffect(jumpTarget) {
+        val target = jumpTarget ?: return@LaunchedEffect
+        val bringer = bringers[target] ?: return@LaunchedEffect
+        delay(50) // let the section lay out first
+        bringer.bringIntoView()
+        runCatching { focusers.getValue(target).requestFocus() } // choices have no text box
+        onJumpDone()
+    }
+    // Auto-follow: after Next checks the answer, go where the updated guidance points.
+    LaunchedEffect(followRequests) {
+        if (followRequests == 0) return@LaunchedEffect
+        delay(AUTO_FOLLOW_DELAY_MS)
+        latestGuidance.pointer()?.fieldId?.let(onOpenField)
+    }
 
     AppScreen(
         title = section.title,
@@ -277,6 +364,22 @@ private fun SectionPage(
                 text = if (page == sections.lastIndex) "Review answers" else "Next: ${sections[page + 1].title}",
                 onClick = { onGoTo(page + 1) }
             )
+        },
+        // The suggestion and the risk warning float over the form, so they stay in sight.
+        overlay = {
+            GuidanceDock(
+                pointer = guidance.pointer(),
+                risk = guidance.riskGuidance,
+                mood = guideMood(guidance, justPassed),
+                fieldName = { id -> allFields.firstOrNull { it.fieldId == id }?.fieldName ?: id },
+                sectionName = { id -> sectionOf[id]?.takeIf { it != section.title } },
+                autoFollow = autoFollow,
+                onAutoFollowChange = onAutoFollowChange,
+                offset = dockOffset,
+                onOffsetChange = onDockOffsetChange,
+                onOpenField = onOpenField,
+                onReview = { onGoTo(sections.size) }
+            )
         }
     ) {
         ProgressSegments(sections, page, state, onGoTo)
@@ -284,31 +387,22 @@ private fun SectionPage(
         if (!isOnline) {
             Banner("You are offline. Keep going; answers are sent when the connection returns.", Tone.Neutral)
         }
-        guidance.riskGuidance?.let { risk ->
-            val high = risk.level == CompletionRiskLevel.HIGH
-            Banner(
-                risk.message,
-                if (high) Tone.Negative else Tone.Caution,
-                title = if (high) "High chance this customer stops" else "This customer may not finish"
-            )
-        }
-        if (suggestedId != null) {
-            val target = sections.getOrNull(suggestedPage)
-            SuggestedNextRow(
-                fieldName = sections.flatMap { it.fields }.first { it.fieldId == suggestedId }.fieldName,
-                onClick = if (suggestedPage >= 0 && suggestedPage != page) ({ onGoTo(suggestedPage) }) else null,
-                sectionName = target?.title?.takeIf { suggestedPage != page }
-            )
-        }
         Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
             section.fields.forEachIndexed { index, field ->
                 QuestionBlock(
                     field = field,
                     allFields = playbook.fields,
                     state = state,
-                    imeAction = if (index == section.fields.lastIndex) ImeAction.Done else ImeAction.Next,
+                    // With auto-follow on, every box's Enter key follows the guidance.
+                    imeAction = if (autoFollow || index != section.fields.lastIndex) ImeAction.Next else ImeAction.Done,
                     onValueChange = { onValueChange(field.fieldId, it) },
-                    onCheck = { onCheckField(field.fieldId) }
+                    onCheck = { onCheckField(field.fieldId) },
+                    modifier = Modifier.bringIntoViewRequester(bringers.getValue(field.fieldId)),
+                    focusRequester = focusers.getValue(field.fieldId),
+                    onNext = if (autoFollow) ({
+                        focusManager.clearFocus() // leaving the box checks the answer
+                        followRequests++
+                    }) else null
                 )
             }
         }
@@ -319,49 +413,8 @@ private fun SectionPage(
                 color = Sm.colors.muted
             )
         }
-    }
-}
-
-/** The AI's pick. A chevron and a tap show up when it is in another section. */
-@Composable
-private fun SuggestedNextRow(fieldName: String, sectionName: String?, onClick: (() -> Unit)?) {
-    val c = Sm.colors
-    val content: @Composable () -> Unit = {
-        Row(
-            Modifier.padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SmIcon(R.drawable.ic_sm_plus, c.cherry, size = 24.dp)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (sectionName == null) "Suggested next" else "Suggested next · $sectionName",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                    color = c.mutedStrong
-                )
-                Text(fieldName, style = MaterialTheme.typography.titleMedium, color = c.ink)
-            }
-            if (onClick != null) SmIcon(R.drawable.ic_sm_chevron_right, c.ink)
-        }
-    }
-    val shape = RoundedCornerShape(16.dp)
-    if (onClick != null) {
-        Surface(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-            shape = shape,
-            color = c.cream,
-            border = BorderStroke(1.5.dp, c.switchOff),
-            content = content
-        )
-    } else {
-        Surface(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-            shape = shape,
-            color = c.cream,
-            border = BorderStroke(1.5.dp, c.switchOff),
-            content = content
-        )
+        // Room to scroll the last question above the guidance panel.
+        Box(Modifier.height(170.dp))
     }
 }
 

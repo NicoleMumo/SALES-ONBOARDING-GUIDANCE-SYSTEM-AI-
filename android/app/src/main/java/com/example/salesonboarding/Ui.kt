@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -423,7 +424,8 @@ fun AppMark(modifier: Modifier = Modifier, size: Dp = 44.dp) {
 
 /**
  * The frame every screen uses: the cream header, a white page, and an optional footer that
- * stays in reach. Set [scrollable] to false when the content scrolls by itself.
+ * stays in reach. Set [scrollable] to false when the content scrolls by itself. [overlay]
+ * floats above the page and stays put while it scrolls.
  */
 @Composable
 fun AppScreen(
@@ -435,6 +437,7 @@ fun AppScreen(
     scrollable: Boolean = true,
     leading: (@Composable () -> Unit)? = null,
     bottomBar: (@Composable ColumnScope.() -> Unit)? = null,
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     // The phone's Back button does what the header's back arrow does.
@@ -449,15 +452,21 @@ fun AppScreen(
             .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
     ) {
         ScreenHeader(title = title, subtitle = subtitle, onBack = onBack, leading = leading, actions = actions)
-        Column(
-            modifier = Modifier
+        Box(
+            Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .let { if (scrollable) it.verticalScroll(rememberScrollState()) else it }
-                .padding(horizontal = Space.xl, vertical = Space.l),
-            verticalArrangement = Arrangement.spacedBy(Space.l),
-            content = content
-        )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .let { if (scrollable) it.verticalScroll(rememberScrollState()) else it }
+                    .padding(horizontal = Space.xl, vertical = Space.l),
+                verticalArrangement = Arrangement.spacedBy(Space.l),
+                content = content
+            )
+            overlay?.invoke(this)
+        }
         if (bottomBar != null) {
             Surface(
                 color = c.white,
