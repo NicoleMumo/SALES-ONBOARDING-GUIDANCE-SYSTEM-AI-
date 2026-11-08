@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -196,6 +197,11 @@ fun OnboardingForm(
     val preferences = LocalContext.current.getSharedPreferences(FORM_PREFERENCES, Context.MODE_PRIVATE)
     var autoFollow by remember { mutableStateOf(preferences.getBoolean(AUTO_FOLLOW_KEY, false)) }
     var guideMoving by remember { mutableStateOf(preferences.getBoolean(GUIDE_MOVING_KEY, true)) }
+    // First time: the guide's tour. Every later time: a greeting with a fun fact.
+    var showTour by rememberSaveable { mutableStateOf(!preferences.getBoolean(TOUR_SEEN_KEY, false)) }
+    var greeting by remember { mutableStateOf(if (showTour) null else GuideGreetings.forNow()) }
+    // After the tour or greeting, the guide opens the first question it points at, once.
+    var guidanceStarted by rememberSaveable { mutableStateOf(false) }
 
     fun goTo(target: Int) {
         // Leaving the page checks the box being typed in, and any other unchecked answer.
@@ -218,9 +224,24 @@ fun OnboardingForm(
         onSectionOpened(fieldId)
         jumpTarget = fieldId
     }
+
+    LaunchedEffect(greeting) {
+        if (greeting != null) {
+            delay(GREETING_MS)
+            greeting = null
+        }
+    }
+    val firstPointed = guidance.pointer()?.fieldId
+    LaunchedEffect(showTour, greeting, firstPointed) {
+        if (showTour || greeting != null || guidanceStarted || submitted || page == reviewPage) return@LaunchedEffect
+        val target = firstPointed ?: return@LaunchedEffect
+        delay(300) // let the page settle first
+        guidanceStarted = true
+        openField(target)
+    }
     // The phone's Back button follows each page's back arrow (see AppScreen).
 
-    when {
+    Box(Modifier.fillMaxSize()) { when {
         submitted -> CompletionPage(
             fields = playbook.fields,
             values = state.values,
@@ -282,7 +303,20 @@ fun OnboardingForm(
                     guideMoving = it
                     preferences.edit().putBoolean(GUIDE_MOVING_KEY, it).apply()
                 },
+                greeting = greeting,
+                onGreetingDismiss = { greeting = null },
+                onReplayTour = { showTour = true },
                 modifier = modifier
+            )
+        }
+    }
+        if (showTour) {
+            GuideIntro(
+                onFinish = {
+                    showTour = false
+                    preferences.edit().putBoolean(TOUR_SEEN_KEY, true).apply()
+                },
+                guideMoving = guideMoving
             )
         }
     }
@@ -291,6 +325,10 @@ fun OnboardingForm(
 private const val FORM_PREFERENCES = "salesmesh_form"
 private const val AUTO_FOLLOW_KEY = "auto_follow"
 private const val GUIDE_MOVING_KEY = "guide_moving"
+private const val TOUR_SEEN_KEY = "guide_tour_seen"
+
+/** How long the greeting stays before guidance starts by itself. */
+private const val GREETING_MS = 6000L
 
 /** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
 private const val AUTO_FOLLOW_DELAY_MS = 250L
@@ -323,6 +361,9 @@ private fun SectionPage(
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
+    greeting: GuideGreeting?,
+    onGreetingDismiss: () -> Unit,
+    onReplayTour: () -> Unit,
     modifier: Modifier
 ) {
     val section = sections[page]
@@ -380,13 +421,17 @@ private fun SectionPage(
             GuidanceDock(
                 pointer = guidance.pointer(),
                 risk = guidance.riskGuidance,
-                mood = guideMood(guidance, justPassed),
+                // The guide smiles while it greets the agent.
+                mood = if (greeting != null) GuideMood.HAPPY else guideMood(guidance, justPassed),
                 fieldName = { id -> allFields.firstOrNull { it.fieldId == id }?.fieldName ?: id },
                 sectionName = { id -> sectionOf[id]?.takeIf { it != section.title } },
                 autoFollow = autoFollow,
                 onAutoFollowChange = onAutoFollowChange,
                 guideMoving = guideMoving,
                 onGuideMovingChange = onGuideMovingChange,
+                greeting = greeting,
+                onGreetingDismiss = onGreetingDismiss,
+                onReplayTour = onReplayTour,
                 offset = dockOffset,
                 onOffsetChange = onDockOffsetChange,
                 onOpenField = onOpenField,

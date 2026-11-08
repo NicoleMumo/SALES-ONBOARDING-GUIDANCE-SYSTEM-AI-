@@ -1,5 +1,10 @@
 package com.example.salesonboarding
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -87,12 +92,16 @@ internal fun BoxScope.GuidanceDock(
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
+    /** Shown once when the form opens; tapping it dismisses it. */
+    greeting: GuideGreeting?,
+    onGreetingDismiss: () -> Unit,
+    onReplayTour: () -> Unit,
     offset: Offset,
     onOffsetChange: (Offset) -> Unit,
     onOpenField: (String) -> Unit,
     onReview: () -> Unit
 ) {
-    if (pointer == null && risk == null) return
+    if (pointer == null && risk == null && greeting == null) return
     val c = Sm.colors
     var folded by rememberSaveable { mutableStateOf(false) }
     var showRiskDetail by remember { mutableStateOf(false) }
@@ -137,9 +146,13 @@ internal fun BoxScope.GuidanceDock(
                     onAutoFollowChange = onAutoFollowChange,
                     guideMoving = guideMoving,
                     onGuideMovingChange = onGuideMovingChange,
+                    onReplayTour = onReplayTour,
                     folded = folded,
                     onFold = { folded = !folded }
                 )
+                AnimatedVisibility(visible = greeting != null && !folded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                    greeting?.let { GreetingBubble(it, onGreetingDismiss) }
+                }
                 if (!folded && risk != null) {
                     RiskLine(risk, expanded = showRiskDetail, onToggle = { showRiskDetail = !showRiskDetail })
                 }
@@ -158,6 +171,7 @@ private fun DockHeader(
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
+    onReplayTour: () -> Unit,
     folded: Boolean,
     onFold: () -> Unit
 ) {
@@ -199,6 +213,10 @@ private fun DockHeader(
                     leadingIcon = { if (guideMoving) Icon(Icons.Filled.Check, contentDescription = "On") },
                     onClick = { onGuideMovingChange(!guideMoving); menuOpen = false }
                 )
+                DropdownMenuItem(
+                    text = { Text("Replay the guide's tour") },
+                    onClick = { menuOpen = false; onReplayTour() }
+                )
             }
         }
         Box(
@@ -210,6 +228,25 @@ private fun DockHeader(
         ) {
             SmIcon(if (folded) R.drawable.ic_sm_chevron_up else R.drawable.ic_sm_chevron_down, c.cream)
         }
+    }
+}
+
+/** The guide's hello when the form opens, with a fun fact. Tap to dismiss. */
+@Composable
+private fun GreetingBubble(greeting: GuideGreeting, onDismiss: () -> Unit) {
+    val c = Sm.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(c.cream.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClick = onDismiss)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(greeting.hello, style = MaterialTheme.typography.titleSmall, color = c.cream)
+        Text("Fun fact", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = c.lime)
+        Text(greeting.fact, style = MaterialTheme.typography.bodySmall, color = c.cream.copy(alpha = 0.85f))
+        Text("Tap to start", style = MaterialTheme.typography.labelSmall, color = c.cream.copy(alpha = 0.6f))
     }
 }
 

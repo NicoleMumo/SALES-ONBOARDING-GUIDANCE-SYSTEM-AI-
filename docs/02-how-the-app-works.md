@@ -50,7 +50,11 @@ team follows the process.
    remembered on the phone: **Auto-follow** (the keyboard's Next key checks the
    answer and goes straight to where the panel points) and **Moving guide**
    (turn it off for a still face that uses less battery; it is also still when
-   the phone's "Remove animations" is on). All of it is advice; the agent decides.
+   the phone's "Remove animations" is on). The first time the form opens on a
+   phone, the guide gives a five-step tour of the panel (replay it from ⋮).
+   After that it greets the agent with a fun fact about onboarding for a few
+   seconds (tap to skip), then opens the first question it points at. All of it
+   is advice; the agent decides.
 7. **Review and submit.** The review page lists every answer by section, with an
    Edit button per section and a list of anything still missing. Tapping a
    missing or wrong answer opens its question. Submit stays
