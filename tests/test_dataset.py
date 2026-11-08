@@ -241,5 +241,61 @@ class ExportedSessionsTests(unittest.TestCase):
         self.assertEqual(60, sum(len(rows) for rows in by_split.values()))
 
 
+class FirebaseCopiesTests(unittest.TestCase):
+    DAY = 24 * 60 * 60 * 1000
+
+    def record(self, status, updated_at, agent="AGENT-0123456789AB"):
+        return {
+            "industry": "banking", "context": "individual", "agentCode": agent, "fieldCount": 4,
+            "startedAt": 0, "status": status, "updatedAt": updated_at,
+            "steps": {
+                "-b": {"fieldId": "contact_phone_number", "passed": False, "t": 120_000},
+                "-a": {"fieldId": "full_name", "passed": True, "t": 60_000},
+                "-c": {"fieldId": "contact_phone_number", "passed": True, "t": 240_000},
+            },
+        }
+
+    def test_copies_become_rows_like_the_apps_training_csv(self):
+        export = {"trainingData": {
+            "TDONE": self.record("completed", 240_000),
+            "TOLD": self.record("in_progress", 240_000),
+            "TNEW": self.record("in_progress", 2 * self.DAY),
+        }}
+
+        rows = dataset.rows_from_firebase(export, now_ms=2 * self.DAY)
+
+        self.assertEqual({"TDONE", "TOLD"}, {row["session_id"] for row in rows})
+        done = [row for row in rows if row["session_id"] == "TDONE"]
+        self.assertEqual(["full_name", "contact_phone_number", "contact_phone_number"],
+                         [row["onboarding_field"] for row in done])
+        self.assertEqual(["1.00", "1.00", "2.00"], [row["event_duration_minutes"] for row in done])
+        self.assertEqual(["False", "False", "True"], [row["is_revisit"] for row in done])
+        self.assertEqual(["25.00", "25.00", "50.00"], [row["onboarding_progress"] for row in done])
+        self.assertEqual("completed", done[-1]["session_status"])
+        self.assertEqual("abandoned", [row for row in rows if row["session_id"] == "TOLD"][-1]["session_status"])
+        self.assertEqual(dataset.APP_TRAINING_COLUMNS, list(rows[0]))
+
+    def test_an_export_of_training_data_alone_is_also_read(self):
+        rows = dataset.rows_from_firebase({"TDONE": self.record("completed", 0)}, now_ms=0)
+        self.assertEqual(3, len(rows))
+
+    def test_conversion_writes_a_split_csv_the_risk_model_can_read(self):
+        import json
+        from consistency import load_split_rows
+
+        export = {"trainingData": {
+            f"T{agent}{n}": self.record("completed", 0, agent=f"AGENT-{agent:012X}")
+            for agent in range(20) for n in range(3)
+        }}
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.json", Path(folder) / "real.csv"
+            source.write_text(json.dumps(export), encoding="utf-8")
+            counts = dataset.from_firebase(source, out, now_ms=0)
+            by_split = load_split_rows(out)
+
+        self.assertEqual(60, sum(counts.values()))
+        self.assertEqual({"train", "validation", "test"}, set(by_split))
+
+
 if __name__ == "__main__":
     unittest.main()

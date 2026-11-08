@@ -155,6 +155,15 @@ interface AdminDataStore {
     fun setAgentActive(agentId: String, isActive: Boolean, onResult: (Result<Unit>) -> Unit)
     fun loadCompanyIndustry(companyId: String, onResult: (Result<String?>) -> Unit)
     fun saveCompanyIndustry(industry: String, onResult: (Result<Unit>) -> Unit)
+
+    /** Whether the company allows anonymised steps to improve the system; off unless set. */
+    fun loadSharesForTraining(companyId: String, onResult: (Result<Boolean>) -> Unit) {
+        onResult(Result.success(false))
+    }
+
+    fun saveSharesForTraining(enabled: Boolean, onResult: (Result<Unit>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("This setting cannot be changed here.")))
+    }
     fun loadRuleConfiguration(onResult: (Result<FieldRuleConfiguration>) -> Unit)
     fun saveRequiredRule(fieldId: String, enabled: Boolean, onResult: (Result<Unit>) -> Unit)
     fun addCustomField(
@@ -327,6 +336,23 @@ class FirebaseAdminDataStore(
             return
         }
         companyRoot.child("settings").child("industry").setValue(industry)
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun loadSharesForTraining(companyId: String, onResult: (Result<Boolean>) -> Unit) {
+        if (!COMPANY_ID_PATTERN.matches(companyId)) {
+            onResult(Result.failure(IllegalArgumentException("A valid company ID is required.")))
+            return
+        }
+        database.child("companies").child(companyId).child("settings").child("shareForTraining").get()
+            .addOnSuccessListener { onResult(Result.success(it.getValue(Boolean::class.java) == true)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun saveSharesForTraining(enabled: Boolean, onResult: (Result<Unit>) -> Unit) {
+        if (!isConfigured(onResult)) return
+        companyRoot.child("settings").child("shareForTraining").setValue(enabled)
             .addOnSuccessListener { onResult(Result.success(Unit)) }
             .addOnFailureListener { onResult(Result.failure(it)) }
     }

@@ -18,7 +18,10 @@ team follows the process.
    settings, decides the form (the "playbook").
 3. **Consent.** The agent explains to the customer why the information is
    collected, how document photos are used, the customer's rights, and how
-   answers are kept, then ticks that the customer agreed.
+   answers are kept, then ticks that the customer agreed. If the company allows
+   it (Company page), a second, optional tick asks whether anonymised steps may
+   be used to improve the system; it starts unticked and saying no changes
+   nothing else.
 4. **Fill in the form, section by section.** Banking sections: Customer,
    Identity, Financial, Declarations, Account. Telecom sections: Customer,
    Identity, Service, Activation. Questions a company added come last, under
@@ -76,7 +79,16 @@ Admins see five pages in a bottom navigation bar:
   always stay required: full name, date of birth, ID type, ID number, politically
   exposed person status, US person status, and acceptance of the terms.
 - **Company**: copy the company ID to give to agents, and set the onboarding
-  industry (agents cannot sign in until it is set).
+  industry (agents cannot sign in until it is set). **Allow sessions to improve
+  the system** (off by default) makes the consent screen ask each customer the
+  optional question above. For each customer who agrees, the app saves an
+  anonymised copy of the session to `trainingData/` as the agent works: the
+  industry, customer type, number of questions, the agent as a code, and each
+  check (question, passed or not, time). No answers, names or session ID. The
+  database rules let agents only add these copies; no one can read them in the
+  app. The project owner exports `trainingData` from the Firebase console and
+  runs `python ml/dataset.py from-firebase <export.json>` to get a training CSV,
+  already split by agent.
 
 ## The consistency measure
 

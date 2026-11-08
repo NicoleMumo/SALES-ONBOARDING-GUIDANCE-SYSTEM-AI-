@@ -84,6 +84,8 @@ fun AdminDashboardScreen(
     var configuration by remember(companyId, store) { mutableStateOf(FieldRuleConfiguration()) }
     var companyIndustry by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isSavingCompanyIndustry by remember(companyId, store) { mutableStateOf(false) }
+    var sharesForTraining by remember(companyId, store) { mutableStateOf(false) }
+    var isSavingSharesForTraining by remember(companyId, store) { mutableStateOf(false) }
     var errorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var agentStatusMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isLoadingAnalytics by remember(companyId, store) { mutableStateOf(false) }
@@ -128,6 +130,10 @@ fun AdminDashboardScreen(
         store.loadCompanyIndustry(companyId) {
             if (!isCurrentAdminScope()) return@loadCompanyIndustry
             handle(it) { companyIndustry = it }
+        }
+        store.loadSharesForTraining(companyId) {
+            if (!isCurrentAdminScope()) return@loadSharesForTraining
+            handle(it) { sharesForTraining = it }
         }
         store.observeAgents {
             if (!isCurrentAdminScope()) return@observeAgents
@@ -317,6 +323,16 @@ fun AdminDashboardScreen(
                                 companyIndustry = industry
                                 onCompanyIndustryChanged(industry)
                             }
+                        }
+                    },
+                    sharesForTraining = sharesForTraining,
+                    isSavingSharesForTraining = isSavingSharesForTraining,
+                    onSharesForTrainingChanged = { enabled ->
+                        isSavingSharesForTraining = true
+                        store.saveSharesForTraining(enabled) { result ->
+                            if (!isCurrentAdminScope()) return@saveSharesForTraining
+                            isSavingSharesForTraining = false
+                            handle(result) { sharesForTraining = enabled }
                         }
                     }
                 )
@@ -940,7 +956,10 @@ private fun CompanyPage(
     errorMessage: String?,
     onSignOut: () -> Unit,
     bottomBar: @Composable ColumnScope.() -> Unit,
-    onSaveIndustry: (String) -> Unit
+    onSaveIndustry: (String) -> Unit,
+    sharesForTraining: Boolean,
+    isSavingSharesForTraining: Boolean,
+    onSharesForTrainingChanged: (Boolean) -> Unit
 ) {
     var selectedIndustry by remember(industry) { mutableStateOf(industry) }
     val clipboard = LocalClipboardManager.current
@@ -1019,6 +1038,26 @@ private fun CompanyPage(
                 enabled = selectedIndustry != null && selectedIndustry != industry,
                 isLoading = isSaving
             )
+        }
+        SectionCard(
+            title = "Improve the system",
+            subtitle = "When on, the consent screen asks each customer whether anonymised steps may be kept. " +
+                "Only steps of customers who agree are saved: which questions were checked, whether they passed, and when. " +
+                "No answers or names. Agents see the change at their next sign-in."
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+                Text(
+                    "Allow sessions to improve the system",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Sm.colors.ink,
+                    modifier = Modifier.weight(1f)
+                )
+                SmSwitch(
+                    checked = sharesForTraining,
+                    onCheckedChange = onSharesForTrainingChanged,
+                    enabled = !isSavingSharesForTraining
+                )
+            }
         }
     }
 }

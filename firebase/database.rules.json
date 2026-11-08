@@ -18,6 +18,10 @@
           "industry": {
             ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId",
             ".validate": "newData.val() == 'banking' || newData.val() == 'telecom'"
+          },
+          "shareForTraining": {
+            ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId",
+            ".validate": "newData.isBoolean()"
           }
         },
         "agentInvitations": {
@@ -46,6 +50,29 @@
             ".validate": "newData.hasChildren(['companyId', 'agentId', 'status']) && newData.child('companyId').val() == $companyId"
           }
         }
+      }
+    },
+    "trainingData": {
+      "$recordId": {
+        ".write": "auth != null && auth.token.admin != true && newData.exists() && root.child('companyMemberships').child(auth.uid).child('isActive').val() == true && root.child('companies').child(root.child('companyMemberships').child(auth.uid).child('companyId').val()).child('settings').child('shareForTraining').val() == true",
+        ".validate": "$recordId.matches(/^T[0-9A-F]{32}$/) && newData.hasChildren(['industry', 'context', 'agentCode', 'fieldCount', 'startedAt', 'status', 'updatedAt'])",
+        "industry": { ".validate": "newData.val() == 'banking' || newData.val() == 'telecom'" },
+        "context": { ".validate": "newData.isString() && newData.val().matches(/^[a-z_]{1,32}$/)" },
+        "agentCode": { ".validate": "newData.isString() && newData.val().matches(/^AGENT-[0-9A-F]{12}$/)" },
+        "fieldCount": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200" },
+        "startedAt": { ".validate": "newData.isNumber()" },
+        "status": { ".validate": "newData.val() == 'in_progress' || newData.val() == 'completed'" },
+        "updatedAt": { ".validate": "newData.isNumber()" },
+        "steps": {
+          "$stepId": {
+            ".validate": "newData.hasChildren(['fieldId', 'passed', 't'])",
+            "fieldId": { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9_]{1,64}$/)" },
+            "passed": { ".validate": "newData.isBoolean()" },
+            "t": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
       }
     }
   }

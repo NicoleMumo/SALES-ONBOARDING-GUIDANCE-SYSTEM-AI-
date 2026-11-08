@@ -236,10 +236,16 @@ class OnboardingFormController(
     private val riskModel: TrainedCompletionRiskModel? = null,
     /** When the customer agreed on the consent screen; saved with a new session. */
     private val consentAtMillis: Long? = null,
+    /**
+     * The company allows it and the customer agreed: each check is also saved, anonymised,
+     * to retrain the models (see [TrainingData]).
+     */
+    private val shareForTraining: Boolean = false,
     private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
     /** When the form opened: the first answer's time is counted from here. */
     private val openedAtMillis = nowMillis()
+    private val trainingRecordId = TrainingData.recordId(sessionId)
 
     val playbook: OnboardingPlaybook = playbook ?: OnboardingPlaybook.create(
         id = "$industry-standard-onboarding",
@@ -287,6 +293,19 @@ class OnboardingFormController(
             consentAtMillis?.let {
                 (entryStore as? OnboardingSessionStore)?.recordConsent(sessionId, agentId, it)
             }
+            (entryStore as? OnboardingSessionStore)?.let { store ->
+                store.recordTrainingConsent(sessionId, shareForTraining)
+                if (shareForTraining) {
+                    store.startTrainingRecord(
+                        trainingRecordId,
+                        industry,
+                        context,
+                        TrainingData.agentCode(agentId),
+                        fields.size,
+                        consentAtMillis ?: openedAtMillis
+                    )
+                }
+            }
         }
         scope.launch {
             stateFlow.collect { state ->
@@ -322,6 +341,9 @@ class OnboardingFormController(
                             if (passed) "field_validation_passed" else "field_validation_failed",
                             interaction.fieldId
                         )
+                        if (shareForTraining) {
+                            sessionStore?.appendTrainingStep(trainingRecordId, interaction.fieldId, passed, validatedAt)
+                        }
                     }
                 }
 
@@ -456,7 +478,10 @@ class OnboardingFormController(
             draftSaveJob?.cancel()
             draftSaveRequestId++
             draftSaveStatus.value = DraftSaveStatus()
-            sessionStore.completeSession(sessionId, entries, fields.map(FormField::fieldId), onResult)
+            sessionStore.completeSession(sessionId, entries, fields.map(FormField::fieldId)) { result ->
+                if (result.isSuccess && shareForTraining) sessionStore.markTrainingCompleted(trainingRecordId)
+                onResult(result)
+            }
         } else {
             val saveResult = try {
                 entries.forEach(entryStore::save)

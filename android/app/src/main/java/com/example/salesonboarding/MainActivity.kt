@@ -36,6 +36,10 @@ class MainActivity : ComponentActivity() {
                 var agentId by remember { mutableStateOf("") }
                 var companyId by remember { mutableStateOf("") }
                 var companyIndustry by remember { mutableStateOf<String?>(null) }
+                // The admin allows anonymised steps to improve the system (Company page).
+                var companySharesForTraining by remember { mutableStateOf(false) }
+                // The customer of this run of the form agreed to that, on the consent screen.
+                var trainingAgreed by remember { mutableStateOf(false) }
                 var showAgentHome by remember { mutableStateOf(false) }
                 var showAgentSessions by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
@@ -97,6 +101,7 @@ class MainActivity : ComponentActivity() {
                     selectedRole = user.role
                     if (user.role == UserRole.SALES_AGENT) {
                         companyIndustry = user.companyIndustry
+                        companySharesForTraining = user.sharesForTraining
                         selectedIndustry = null
                         showAgentHome = true
                     } else {
@@ -115,6 +120,8 @@ class MainActivity : ComponentActivity() {
                     agentId = ""
                     companyId = ""
                     companyIndustry = null
+                    companySharesForTraining = false
+                    trainingAgreed = false
                     showAgentHome = false
                     showAgentSessions = false
                     selectedIndustry = null
@@ -214,10 +221,12 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (!consentGiven) {
                         OnboardingConsentScreen(
-                            onConsent = {
+                            onConsent = { agreed ->
                                 consentGiven = true
                                 consentAtMillis = System.currentTimeMillis()
+                                trainingAgreed = agreed
                             },
+                            askTrainingConsent = companySharesForTraining,
                             onBack = {
                                 selectedIndustry = null
                                 selectedContext = null
@@ -282,6 +291,11 @@ class MainActivity : ComponentActivity() {
                                     initialModelUnavailable = predictorAttempt.isFailure,
                                     riskModel = riskModel,
                                     consentAtMillis = consentAtMillis,
+                                    // A resumed session keeps the choice its customer made.
+                                    shareForTraining = companySharesForTraining && (
+                                        resumedSession?.takeIf { it.sessionId == onboardingSessionId }
+                                            ?.trainingConsent ?: trainingAgreed
+                                        ),
                                     initialValues = resumedSession
                                         ?.takeIf { it.sessionId == onboardingSessionId }
                                         ?.entries

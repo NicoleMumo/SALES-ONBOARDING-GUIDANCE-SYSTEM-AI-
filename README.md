@@ -39,7 +39,7 @@ each answer is checked, and admins can see how consistently the team follows it.
 ### Admins
 
 1. Choose **Administrator** and sign in.
-2. **Company:** set the industry. Agents cannot sign in until you do. Copy the company ID and give it to your agents.
+2. **Company:** set the industry. Agents cannot sign in until you do. Copy the company ID and give it to your agents. Optionally turn on **Allow sessions to improve the system**: customers are then asked, on the consent screen, whether anonymised steps (never answers or names) may be kept to retrain the models.
 3. **Agents:** tap **Invite an agent** and add their name and work email.
 4. **Questions:** choose which questions are required, or add your own.
 5. **Overview** and **Sessions:** see how the team is doing and read every session.
@@ -141,7 +141,7 @@ How these were tested: [AI, data and results](docs/03-ai-data-and-results.md).
 ## Known limits
 
 - Models were never tested on real agents or customers.
-- The Firebase rules pass 38 automatic tests, but you must still deploy them to your own Firebase project before real data.
+- The Firebase rules pass 43 automatic tests, but you must still deploy them to your own Firebase project before real data.
 - Agent email verification is off for testing.
 - Identity checks are manual: the app reads text from a document photo to help
   typing, but does no KYC, selfie or face-match check.

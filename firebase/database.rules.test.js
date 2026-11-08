@@ -39,7 +39,7 @@ function seedData() {
     },
     companies: {
       [ACME]: {
-        settings: { industry: "banking" },
+        settings: { industry: "banking", shareForTraining: true },
         agentInvitations: {
           one_acme_com: { email: "one@acme.com", displayName: "one", isActive: true },
           new_acme_com: { email: "new@acme.com", displayName: "new", isActive: true },
@@ -372,6 +372,62 @@ describe("Realtime Database access rules", function () {
       await assertFails(get(ref(db, path(ACME, "onboardingSessions"))));
       await assertFails(set(ref(db, path(ACME, "onboardingSessions/s1/entries/full_name")), { value: "x" }));
       await assertFails(set(ref(db, path(ACME, "onboardingSessions/made-by-admin")), newSession(ACME, "agent-1")));
+    });
+  });
+
+  describe("anonymised steps for improving the system", function () {
+    const RECORD = "T" + "0123456789ABCDEF".repeat(2);
+    const record = (extra = {}) => ({
+      industry: "banking",
+      context: "individual",
+      agentCode: "AGENT-0123456789AB",
+      fieldCount: 20,
+      startedAt: 1000,
+      status: "in_progress",
+      updatedAt: 1000,
+      ...extra,
+    });
+    const step = { fieldId: "full_name", passed: true, t: 2000 };
+    const training = (rest = "") => `trainingData/${RECORD}${rest}`;
+
+    it("lets only the company's admin turn sharing on or off", async function () {
+      await assertSucceeds(set(ref(adminAcme(), path(ACME, "settings/shareForTraining")), false));
+      await assertFails(set(ref(adminAcme(), path(ACME, "settings/shareForTraining")), "yes"));
+      await assertFails(set(ref(adminBeta(), path(ACME, "settings/shareForTraining")), true));
+      await assertFails(set(ref(agent1(), path(ACME, "settings/shareForTraining")), true));
+    });
+
+    it("lets an active agent of a sharing company add a record and its steps", async function () {
+      const db = agent1();
+      await assertSucceeds(set(ref(db, training()), record()));
+      await assertSucceeds(update(ref(db, training()), { "steps/s1": step, updatedAt: 2000 }));
+      await assertSucceeds(update(ref(db, training()), { status: "completed", updatedAt: 3000 }));
+    });
+
+    it("refuses records from companies that do not share, switched-off agents and admins", async function () {
+      await assertFails(set(ref(agentBeta(), training()), record()));
+      await assertFails(set(ref(agentOff(), training()), record()));
+      await assertFails(set(ref(adminAcme(), training()), record()));
+      await assertFails(set(ref(signedOut(), training()), record()));
+    });
+
+    it("refuses anything that could identify a person, and badly formed records", async function () {
+      const db = agent1();
+      await assertFails(set(ref(db, training()), record({ fullName: "Jane Mika" })));
+      await assertFails(set(ref(db, training()), record({ agentCode: "one@acme.com" })));
+      await assertFails(set(ref(db, training()), { ...record(), steps: { s1: { ...step, value: "0700000000" } } }));
+      await assertFails(set(ref(db, "trainingData/session-1"), record()));
+      await assertFails(set(ref(db, training()), { industry: "banking" }));
+    });
+
+    it("lets nobody read the records or delete them through the app", async function () {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await set(ref(context.database(), training()), record());
+      });
+      await assertFails(get(ref(agent1(), training())));
+      await assertFails(get(ref(adminAcme(), training())));
+      await assertFails(get(ref(adminAcme(), "trainingData")));
+      await assertFails(set(ref(agent1(), training()), null));
     });
   });
 

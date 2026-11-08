@@ -812,7 +812,9 @@ data class SignedInUser(
     val companyId: String,
     val role: UserRole,
     /** The company's onboarding industry. Loaded for agents only; the admin dashboard loads its own. */
-    val companyIndustry: String? = null
+    val companyIndustry: String? = null,
+    /** The company allows anonymised steps to improve the system. Loaded for agents only. */
+    val sharesForTraining: Boolean = false
 )
 
 /** The sign-in screen, connected to Firebase. [onSignedIn] runs before the screen is told of the success. */
@@ -1004,7 +1006,14 @@ private fun loadAgentCompany(
                     IllegalStateException("Your company administrator must choose an onboarding industry before agents can sign in.")
                 )
             } else {
-                onResult(Result.success(SignedInUser(userId, companyId, UserRole.SALES_AGENT, industry)))
+                // Sharing is optional: if the setting cannot be read, the customer is simply not asked.
+                membershipStore.loadSharesForTraining(companyId) { shares ->
+                    onResult(
+                        Result.success(
+                            SignedInUser(userId, companyId, UserRole.SALES_AGENT, industry, shares.getOrDefault(false))
+                        )
+                    )
+                }
             }
         }.onFailure { error ->
             signOutAndFail(onResult, IllegalStateException("Could not load your company's onboarding industry.", error))
