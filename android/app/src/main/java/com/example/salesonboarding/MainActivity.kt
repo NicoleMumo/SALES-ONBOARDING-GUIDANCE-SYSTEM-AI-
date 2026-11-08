@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,6 +112,16 @@ class MainActivity : ComponentActivity() {
                     signedIn = true
                     loadFieldConfiguration(user.companyId)
                 }
+                /** Opens an unfinished session where it stopped (from My sessions or the home screen). */
+                fun resumeSession(session: StoredOnboardingSession) {
+                    resumedSession = session
+                    onboardingSessionId = session.sessionId
+                    selectedIndustry = session.industry
+                    selectedContext = session.context
+                    consentGiven = true
+                    showAgentSessions = false
+                    showAgentHome = false
+                }
                 fun signOut() {
                     FirebaseAuth.getInstance().signOut()
                     // Clear everything from the signed-in session, so the next person
@@ -184,18 +195,17 @@ class MainActivity : ComponentActivity() {
                             agentUid = agentId,
                             store = sessionHistoryStore,
                             onBack = { showAgentSessions = false },
-                            onResumeSession = { session ->
-                                resumedSession = session
-                                onboardingSessionId = session.sessionId
-                                selectedIndustry = session.industry
-                                selectedContext = session.context
-                                consentGiven = true
-                                showAgentSessions = false
-                                showAgentHome = false
-                            },
+                            onResumeSession = ::resumeSession,
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (showAgentHome && selectedIndustry == null) {
+                        // The latest unfinished session, offered on the home screen.
+                        var unfinished by remember(agentId) { mutableStateOf<StoredOnboardingSession?>(null) }
+                        LaunchedEffect(agentId, sessionHistoryStore) {
+                            sessionHistoryStore?.loadAgentSessions(agentId) { result ->
+                                unfinished = result.getOrNull()?.firstOrNull { it.status == "in_progress" }
+                            }
+                        }
                         AgentHomeScreen(
                             onStartOnboarding = {
                                 showAgentSessions = false
@@ -204,6 +214,8 @@ class MainActivity : ComponentActivity() {
                             },
                             onViewSessions = { showAgentSessions = true },
                             onSignOut = ::signOut,
+                            unfinishedSession = unfinished,
+                            onContinueSession = ::resumeSession,
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (selectedIndustry == null) {

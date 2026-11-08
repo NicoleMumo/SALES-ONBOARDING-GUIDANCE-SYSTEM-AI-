@@ -1,5 +1,7 @@
-package com.example.salesonboarding
+﻿package com.example.salesonboarding
 
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -49,7 +51,10 @@ fun AgentHomeScreen(
     onStartOnboarding: () -> Unit,
     onViewSessions: () -> Unit,
     onSignOut: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The agent's most recent unfinished session, offered as one tap to continue. */
+    unfinishedSession: StoredOnboardingSession? = null,
+    onContinueSession: (StoredOnboardingSession) -> Unit = {}
 ) {
     val c = Sm.colors
     AppScreen(
@@ -84,6 +89,35 @@ fun AgentHomeScreen(
                         color = c.cream
                     )
                     PrimaryButton("Start onboarding", onClick = onStartOnboarding)
+                }
+            }
+        }
+        unfinishedSession?.let { session ->
+            val type = CUSTOMER_TYPES[session.context]?.title ?: session.context.replaceFirstChar { it.titlecase(Locale.ROOT) }
+            val name = session.entries.firstOrNull { it.fieldId == "full_name" || it.fieldId == "business_name" }
+                ?.value?.takeIf(String::isNotBlank)
+            Surface(
+                onClick = { onContinueSession(session) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = c.cream,
+                border = BorderStroke(1.5.dp, c.switchOff)
+            ) {
+                Row(
+                    Modifier.padding(start = 22.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Continue last session", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            listOfNotNull(name, type).joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.mutedStrong
+                        )
+                    }
+                    Box(Modifier.size(44.dp).background(c.lime, CircleShape), contentAlignment = Alignment.Center) {
+                        SmIcon(R.drawable.ic_sm_arrow, c.ink, size = 20.dp)
+                    }
                 }
             }
         }
@@ -134,6 +168,9 @@ object IndustrySelectionValidator {
         else "Select a valid customer context."
 }
 
+private const val LAST_CHOICE_PREFERENCES = "salesmesh_form"
+private const val LAST_CONTEXT_KEY_PREFIX = "last_context_"
+
 private data class CustomerType(val title: String, val detail: String, @DrawableRes val icon: Int)
 
 private val CUSTOMER_TYPES = mapOf(
@@ -154,7 +191,12 @@ fun IndustrySelectionScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedIndustry by remember(assignedIndustry) { mutableStateOf(assignedIndustry) }
-    var selectedContext by remember { mutableStateOf<String?>(null) }
+    // The customer type chosen last time for this industry is picked again, to save a tap.
+    val preferences = LocalContext.current.getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
+    fun lastContextFor(industry: String?): String? =
+        industry?.let { preferences.getString("$LAST_CONTEXT_KEY_PREFIX$it", null) }
+            ?.takeIf { it in IndustrySelectionValidator.contextsFor(industry) }
+    var selectedContext by remember(selectedIndustry) { mutableStateOf(lastContextFor(selectedIndustry)) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     AppScreen(
@@ -169,6 +211,9 @@ fun IndustrySelectionScreen(
                     val validationError = IndustrySelectionValidator.validate(selectedIndustry)
                         ?: IndustrySelectionValidator.validateContext(selectedIndustry, selectedContext)
                     if (validationError == null) {
+                        preferences.edit()
+                            .putString("$LAST_CONTEXT_KEY_PREFIX$selectedIndustry", selectedContext)
+                            .apply()
                         onIndustrySelected(requireNotNull(selectedIndustry), requireNotNull(selectedContext))
                     } else {
                         errorMessage = validationError
@@ -183,7 +228,6 @@ fun IndustrySelectionScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                 listOf("banking" to "Banking", "telecom" to "Telecommunications").forEach { (id, label) ->
                     SmChip(label, selected = selectedIndustry == id, onClick = {
-                        if (selectedIndustry != id) selectedContext = null
                         selectedIndustry = id
                         errorMessage = null
                     })
@@ -287,7 +331,7 @@ private val CONSENT_POINTS = listOf(
 /** The complete wording, available behind "Read the full terms". */
 private val FULL_CONSENT_TERMS = listOf(
     "Purpose of Collection" to "Information is collected to set up the customer account and follow your company's onboarding process.",
-    "Document photos" to "If the agent takes a document photo, its text is read on this device to help with data entry. The photo is deleted after reading, and neither the photo nor the text is uploaded or saved.",
+    "Document photos" to "If the agent takes a document photo, its text is read on this device to help with data entry. The agent may use the name, ID number or date of birth it found as answers, after checking them. The photo is deleted after reading, and neither the photo nor the rest of the text is uploaded or saved.",
     "Customer rights" to "The customer may request review of their submitted details through authorized company channels.",
     "Access and retention" to "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
 )

@@ -195,6 +195,7 @@ fun OnboardingForm(
     var dockY by rememberSaveable { mutableFloatStateOf(0f) }
     val preferences = LocalContext.current.getSharedPreferences(FORM_PREFERENCES, Context.MODE_PRIVATE)
     var autoFollow by remember { mutableStateOf(preferences.getBoolean(AUTO_FOLLOW_KEY, false)) }
+    var guideMoving by remember { mutableStateOf(preferences.getBoolean(GUIDE_MOVING_KEY, true)) }
 
     fun goTo(target: Int) {
         // Leaving the page checks the box being typed in, and any other unchecked answer.
@@ -235,6 +236,7 @@ fun OnboardingForm(
             isSubmitting = isSubmitting,
             submitError = submitError,
             onGoTo = ::goTo,
+            onOpenField = ::openField,
             onSubmit = {
                 if (!isSubmitting && canSubmit) {
                     isSubmitting = true
@@ -275,6 +277,11 @@ fun OnboardingForm(
                     autoFollow = it
                     preferences.edit().putBoolean(AUTO_FOLLOW_KEY, it).apply()
                 },
+                guideMoving = guideMoving,
+                onGuideMovingChange = {
+                    guideMoving = it
+                    preferences.edit().putBoolean(GUIDE_MOVING_KEY, it).apply()
+                },
                 modifier = modifier
             )
         }
@@ -283,6 +290,7 @@ fun OnboardingForm(
 
 private const val FORM_PREFERENCES = "salesmesh_form"
 private const val AUTO_FOLLOW_KEY = "auto_follow"
+private const val GUIDE_MOVING_KEY = "guide_moving"
 
 /** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
 private const val AUTO_FOLLOW_DELAY_MS = 250L
@@ -313,6 +321,8 @@ private fun SectionPage(
     onDockOffsetChange: (Offset) -> Unit,
     autoFollow: Boolean,
     onAutoFollowChange: (Boolean) -> Unit,
+    guideMoving: Boolean,
+    onGuideMovingChange: (Boolean) -> Unit,
     modifier: Modifier
 ) {
     val section = sections[page]
@@ -375,6 +385,8 @@ private fun SectionPage(
                 sectionName = { id -> sectionOf[id]?.takeIf { it != section.title } },
                 autoFollow = autoFollow,
                 onAutoFollowChange = onAutoFollowChange,
+                guideMoving = guideMoving,
+                onGuideMovingChange = onGuideMovingChange,
                 offset = dockOffset,
                 onOffsetChange = onDockOffsetChange,
                 onOpenField = onOpenField,
@@ -402,7 +414,11 @@ private fun SectionPage(
                     onNext = if (autoFollow) ({
                         focusManager.clearFocus() // leaving the box checks the answer
                         followRequests++
-                    }) else null
+                    }) else null,
+                    onFillField = { id, found ->
+                        onValueChange(id, found)
+                        onCheckField(id)
+                    }
                 )
             }
         }
@@ -427,6 +443,7 @@ private fun ReviewPage(
     isSubmitting: Boolean,
     submitError: String?,
     onGoTo: (Int) -> Unit,
+    onOpenField: (String) -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier
 ) {
@@ -452,7 +469,11 @@ private fun ReviewPage(
         if (missing.isEmpty()) {
             Banner("Every required question is answered.", Tone.Positive)
         } else {
-            Banner(missing.joinToString(), Tone.Caution, title = "Still needed (${missing.size})")
+            Banner(
+                missing.joinToString() + ". Tap a red answer below to go straight to it.",
+                Tone.Caution,
+                title = "Still needed (${missing.size})"
+            )
         }
         sections.forEachIndexed { index, section ->
             SectionCard(
@@ -469,19 +490,24 @@ private fun ReviewPage(
             ) {
                 section.fields.forEachIndexed { fieldIndex, field ->
                     if (fieldIndex > 0) HorizontalDivider(color = c.divider)
-                    AnswerRow(field, state)
+                    AnswerRow(field, state, onOpen = { onOpenField(field.fieldId) })
                 }
             }
         }
     }
 }
 
+/** One answer on the review page. A missing or wrong one can be tapped to open its question. */
 @Composable
-private fun AnswerRow(field: FormField, state: LiveValidationState) {
+private fun AnswerRow(field: FormField, state: LiveValidationState, onOpen: () -> Unit) {
     val c = Sm.colors
     val value = state.values[field.fieldId]
     val error = errorFor(field, state)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    val needsWork = error != null || (value.isNullOrBlank() && field.isRequiredFor(state.values))
+    Column(
+        modifier = if (needsWork) Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpen) else Modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
         Text(field.fieldName, style = MaterialTheme.typography.bodySmall, color = c.muted)
         when {
             !value.isNullOrBlank() -> Text(displayAnswer(field, value), style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp))
@@ -497,6 +523,13 @@ private fun AnswerRow(field: FormField, state: LiveValidationState) {
             )
         }
         error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.cherryDeep) }
+        if (needsWork) {
+            Text(
+                "Tap to fix",
+                style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
+                color = c.ink
+            )
+        }
     }
 }
 

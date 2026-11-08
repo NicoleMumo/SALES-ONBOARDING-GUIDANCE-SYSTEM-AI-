@@ -14,8 +14,9 @@ team follows the process.
    typed; the app gives the same reply whether or not that email has an account.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
-   mobile, broadband, TV, IoT or landline. That choice, plus the company's own
-   settings, decides the form (the "playbook").
+   mobile, broadband, TV, IoT or landline. The type chosen last time is already
+   selected. That choice, plus the company's own settings, decides the form (the
+   "playbook").
 3. **Consent.** The agent explains to the customer why the information is
    collected, how document photos are used, the customer's rights, and how
    answers are kept, then ticks that the customer agreed. If the company allows
@@ -31,24 +32,35 @@ team follows the process.
    any section at any time.
 5. **Answers are checked when the agent leaves the box**, picks an option, ticks
    a box, or changes section, never while typing. A wrong answer shows its
-   message under the box; a correct one shows a tick.
+   message under the box; a correct one shows a tick. Typing aids: a date has a
+   calendar button that writes YYYY-MM-DD; a phone number typed as
+   0712 345 678, +254 712 345 678 or 254712345678 is tidied to 0712345678 before
+   it is checked.
 6. **Suggestions and warnings.** A guidance panel floats at the bottom of the
    form and stays in sight while the agent scrolls. It shows, in order of
    priority: an answer to fix, the AI's "Suggested next" question, or the next
    required question. Tapping it opens that question, in any section, and puts
    the cursor in it. If the session looks likely to be abandoned, the panel also
    shows an amber or red line; tapping it shows the advice. The panel can be
-   dragged anywhere on the page or folded to one line. With **Auto-follow** on
-   (remembered on the phone), the keyboard's Next key checks the answer and goes
-   straight to where the panel points. All of it is advice; the agent decides.
+   dragged anywhere on the page or folded to one line. A small guide character
+   in the panel shows how things are going: calm, pleased after an accepted
+   answer, concerned when something needs fixing or the risk is amber, worried
+   when it is red, and celebrating when every required answer is in. Tapping it
+   folds or opens the panel. The panel's ⋮ menu has two settings, both
+   remembered on the phone: **Auto-follow** (the keyboard's Next key checks the
+   answer and goes straight to where the panel points) and **Moving guide**
+   (turn it off for a still face that uses less battery; it is also still when
+   the phone's "Remove animations" is on). All of it is advice; the agent decides.
 7. **Review and submit.** The review page lists every answer by section, with an
-   Edit button per section and a list of anything still missing. Submit stays
+   Edit button per section and a list of anything still missing. Tapping a
+   missing or wrong answer opens its question. Submit stays
    off until every required answer is valid. The app shows "Onboarding
    complete" only after Firebase confirms the save.
 
 Answers are saved as a draft while the agent works (about 0.7 seconds after the
 last change). An unfinished session can be continued from **My sessions** on the
-agent's home screen, and opens on the section where the agent stopped. The phone's
+agent's home screen, or, for the latest one, with one tap on **Continue last
+session** there. It opens on the section where the agent stopped. The phone's
 Back button goes back one step wherever the screen has a back arrow.
 
 ## An admin's pages
@@ -155,8 +167,10 @@ The ID photo reader (on the "Identification document" question) opens the camera
 from inside the app. The photo goes into the app's private cache, never the
 phone's gallery, and Google ML Kit reads its printed text on the phone. The photo
 is deleted as soon as it has been read. The text is shown for the agent to
-compare; it does not fill in answers, and neither the photo nor the text is
-uploaded or saved. It is a typing aid, not identity
+compare. Beside the full name, ID number and date of birth it found, a **Use**
+button fills and checks that question; nothing is filled unless the agent taps
+it. Neither the photo nor the rest of the text is uploaded or saved. It is a
+typing aid, not identity
 verification. The app has no KYC/AML service, selfie, liveness or face-match
 check, and records no identity decision; the agent follows the company's own
 manual checks.

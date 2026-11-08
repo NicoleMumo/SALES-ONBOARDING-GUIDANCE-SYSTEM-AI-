@@ -18,6 +18,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -79,6 +85,8 @@ internal fun BoxScope.GuidanceDock(
     sectionName: (String) -> String?,
     autoFollow: Boolean,
     onAutoFollowChange: (Boolean) -> Unit,
+    guideMoving: Boolean,
+    onGuideMovingChange: (Boolean) -> Unit,
     offset: Offset,
     onOffsetChange: (Offset) -> Unit,
     onOpenField: (String) -> Unit,
@@ -127,6 +135,8 @@ internal fun BoxScope.GuidanceDock(
                     mood = mood,
                     autoFollow = autoFollow,
                     onAutoFollowChange = onAutoFollowChange,
+                    guideMoving = guideMoving,
+                    onGuideMovingChange = onGuideMovingChange,
                     folded = folded,
                     onFold = { folded = !folded }
                 )
@@ -146,26 +156,51 @@ private fun DockHeader(
     mood: GuideMood,
     autoFollow: Boolean,
     onAutoFollowChange: (Boolean) -> Unit,
+    guideMoving: Boolean,
+    onGuideMovingChange: (Boolean) -> Unit,
     folded: Boolean,
     onFold: () -> Unit
 ) {
     val c = Sm.colors
+    var menuOpen by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         // The guide shows how the onboarding is going; tapping it folds or opens the panel.
         GuideMascot(
             mood,
             Modifier
                 .size(44.dp)
-                .clickable(role = Role.Button, onClick = onFold)
+                .clickable(role = Role.Button, onClick = onFold),
+            animated = guideMoving
         )
         Text(
-            "Guidance",
+            if (autoFollow) "Guidance · auto-follow" else "Guidance",
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = c.cream.copy(alpha = 0.75f)
         )
         Box(Modifier.weight(1f))
-        Text("Auto-follow", style = MaterialTheme.typography.labelMedium, color = c.cream.copy(alpha = 0.75f))
-        SmSwitch(checked = autoFollow, onCheckedChange = onAutoFollowChange)
+        Box {
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clickable(role = Role.Button) { menuOpen = true }
+                    .semantics { contentDescription = "Guidance settings" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.MoreVert, contentDescription = null, tint = c.cream)
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Auto-follow: Next goes to the suggestion") },
+                    leadingIcon = { if (autoFollow) Icon(Icons.Filled.Check, contentDescription = "On") },
+                    onClick = { onAutoFollowChange(!autoFollow); menuOpen = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Moving guide (off saves battery)") },
+                    leadingIcon = { if (guideMoving) Icon(Icons.Filled.Check, contentDescription = "On") },
+                    onClick = { onGuideMovingChange(!guideMoving); menuOpen = false }
+                )
+            }
+        }
         Box(
             Modifier
                 .size(36.dp)

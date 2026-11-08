@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -52,33 +55,44 @@ internal fun guideMood(guidance: NextFieldGuidance, justPassed: Boolean): GuideM
 
 /**
  * The SalesMesh guide: a round robot head drawn in code, so it has no background, scales to
- * any size and moves. It floats gently, blinks, and changes its eyes with [mood]. A new mood
- * needs only a new entry in [GuideMood] and the eye shapes below.
+ * any size and moves. It floats gently, blinks, and changes its eyes with [mood]. With
+ * [animated] off, or the phone's "Remove animations" on, it is a still face that still shows
+ * the mood, and nothing is redrawn between changes. A new mood needs only a new entry in
+ * [GuideMood] and the eye shapes below.
  */
 @Composable
-fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier) {
+fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier, animated: Boolean = true) {
     val c = Sm.colors
-    val life = rememberInfiniteTransition(label = "guide")
-    val blink by life.animateFloat(
-        initialValue = 1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            keyframes {
-                durationMillis = 4200
-                1f at 0
-                1f at 3900
-                0.1f at 4000
-                1f at 4150
-            }
-        ),
-        label = "blink"
-    )
-    val float by life.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "float"
-    )
+    val resolver = LocalContext.current.contentResolver
+    val systemAnimationsOff = remember(resolver) {
+        Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
+    val moving = animated && !systemAnimationsOff
+    var blink = 1f
+    var float = 0f
+    if (moving) {
+        val life = rememberInfiniteTransition(label = "guide")
+        blink = life.animateFloat(
+            initialValue = 1f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                keyframes {
+                    durationMillis = 4200
+                    1f at 0
+                    1f at 3900
+                    0.1f at 4000
+                    1f at 4150
+                }
+            ),
+            label = "blink"
+        ).value
+        float = life.animateFloat(
+            initialValue = -1f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "float"
+        ).value
+    }
     val smile by animateFloatAsState(
         if (mood == GuideMood.HAPPY || mood == GuideMood.CELEBRATING) 1f else 0f,
         label = "smile"
