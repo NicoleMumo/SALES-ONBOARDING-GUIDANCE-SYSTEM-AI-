@@ -37,13 +37,14 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DisplayMode
+import androidx.compose.material3.SelectableDates
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.TimeZone
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -160,6 +161,19 @@ internal fun QuestionBlock(
         when {
             choices.isNotEmpty() -> ChoiceInput(field, value, choices, isValid, onChoose = choose)
             isConfirm -> ConfirmInput(field, value, onChoose = choose)
+            // A date is picked from a calendar, never typed: picking checks it and moves on.
+            field.fieldType == "date" -> DateInput(
+                field = field,
+                value = value,
+                hasError = error != null,
+                isValid = isValid,
+                focusRequester = focusRequester,
+                onPicked = { picked ->
+                    onValueChange(picked)
+                    onCheck()
+                    onNext?.invoke()
+                }
+            )
             else -> TextInput(
                 field = field,
                 value = value,
@@ -279,49 +293,104 @@ private fun TextInput(
                 )
             )
         }
-        if (field.fieldType == "date") {
-            DatePickerButton(field.fieldName, value) { picked ->
-                onValueChange(picked)
-                onCheck()
-            }
-        }
         if (isValid) Tick()
     }
 }
 
-/** A calendar button: the chosen day is written as YYYY-MM-DD, so nothing has to be typed. */
+/**
+ * A date question: one box that opens a calendar when tapped (or when Enter is pressed on
+ * it). Tapping a day chooses it at once; there is nothing to type and no OK to press. For a
+ * date of birth the calendar opens about 30 years back and only allows ages the check accepts.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DatePickerButton(fieldName: String, value: String, onPicked: (String) -> Unit) {
+private fun DateInput(
+    field: FormField,
+    value: String,
+    hasError: Boolean,
+    isValid: Boolean,
+    focusRequester: FocusRequester?,
+    onPicked: (String) -> Unit
+) {
     val c = Sm.colors
     var open by remember { mutableStateOf(false) }
-    Box(
-        Modifier
-            .size(44.dp)
+    var focused by remember(field.fieldId) { mutableStateOf(false) }
+    val shape = RoundedCornerShape(14.dp)
+    val shown = CalendarDates.readable(value)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 60.dp)
+            .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+            .onFocusChanged { focused = it.isFocused }
+            .clip(shape)
+            .background(c.white, shape)
+            .border(
+                if (focused || hasError) 2.dp else 1.5.dp,
+                when {
+                    hasError -> c.cherry
+                    focused -> c.ink
+                    else -> c.switchOff
+                },
+                shape
+            )
             .clickable(role = Role.Button) { open = true }
-            .semantics { contentDescription = "Choose $fieldName from a calendar" },
-        contentAlignment = Alignment.Center
+            .semantics { contentDescription = "${field.fieldName}: ${shown ?: "not chosen"}. Tap to pick from a calendar." }
+            .padding(start = 18.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Icon(Icons.Filled.DateRange, contentDescription = null, tint = c.ink)
+        Text(
+            shown ?: value.ifBlank { "Tap to pick a date" },
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = if (shown != null) 20.sp else 18.sp,
+                fontWeight = FontWeight.Normal
+            ),
+            color = if (shown != null) c.ink else c.muted.copy(alpha = 0.7f),
+            modifier = Modifier.weight(1f)
+        )
+        if (isValid) Tick()
     }
     if (!open) return
-    val utcDay = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false } }
-    val thisYear = Calendar.getInstance().get(Calendar.YEAR)
+
+    val limits = remember(field) { CalendarDates.limitsFor(field, Calendar.getInstance()) }
     val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = runCatching { utcDay.parse(value)?.time }.getOrNull(),
-        yearRange = 1900..thisYear
+        initialSelectedDateMillis = CalendarDates.fromIso(value),
+        initialDisplayedMonthMillis = CalendarDates.fromIso(value) ?: limits.startMillis,
+        yearRange = limits.years,
+        initialDisplayMode = DisplayMode.Picker,
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = limits.allows(utcTimeMillis)
+            override fun isSelectableYear(year: Int) = year in limits.years
+        }
     )
+    // A tap on a day is the choice: no extra button to press.
+    val initial = remember { pickerState.selectedDateMillis }
+    LaunchedEffect(pickerState.selectedDateMillis) {
+        val picked = pickerState.selectedDateMillis
+        if (picked != null && picked != initial) {
+            open = false
+            onPicked(CalendarDates.toIso(picked))
+        }
+    }
     DatePickerDialog(
         onDismissRequest = { open = false },
-        confirmButton = {
-            TextButton(onClick = {
-                pickerState.selectedDateMillis?.let { onPicked(utcDay.format(Date(it))) }
-                open = false
-            }) { Text("Use this date") }
-        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } }
     ) {
-        DatePicker(state = pickerState, showModeToggle = true)
+        DatePicker(
+            state = pickerState,
+            showModeToggle = false,
+            title = {
+                Text(
+                    "Pick ${field.fieldName.lowercase(Locale.ROOT)}. Tap the month and year to jump to another year.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)
+                )
+            },
+            headline = null
+        )
     }
 }
 

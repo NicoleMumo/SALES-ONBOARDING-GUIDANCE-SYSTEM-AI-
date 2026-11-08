@@ -40,8 +40,10 @@ team follows the process.
    any section at any time.
 5. **Answers are checked when the agent leaves the box**, picks an option, ticks
    a box, or changes section, never while typing. A wrong answer shows its
-   message under the box; a correct one shows a tick. Typing aids: a date has a
-   calendar button that writes YYYY-MM-DD; a phone number typed as
+   message under the box; a correct one shows a tick. Typing aids: a date is
+   never typed. Tapping its box (or pressing Enter on it) opens a calendar, and
+   tapping a day picks it, checks it and moves on. A date of birth opens 30
+   years back and only offers ages the check accepts. A phone number typed as
    0712 345 678, +254 712 345 678 or 254712345678 is tidied to 0712345678 before
    it is checked. An address question has **Use my location** and **Find
    address**: they ask OpenStreetMap's free address service (Nominatim) for the
