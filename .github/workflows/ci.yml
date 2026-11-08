@@ -54,5 +54,8 @@ jobs:
           packages: platform-tools
       - run: cp app/google-services.example.json app/google-services.json
         working-directory: android
+      # Gradle's download server sometimes times out: try fetching Gradle up to three times.
+      - run: for attempt in 1 2 3; do bash ./gradlew --version && exit 0; sleep 30; done; exit 1
+        working-directory: android
       - run: bash ./gradlew :app:testDebugUnitTest
         working-directory: android
