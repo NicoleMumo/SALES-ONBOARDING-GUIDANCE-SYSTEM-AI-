@@ -43,8 +43,9 @@ session ended (status, scenario, next field) are never model inputs.
 **What it sees:** the order of questions answered so far (up to 29), the
 industry, the customer type, whether the last answer passed its check, and a
 short description of each question it may choose from. It never sees the
-customer's answers. Because it compares descriptions, it can also score a
-company's own questions that it was not trained on.
+customer's answers. It does **not** work for questions it was not trained on,
+such as a company's own questions (see "New questions" below): those are reached
+through the form's order instead.
 
 **How the app uses it:** while a required question is still unanswered, the app
 asks the model to choose among the questions not yet answered correctly (at most
@@ -103,8 +104,49 @@ chance, and export a TensorFlow Lite file that matches. Both runs met it.
 
 **Limits.** One simulator, written for this project, whose standard order is the
 app's order, which is partly why the app's own rule already scores 86.5%. Only
-the standard forms were tested: not company questions, rule changes, or edits
-that make an earlier answer wrong.
+the standard forms were tested: not rule changes or edits that make an earlier
+answer wrong.
+
+**New questions: the model cannot score them (tested, 8 Nov 2026).** The design
+compares sessions with question descriptions, which was meant to let it score a
+company's own questions without retraining. `ml/custom_question_check.py` tested
+that: four standard questions (email address, profession, US person, payment
+method; one from each admin question group, chosen before any result) were held
+out of training completely, as if a company had added them later, and the model
+was trained again from scratch. The pass mark, fixed before running: pick the
+held-out question first at least 50% of the time when it is the right next one,
+and have it in the top 3 at least 80% of the time.
+
+| Steps where a held-out question was next (2,927) | First choice | In top 3 |
+|---|---|---|
+| Model that never saw them | **0%** | 42% |
+| Random choice among the open questions | 16% | |
+| Shipped model (trained with them) | 98.5% | |
+
+It never once chose a question it was not trained on, so the claim is dropped.
+On every other step it stayed as good as the shipped model (95.6% against
+94.8%). A company's own questions are therefore reached through the form's
+order, not through a suggestion.
+
+```powershell
+python ml/custom_question_check.py ml/data/onboarding_dataset_v3.csv
+```
+
+**Try it yourself.** `ml/try_next_question.py` calls the phone's model file:
+
+```powershell
+# Rank the open questions after the ones answered so far
+python ml/try_next_question.py ask --industry banking --context individual --answered full_name,email_address
+# Follow a real test session step by step, next to the app's plain rule
+python ml/try_next_question.py walk ml/data/onboarding_dataset_v3.csv --session SESSION-4CD01894
+```
+
+In that session the agent starts with the ID document. The model follows the
+agent's flow and is right on 14 of 15 steps; the plain rule keeps asking for
+the next question in the form's order and is right on 7. In the 219 test
+sessions of 10 to 20 answers that left the form's order, the model was right
+2,802 times and the rule 2,244 times. Where the agent keeps to the order, the
+two agree almost everywhere.
 
 **Retraining.** Open `ml/onboarding_transformer.ipynb` in Google Colab (or a
 Python 3.11+ environment with TensorFlow), upload the whole CSV and wait for the
@@ -274,6 +316,31 @@ It runs 50 warm-ups and 500 timed suggestions and writes the device, Android
 version, median and 95th-percentile time to Logcat under
 `NextFieldInferenceBenchmark`. No physical-phone result has been recorded yet;
 emulator timing does not count.
+
+## The warning as the app shows it
+
+The numbers above score every step against the amber and red thresholds. The
+app does not show those raw levels: it paces them (`RiskWarningPacer` in
+`Insights.kt`): nothing for the first 4 checked answers, "Check in" before
+"Needs help", "Needs help" only after 3 high scores in a row.
+`ml/risk_policy_replay.py` replays every test session (unseen agents) answer by
+answer through the shipped model and the same pacer:
+
+| Shown to the agent | Abandoned sessions warned | Median warning, answers before the end | Completed sessions warned (false alarms) | Warned sessions that were abandoned |
+|---|---|---|---|---|
+| "Needs help" | 19-27% | 7-11.5 | 8-9% | 34-46% |
+| "Check in" or more | 38-42% | 6-8 | 16-17% | 29-43% |
+| Raw amber, no pacing | 66-75% | 8-10 | 48-53% | 19-29% |
+
+Ranges over the three datasets (seeds 2026, 7, 99), whose test sessions were
+14.5%, 22.3% and 20.2% abandoned. A "Needs help" warning is followed by
+abandonment about 2.1 to 2.3 times as often as chance, and usually comes
+several answers early. Pacing trades reach for calm: without it, half of the
+sessions that finished fine would have shown a warning.
+
+```powershell
+python ml/risk_policy_replay.py ml/data/onboarding_dataset_v3.csv
+```
 
 ## Not yet shown
 

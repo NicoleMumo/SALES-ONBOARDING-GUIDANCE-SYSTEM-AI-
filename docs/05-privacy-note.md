@@ -44,8 +44,9 @@ agents follow the process. Nothing is used for advertising.
   data goes to them.
 - **The agent's phone** keeps an offline copy of recent data so the app works
   without a connection.
-- **Phone backups:** Android backup is currently **on** for the app, so a phone's
-  backup may contain saved data. See "Decisions" below.
+- **Phone backups:** none. Android backup and moving data to a new phone are
+  switched off for the app (`allowBackup="false"` and
+  `res/xml/data_extraction_rules.xml`), so its offline copy never leaves the phone that way.
 
 ## Who can see it
 
@@ -96,7 +97,6 @@ off stops their access, but keeps the sessions they created.
 | How long to keep sessions, and who deletes them | Keeping data forever is the riskiest default |
 | How a customer asks to see, correct or delete their data | Today it is a manual job in the console, and someone must own it |
 | Who the data controller is (the company or you) | It decides who is responsible and who may need to register |
-| Turn Android backup off? | The app can set `allowBackup` to false so phone backups do not copy customer data |
 | Who gets Firebase console access | They can read everything |
 | Deploy the tested rules to your Firebase project | The rules file only protects data once published |
 | How long to keep the anonymised copies in `trainingData/` | They are not personal answers, but a retention period should still be set |

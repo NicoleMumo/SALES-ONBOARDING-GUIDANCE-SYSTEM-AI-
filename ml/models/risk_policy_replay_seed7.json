@@ -1,0 +1,51 @@
+{
+  "dataset": "onboarding_dataset_v3_seed7.csv",
+  "note": "Simulated data, test split (unseen sales agents). 'Check in' = medium, 'Needs help' = high.",
+  "test_sessions": 1125,
+  "abandoned_sessions": 251,
+  "abandoned_share_pct": 22.3,
+  "thresholds": {
+    "medium": 0.6054,
+    "high": 0.7132
+  },
+  "pacer": {
+    "quiet_checks": 4,
+    "high_streak": 3
+  },
+  "as_the_app_shows_it": {
+    "check_in_or_more": {
+      "abandoned_sessions_warned_pct": 42.2,
+      "abandoned_warned_at_least_one_answer_early_pct": 37.5,
+      "median_lead_answers": 7.0,
+      "completed_sessions_warned_pct": 16.0,
+      "warned_sessions_that_were_abandoned_pct": 43.1,
+      "answers_shown_per_completed_session": 1.26
+    },
+    "needs_help": {
+      "abandoned_sessions_warned_pct": 25.5,
+      "abandoned_warned_at_least_one_answer_early_pct": 25.1,
+      "median_lead_answers": 10.0,
+      "completed_sessions_warned_pct": 8.5,
+      "warned_sessions_that_were_abandoned_pct": 46.4,
+      "answers_shown_per_completed_session": 0.48
+    }
+  },
+  "raw_model_levels_without_pacing": {
+    "check_in_or_more": {
+      "abandoned_sessions_warned_pct": 72.5,
+      "abandoned_warned_at_least_one_answer_early_pct": 70.1,
+      "median_lead_answers": 11.0,
+      "completed_sessions_warned_pct": 50.8,
+      "warned_sessions_that_were_abandoned_pct": 29.1,
+      "answers_shown_per_completed_session": 2.43
+    },
+    "needs_help": {
+      "abandoned_sessions_warned_pct": 38.2,
+      "abandoned_warned_at_least_one_answer_early_pct": 37.1,
+      "median_lead_answers": 10.5,
+      "completed_sessions_warned_pct": 13.3,
+      "warned_sessions_that_were_abandoned_pct": 45.3,
+      "answers_shown_per_completed_session": 1.03
+    }
+  }
+}

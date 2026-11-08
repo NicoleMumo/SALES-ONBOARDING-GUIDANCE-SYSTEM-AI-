@@ -1,0 +1,68 @@
+{
+  "dataset": "onboarding_dataset_v3.csv",
+  "note": "Simulated data, test split (unseen sales agents), the app's suggestion steps only.",
+  "held_out_questions": [
+    "email_address",
+    "profession",
+    "us_person_status",
+    "payment_method"
+  ],
+  "pass_mark": {
+    "top1_on_held_out_steps": 50.0,
+    "top3_on_held_out_steps": 80.0,
+    "max_drop_on_other_steps": 3.0
+  },
+  "epochs": 14,
+  "steps_where_a_held_out_question_is_next": {
+    "steps": 2927,
+    "held_out_model_top1": 0.0,
+    "held_out_model_top3": 42.4,
+    "shipped_model_top1": 98.5,
+    "app_rule_top1": 98.9,
+    "chance_top1": 16.4
+  },
+  "per_held_out_question": {
+    "email_address": {
+      "steps": 1239,
+      "held_out_model_top1": 0.0,
+      "held_out_model_top3": 13.4,
+      "shipped_model_top1": 97.8,
+      "app_rule_top1": 98.7,
+      "chance_top1": 7.9
+    },
+    "profession": {
+      "steps": 555,
+      "held_out_model_top1": 0.0,
+      "held_out_model_top3": 28.8,
+      "shipped_model_top1": 99.8,
+      "app_rule_top1": 100.0,
+      "chance_top1": 15.0
+    },
+    "us_person_status": {
+      "steps": 533,
+      "held_out_model_top1": 0.0,
+      "held_out_model_top3": 100.0,
+      "shipped_model_top1": 100.0,
+      "app_rule_top1": 100.0,
+      "chance_top1": 29.1
+    },
+    "payment_method": {
+      "steps": 600,
+      "held_out_model_top1": 0.0,
+      "held_out_model_top3": 63.7,
+      "shipped_model_top1": 97.5,
+      "app_rule_top1": 97.3,
+      "chance_top1": 23.8
+    }
+  },
+  "all_other_steps": {
+    "steps": 13528,
+    "held_out_model_top1": 95.6,
+    "held_out_model_top3": 97.9,
+    "shipped_model_top1": 94.8,
+    "app_rule_top1": 84.3,
+    "chance_top1": 23.4
+  },
+  "other_steps_where_a_held_out_question_was_wrongly_picked_pct": 0.0,
+  "claim_supported": false
+}
