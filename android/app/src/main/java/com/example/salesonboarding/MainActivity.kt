@@ -42,6 +42,14 @@ class MainActivity : ComponentActivity() {
                 // The customer of this run of the form agreed to that, on the consent screen.
                 var trainingAgreed by remember { mutableStateOf(false) }
                 var showAgentHome by remember { mutableStateOf(false) }
+                // A sales agent's companies, the one open now, and its message (AgentCompanies.kt).
+                var agentCompanies by remember { mutableStateOf<List<CompanyMembership>>(emptyList()) }
+                var openedCompany by remember { mutableStateOf<OpenedCompany?>(null) }
+                var showCompanyPicker by remember { mutableStateOf(false) }
+                var showCompanyBrief by remember { mutableStateOf(false) }
+                var openingCompanyId by remember { mutableStateOf<String?>(null) }
+                var companyError by remember { mutableStateOf<String?>(null) }
+                var isJoiningCompany by remember { mutableStateOf(false) }
                 var showAgentSessions by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var selectedContext by remember { mutableStateOf<String?>(null) }
@@ -96,21 +104,65 @@ class MainActivity : ComponentActivity() {
                         isLoadingFieldConfiguration = false
                     }
                 }
+                /** Opens one of the agent's companies: its settings, questions, sessions and message. */
+                fun openCompany(membership: CompanyMembership) {
+                    openingCompanyId = membership.companyId
+                    companyError = null
+                    openAgentCompany(membershipStore, membership) { result ->
+                        openingCompanyId = null
+                        result.onSuccess { opened ->
+                            openedCompany = opened
+                            companyId = opened.companyId
+                            companyIndustry = opened.industry
+                            companySharesForTraining = opened.sharesForTraining
+                            selectedIndustry = null
+                            selectedContext = null
+                            showAgentSessions = false
+                            showCompanyPicker = false
+                            showCompanyBrief = true
+                            loadFieldConfiguration(opened.companyId)
+                        }.onFailure {
+                            companyError = it.message
+                            showCompanyPicker = true
+                        }
+                    }
+                }
                 fun startSignedInSession(user: SignedInUser) {
                     agentId = user.userId
                     companyId = user.companyId
                     selectedRole = user.role
-                    if (user.role == UserRole.SALES_AGENT) {
-                        companyIndustry = user.companyIndustry
-                        companySharesForTraining = user.sharesForTraining
-                        selectedIndustry = null
-                        showAgentHome = true
-                    } else {
-                        showAgentHome = false
-                    }
                     showAgentSessions = false
                     signedIn = true
-                    loadFieldConfiguration(user.companyId)
+                    if (user.role == UserRole.SALES_AGENT) {
+                        agentCompanies = user.companies
+                        selectedIndustry = null
+                        showAgentHome = true
+                        // One company, or the one typed at sign-in, opens straight away.
+                        val first = user.companies.firstOrNull { it.companyId == user.preferredCompanyId }
+                            ?: user.companies.singleOrNull()
+                        if (first != null) openCompany(first) else showCompanyPicker = true
+                    } else {
+                        showAgentHome = false
+                        loadFieldConfiguration(user.companyId)
+                    }
+                }
+                /** Joins another company by its ID, if it invited this agent's email. */
+                fun joinCompany(newCompanyId: String) {
+                    val email = FirebaseAuth.getInstance().currentUser?.email.orEmpty()
+                    isJoiningCompany = true
+                    companyError = null
+                    membershipStore.enrollAgent(newCompanyId, agentId, email) { joined ->
+                        joined.onSuccess {
+                            membershipStore.loadAgentCompanies(agentId, email) { reloaded ->
+                                isJoiningCompany = false
+                                agentCompanies = reloaded.getOrDefault(agentCompanies).filter { it.isActive }
+                                agentCompanies.firstOrNull { it.companyId == newCompanyId }?.let(::openCompany)
+                            }
+                        }.onFailure {
+                            isJoiningCompany = false
+                            companyError = "Could not join $newCompanyId. Check the ID, and that this company invited $email."
+                        }
+                    }
                 }
                 /** Opens an unfinished session where it stopped (from My sessions or the home screen). */
                 fun resumeSession(session: StoredOnboardingSession) {
@@ -132,6 +184,12 @@ class MainActivity : ComponentActivity() {
                     companyId = ""
                     companyIndustry = null
                     companySharesForTraining = false
+                    agentCompanies = emptyList()
+                    openedCompany = null
+                    showCompanyPicker = false
+                    showCompanyBrief = false
+                    openingCompanyId = null
+                    companyError = null
                     trainingAgreed = false
                     showAgentHome = false
                     showAgentSessions = false
@@ -185,6 +243,30 @@ class MainActivity : ComponentActivity() {
                             onSignOut = ::signOut,
                             modifier = Modifier.padding(innerPadding)
                         )
+                    } else if (showCompanyPicker || openedCompany == null) {
+                        CompanyPickerScreen(
+                            companies = agentCompanies,
+                            openingCompanyId = openingCompanyId,
+                            errorMessage = companyError,
+                            isJoining = isJoiningCompany,
+                            onPick = ::openCompany,
+                            onJoin = ::joinCompany,
+                            onSignOut = ::signOut,
+                            // Back to the company already open, if there is one.
+                            onBack = openedCompany?.let { { showCompanyPicker = false; companyError = null } },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (showCompanyBrief) {
+                        CompanyBriefScreen(
+                            company = openedCompany!!,
+                            onStart = {
+                                showCompanyBrief = false
+                                showAgentHome = true
+                            },
+                            onSwitchCompany = { showCompanyPicker = true },
+                            onSignOut = ::signOut,
+                            modifier = Modifier.padding(innerPadding)
+                        )
                     } else if (
                         showAgentHome &&
                         showAgentSessions &&
@@ -216,6 +298,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         AgentHomeScreen(
+                            companyName = openedCompany?.name,
+                            onSwitchCompany = {
+                                companyError = null
+                                showCompanyPicker = true
+                            },
+                            onShowCompanyMessage = { showCompanyBrief = true },
                             onStartOnboarding = {
                                 showAgentSessions = false
                                 showAgentHome = false

@@ -184,7 +184,7 @@ fun UnifiedLoginScreen(
     val fonts = rememberSignInFonts()
 
     fun submit() {
-        val error = (if (isAgent) LoginFormValidator.validateCompanyId(state.companyId) else null)
+        val error = (if (isAgent && state.companyId.isNotBlank()) LoginFormValidator.validateCompanyId(state.companyId) else null)
             ?: LoginFormValidator.validate(state.email, state.password)
         if (error != null) {
             state = state.copy(errorMessage = error)
@@ -248,7 +248,7 @@ fun UnifiedLoginScreen(
             // Agents sign in to a company, so the login logic needs its ID.
             if (isAgent) {
                 SignInField(
-                    label = "Company ID",
+                    label = "Company ID · first time or new company",
                     value = state.companyId,
                     onValueChange = { state = state.copy(companyId = it.trim(), errorMessage = null) },
                     icon = Icons.Outlined.Home,
@@ -687,11 +687,19 @@ private fun SocialButton(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            "Continue with ${provider.label}",
-            color = colors.ink,
-            style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Google's own coloured "G", as its sign-in branding asks; it is never tinted.
+            Image(
+                painter = painterResource(R.drawable.ic_google_g),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                "Continue with ${provider.label}",
+                color = colors.ink,
+                style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            )
+        }
     }
 }
 
@@ -895,12 +903,13 @@ private const val REQUIRE_AGENT_EMAIL_VERIFICATION = true
 /** Who signed in, once Firebase and the company records agree they may. */
 data class SignedInUser(
     val userId: String,
+    /** The admin's company. Empty for a sales agent, who chooses one of [companies] next. */
     val companyId: String,
     val role: UserRole,
-    /** The company's onboarding industry. Loaded for agents only; the admin dashboard loads its own. */
-    val companyIndustry: String? = null,
-    /** The company allows anonymised steps to improve the system. Loaded for agents only. */
-    val sharesForTraining: Boolean = false
+    /** The companies a sales agent works for and may open now. */
+    val companies: List<CompanyMembership> = emptyList(),
+    /** The company whose ID the agent typed at sign-in, opened straight away. */
+    val preferredCompanyId: String? = null
 )
 
 /** The sign-in screen, connected to Firebase. [onSignedIn] runs before the screen is told of the success. */
@@ -1143,62 +1152,60 @@ private fun signInAgent(
     onResult: (Result<SignedInUser>) -> Unit
 ) {
     val userEmail = user.email ?: email
-    membershipStore.loadAgentMembership(user.uid, userEmail) { membershipResult ->
-        membershipResult.onSuccess { membership ->
-            when {
-                membership == null -> membershipStore.enrollAgent(requestedCompanyId, user.uid, userEmail) { enrollment ->
-                    enrollment.onSuccess {
-                        loadAgentCompany(membershipStore, user.uid, requestedCompanyId, onResult)
-                    }.onFailure { error ->
-                        signOutAndFail(
-                            onResult,
-                            IllegalStateException(error.message ?: "This email is not invited to that company.", error)
-                        )
-                    }
-                }
-                // Google sign-in may leave the company ID empty for a returning agent.
-                membership.isActive && (requestedCompanyId.isBlank() || membership.companyId == requestedCompanyId) ->
-                    loadAgentCompany(membershipStore, user.uid, membership.companyId, onResult)
-                else -> signOutAndFail(
-                    onResult,
-                    IllegalStateException("This account is inactive or belongs to a different company.")
+    val requested = requestedCompanyId.trim()
+
+    fun finish(companies: List<CompanyMembership>) {
+        val active = companies.filter { it.isActive }
+        when {
+            active.isNotEmpty() -> onResult(
+                Result.success(
+                    SignedInUser(
+                        userId = user.uid,
+                        companyId = "",
+                        role = UserRole.SALES_AGENT,
+                        companies = active,
+                        preferredCompanyId = requested.takeIf { id -> active.any { it.companyId == id } }
+                    )
                 )
+            )
+            companies.isNotEmpty() -> signOutAndFail(
+                onResult,
+                IllegalStateException("Your companies have switched off your access. Ask your administrator.")
+            )
+            else -> signOutAndFail(
+                onResult,
+                IllegalStateException("You have not joined a company yet. Enter the company ID from your invitation.")
+            )
+        }
+    }
+
+    membershipStore.loadAgentCompanies(user.uid, userEmail) { loaded ->
+        loaded.onSuccess { companies ->
+            // A company ID typed at sign-in joins that company, if it invited this email.
+            if (requested.isEmpty() || companies.any { it.companyId == requested }) {
+                finish(companies)
+                return@onSuccess
+            }
+            membershipStore.enrollAgent(requested, user.uid, userEmail) { joined ->
+                joined.onSuccess {
+                    membershipStore.loadAgentCompanies(user.uid, userEmail) { reloaded ->
+                        finish(reloaded.getOrDefault(companies))
+                    }
+                }.onFailure { error ->
+                    signOutAndFail(
+                        onResult,
+                        IllegalStateException(
+                            "$userEmail is not invited to company $requested. Check the company ID, or leave it empty to open your companies.",
+                            error
+                        )
+                    )
+                }
             }
         }.onFailure { error ->
             signOutAndFail(
                 onResult,
                 IllegalStateException("Could not verify this agent account. Try again when Firebase is available.", error)
             )
-        }
-    }
-}
-
-/** Agents can only start once their company has chosen its onboarding industry. */
-private fun loadAgentCompany(
-    membershipStore: AdminDataStore,
-    userId: String,
-    companyId: String,
-    onResult: (Result<SignedInUser>) -> Unit
-) {
-    membershipStore.loadCompanyIndustry(companyId) { result ->
-        result.onSuccess { industry ->
-            if (industry == null) {
-                signOutAndFail(
-                    onResult,
-                    IllegalStateException("Your company administrator must choose an onboarding industry before agents can sign in.")
-                )
-            } else {
-                // Sharing is optional: if the setting cannot be read, the customer is simply not asked.
-                membershipStore.loadSharesForTraining(companyId) { shares ->
-                    onResult(
-                        Result.success(
-                            SignedInUser(userId, companyId, UserRole.SALES_AGENT, industry, shares.getOrDefault(false))
-                        )
-                    )
-                }
-            }
-        }.onFailure { error ->
-            signOutAndFail(onResult, IllegalStateException("Could not load your company's onboarding industry.", error))
         }
     }
 }

@@ -9,8 +9,9 @@ team follows the process.
 
 ## An agent's session
 
-1. **Sign in.** The agent picks "Sales agent" and enters the company ID, email
-   and password. **Forgot password?** sends a Firebase reset link to the email
+1. **Sign in.** The agent picks "Sales agent" and enters their email and
+   password. The company ID is needed only the first time, or to join another
+   company that invited them. **Forgot password?** sends a Firebase reset link to the email
    typed; the app gives the same reply whether or not that email has an account.
    **Continue with Google** signs in without a password, but only if that
    Google account's email was invited by the company's
@@ -20,6 +21,14 @@ team follows the process.
    (see [01-set-up-and-run.md](01-set-up-and-run.md)). An admin can also use
    Google, once the Firebase owner has given that account admin
    access.
+   **Choose the company.** An agent can work for several companies. With one
+   company, it opens straight away; with more, the agent picks the company this
+   client is for (and can join another by its ID). Each time a company is
+   opened, its **message to agents** is shown first: what the company does and
+   what to watch for, written by its admin. Then its home screen, with its name
+   at the top, a **Message from ...** button to read it again, and a switch
+   button to change company. Sessions, questions and settings all come from the
+   company that is open.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
    mobile, broadband, TV, IoT or landline. The type chosen last time is already
@@ -181,8 +190,10 @@ model was tried and rejected for this.
   sign-in never leaves a session open.
 - Signing out clears everything from the session in memory (company, agent,
   answers of a resumed session, loaded settings), so the next person starts clean.
-- Company data is stored under `companies/{companyId}/`; agent memberships under
-  `companyMemberships/{uid}`.
+- Company data is stored under `companies/{companyId}/`, including its agents
+  (`members/{uid}`). Each agent's list of companies is at `agentCompanies/{uid}`.
+  The old one-company `companyMemberships/{uid}` is only read, once, to move an
+  agent who joined before agents could work for several companies.
 
 ## What is saved
 

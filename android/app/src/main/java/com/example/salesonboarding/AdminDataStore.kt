@@ -7,12 +7,18 @@ import com.google.firebase.database.MutableData
 import com.google.firebase.database.Transaction
 import android.util.Base64
 
+/** One company a sales agent works for. An agent can work for several. */
 data class CompanyMembership(
     val companyId: String,
     val email: String,
     val displayName: String,
-    val isActive: Boolean
+    val isActive: Boolean,
+    /** The name the company's admin gave it; its ID until one is set. */
+    val companyName: String = companyId
 )
+
+/** What a company tells its sales agents when they choose it: its name and the admin's message. */
+data class CompanyBrief(val name: String = "", val message: String = "")
 
 data class SalesAgentAccount(
     val id: String = "",
@@ -139,10 +145,11 @@ enum class AdminRule(val label: String) {
 }
 
 interface AdminDataStore {
-    fun loadAgentMembership(
+    /** Every company the agent has joined, switched-off ones included, by company name. */
+    fun loadAgentCompanies(
         agentId: String,
         email: String,
-        onResult: (Result<CompanyMembership?>) -> Unit
+        onResult: (Result<List<CompanyMembership>>) -> Unit
     )
     fun enrollAgent(
         companyId: String,
@@ -166,6 +173,15 @@ interface AdminDataStore {
     }
 
     fun saveSharesForTraining(enabled: Boolean, onResult: (Result<Unit>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("This setting cannot be changed here.")))
+    }
+
+    /** The company's name and its message to agents; empty when the admin has not set them. */
+    fun loadCompanyBrief(companyId: String, onResult: (Result<CompanyBrief>) -> Unit) {
+        onResult(Result.success(CompanyBrief()))
+    }
+
+    fun saveCompanyBrief(brief: CompanyBrief, onResult: (Result<Unit>) -> Unit) {
         onResult(Result.failure(UnsupportedOperationException("This setting cannot be changed here.")))
     }
     fun loadRuleConfiguration(onResult: (Result<FieldRuleConfiguration>) -> Unit)
@@ -215,33 +231,99 @@ class FirebaseAdminDataStore(
     private val sessions: DatabaseReference
         get() = companyRoot.child("onboardingSessions")
 
-    override fun loadAgentMembership(
+    override fun loadAgentCompanies(
         agentId: String,
         email: String,
-        onResult: (Result<CompanyMembership?>) -> Unit
+        onResult: (Result<List<CompanyMembership>>) -> Unit
     ) {
-        if (agentId.isBlank() || email.isBlank()) {
+        val normalizedEmail = email.trim().lowercase(java.util.Locale.ROOT)
+        if (agentId.isBlank() || normalizedEmail.isBlank()) {
             onResult(Result.failure(IllegalArgumentException("Sign in with your invited work email.")))
             return
         }
-        database.child("companyMemberships").child(agentId).get()
-            .addOnSuccessListener { snapshot ->
-                val membershipEmail = snapshot.child("email").getValue(String::class.java)
-                    ?.trim()?.lowercase(java.util.Locale.ROOT)
-                val normalizedEmail = email.trim().lowercase(java.util.Locale.ROOT)
-                val membership = if (membershipEmail == normalizedEmail) {
-                    CompanyMembership(
-                        companyId = snapshot.child("companyId").getValue(String::class.java).orEmpty(),
-                        email = membershipEmail,
-                        displayName = snapshot.child("displayName").getValue(String::class.java).orEmpty(),
-                        isActive = snapshot.child("isActive").getValue(Boolean::class.java) == true
-                    )
-                } else {
-                    null
-                }
-                onResult(Result.success(membership))
+        database.child("agentCompanies").child(agentId).get()
+            .addOnSuccessListener { list ->
+                val joined = list.children.mapNotNull { it.key }.filter(COMPANY_ID_PATTERN::matches)
+                // Before agents could work for several companies, their one company was kept in
+                // companyMemberships. An agent still listed only there is moved over once.
+                database.child("companyMemberships").child(agentId).get()
+                    .addOnSuccessListener { old ->
+                        val oldCompany = old.child("companyId").getValue(String::class.java)
+                        val oldEmail = old.child("email").getValue(String::class.java)?.trim()?.lowercase(java.util.Locale.ROOT)
+                        val moveOver = oldCompany != null && COMPANY_ID_PATTERN.matches(oldCompany) &&
+                            oldCompany !in joined && oldEmail == normalizedEmail &&
+                            old.child("isActive").getValue(Boolean::class.java) == true
+                        if (moveOver) {
+                            enrollAgent(oldCompany!!, agentId, normalizedEmail) { moved ->
+                                loadMemberships(agentId, normalizedEmail, joined + listOfNotNull(oldCompany.takeIf { moved.isSuccess }), onResult)
+                            }
+                        } else {
+                            loadMemberships(agentId, normalizedEmail, joined, onResult)
+                        }
+                    }
+                    .addOnFailureListener { loadMemberships(agentId, normalizedEmail, joined, onResult) }
             }
             .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    /** Reads the agent's membership in each company, and the name of each company they are active in. */
+    private fun loadMemberships(
+        agentId: String,
+        email: String,
+        companyIds: List<String>,
+        onResult: (Result<List<CompanyMembership>>) -> Unit
+    ) {
+        if (companyIds.isEmpty()) {
+            onResult(Result.success(emptyList()))
+            return
+        }
+        val found = mutableListOf<CompanyMembership>()
+        var waiting = companyIds.size
+        var failure: Exception? = null
+        fun done() {
+            waiting--
+            if (waiting > 0) return
+            val error = failure
+            if (found.isEmpty() && error != null) onResult(Result.failure(error))
+            else onResult(Result.success(found.sortedBy { it.companyName.lowercase(java.util.Locale.ROOT) }))
+        }
+        companyIds.distinct().also { waiting = it.size }.forEach { companyId ->
+            val company = database.child("companies").child(companyId)
+            company.child("members").child(agentId).get()
+                .addOnSuccessListener { member ->
+                    val memberEmail = member.child("email").getValue(String::class.java)?.trim()?.lowercase(java.util.Locale.ROOT)
+                    if (!member.exists() || memberEmail != email) {
+                        done()
+                        return@addOnSuccessListener
+                    }
+                    val membership = CompanyMembership(
+                        companyId = companyId,
+                        email = memberEmail,
+                        displayName = member.child("displayName").getValue(String::class.java).orEmpty(),
+                        isActive = member.child("isActive").getValue(Boolean::class.java) == true
+                    )
+                    if (!membership.isActive) {
+                        found += membership
+                        done()
+                        return@addOnSuccessListener
+                    }
+                    company.child("settings").child("displayName").get()
+                        .addOnSuccessListener { name ->
+                            found += membership.copy(
+                                companyName = name.getValue(String::class.java)?.trim()?.takeIf(String::isNotEmpty) ?: companyId
+                            )
+                            done()
+                        }
+                        .addOnFailureListener {
+                            found += membership
+                            done()
+                        }
+                }
+                .addOnFailureListener {
+                    failure = it
+                    done()
+                }
+        }
     }
 
     override fun enrollAgent(
@@ -277,13 +359,16 @@ class FirebaseAdminDataStore(
                     )
                     return@addOnSuccessListener
                 }
-                database.child("companyMemberships").child(agentId).setValue(
+                // The membership and the agent's own list of companies are written together.
+                database.updateChildren(
                     mapOf(
-                        "companyId" to normalizedCompanyId,
-                        "email" to normalizedEmail,
-                        "displayName" to snapshot.child("displayName").getValue(String::class.java).orEmpty(),
-                        "isActive" to true,
-                        "invitationKey" to emailKey
+                        "/companies/$normalizedCompanyId/members/$agentId" to mapOf(
+                            "email" to normalizedEmail,
+                            "displayName" to snapshot.child("displayName").getValue(String::class.java).orEmpty(),
+                            "isActive" to true,
+                            "invitationKey" to emailKey
+                        ),
+                        "/agentCompanies/$agentId/$normalizedCompanyId" to true
                     )
                 ).addOnSuccessListener { onResult(Result.success(Unit)) }
                     .addOnFailureListener { onResult(Result.failure(it)) }
@@ -316,7 +401,7 @@ class FirebaseAdminDataStore(
 
     override fun observeAgents(onResult: (Result<List<SalesAgentAccount>>) -> Unit) {
         if (!isConfigured(onResult)) return
-        database.child("companyMemberships").orderByChild("companyId").equalTo(companyId).get()
+        companyRoot.child("members").get()
             .addOnSuccessListener { memberships ->
                 agents.get()
                     .addOnSuccessListener { invitations ->
@@ -384,6 +469,38 @@ class FirebaseAdminDataStore(
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
 
+    override fun loadCompanyBrief(companyId: String, onResult: (Result<CompanyBrief>) -> Unit) {
+        if (!COMPANY_ID_PATTERN.matches(companyId)) {
+            onResult(Result.failure(IllegalArgumentException("A valid company ID is required.")))
+            return
+        }
+        database.child("companies").child(companyId).child("settings").get()
+            .addOnSuccessListener { settings ->
+                onResult(
+                    Result.success(
+                        CompanyBrief(
+                            name = settings.child("displayName").getValue(String::class.java).orEmpty().trim(),
+                            message = settings.child("agentBrief").getValue(String::class.java).orEmpty().trim()
+                        )
+                    )
+                )
+            }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun saveCompanyBrief(brief: CompanyBrief, onResult: (Result<Unit>) -> Unit) {
+        if (!isConfigured(onResult)) return
+        val name = brief.name.trim()
+        val message = brief.message.trim()
+        if (name.length > CompanyBriefLimits.NAME || message.length > CompanyBriefLimits.MESSAGE) {
+            onResult(Result.failure(IllegalArgumentException("The name or the message is too long.")))
+            return
+        }
+        companyRoot.child("settings").updateChildren(mapOf("displayName" to name, "agentBrief" to message))
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
     override fun addAgent(
         email: String,
         displayName: String,
@@ -437,15 +554,16 @@ class FirebaseAdminDataStore(
                 .addOnSuccessListener { onResult(Result.success(Unit)) }
                 .addOnFailureListener { onResult(Result.failure(it)) }
         } else {
-            database.child("companyMemberships").child(agentId).get()
+            companyRoot.child("members").child(agentId).get()
                 .addOnSuccessListener { membership ->
-                    if (membership.child("companyId").getValue(String::class.java) != companyId) {
+                    if (!membership.exists()) {
                         onResult(Result.failure(IllegalArgumentException("This agent does not belong to your company.")))
                         return@addOnSuccessListener
                     }
                     val invitationKey = membership.child("invitationKey").getValue(String::class.java)
+                    // Only this company's access changes; the agent keeps any other company.
                     val updates = mutableMapOf<String, Any?>(
-                        "/companyMemberships/$agentId/isActive" to isActive
+                        "/companies/$companyId/members/$agentId/isActive" to isActive
                     )
                     if (!invitationKey.isNullOrBlank()) {
                         updates["/companies/$companyId/agentInvitations/$invitationKey/isActive"] = isActive
@@ -761,3 +879,9 @@ internal fun Set<AdminRule>.toValidationRules() = buildList {
 }
 
 private fun Any?.asLongTimestamp(): Long? = (this as? Number)?.toLong()
+
+/** The longest company name and message to agents the database accepts. */
+object CompanyBriefLimits {
+    const val NAME = 80
+    const val MESSAGE = 1500
+}

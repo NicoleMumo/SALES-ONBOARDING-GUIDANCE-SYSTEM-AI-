@@ -86,6 +86,8 @@ fun AdminDashboardScreen(
     var isSavingCompanyIndustry by remember(companyId, store) { mutableStateOf(false) }
     var sharesForTraining by remember(companyId, store) { mutableStateOf(false) }
     var isSavingSharesForTraining by remember(companyId, store) { mutableStateOf(false) }
+    var companyBrief by remember(companyId, store) { mutableStateOf(CompanyBrief()) }
+    var isSavingCompanyBrief by remember(companyId, store) { mutableStateOf(false) }
     var errorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var agentStatusMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isLoadingAnalytics by remember(companyId, store) { mutableStateOf(false) }
@@ -134,6 +136,10 @@ fun AdminDashboardScreen(
         store.loadSharesForTraining(companyId) {
             if (!isCurrentAdminScope()) return@loadSharesForTraining
             handle(it) { sharesForTraining = it }
+        }
+        store.loadCompanyBrief(companyId) {
+            if (!isCurrentAdminScope()) return@loadCompanyBrief
+            handle(it) { companyBrief = it }
         }
         store.observeAgents {
             if (!isCurrentAdminScope()) return@observeAgents
@@ -333,6 +339,16 @@ fun AdminDashboardScreen(
                             if (!isCurrentAdminScope()) return@saveSharesForTraining
                             isSavingSharesForTraining = false
                             handle(result) { sharesForTraining = enabled }
+                        }
+                    },
+                    brief = companyBrief,
+                    isSavingBrief = isSavingCompanyBrief,
+                    onSaveBrief = { brief ->
+                        isSavingCompanyBrief = true
+                        store.saveCompanyBrief(brief) { result ->
+                            if (!isCurrentAdminScope()) return@saveCompanyBrief
+                            isSavingCompanyBrief = false
+                            handle(result) { companyBrief = brief.copy(name = brief.name.trim(), message = brief.message.trim()) }
                         }
                     }
                 )
@@ -959,9 +975,14 @@ private fun CompanyPage(
     onSaveIndustry: (String) -> Unit,
     sharesForTraining: Boolean,
     isSavingSharesForTraining: Boolean,
-    onSharesForTrainingChanged: (Boolean) -> Unit
+    onSharesForTrainingChanged: (Boolean) -> Unit,
+    brief: CompanyBrief,
+    isSavingBrief: Boolean,
+    onSaveBrief: (CompanyBrief) -> Unit
 ) {
     var selectedIndustry by remember(industry) { mutableStateOf(industry) }
+    var briefName by remember(brief) { mutableStateOf(brief.name) }
+    var briefMessage by remember(brief) { mutableStateOf(brief.message) }
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     AdminPage(
@@ -1037,6 +1058,33 @@ private fun CompanyPage(
                 onClick = { selectedIndustry?.let(onSaveIndustry) },
                 enabled = selectedIndustry != null && selectedIndustry != industry,
                 isLoading = isSaving
+            )
+        }
+        SectionCard(
+            title = "Message to your agents",
+            subtitle = "Agents see this each time they open your company, before they start: who you are, " +
+                "what they are onboarding clients for, and anything to watch for. An agent may work for several companies."
+        ) {
+            AdminTextField(
+                value = briefName,
+                onValueChange = { briefName = it.take(CompanyBriefLimits.NAME) },
+                label = "Company name agents see",
+                placeholder = companyId,
+                supportingText = "${briefName.length} / ${CompanyBriefLimits.NAME}"
+            )
+            AdminTextField(
+                value = briefMessage,
+                onValueChange = { briefMessage = it.take(CompanyBriefLimits.MESSAGE) },
+                label = "Message",
+                placeholder = "For example: We open savings accounts for walk-in clients. Check the national ID first.",
+                singleLine = false,
+                supportingText = "${briefMessage.length} / ${CompanyBriefLimits.MESSAGE}"
+            )
+            PrimaryButton(
+                text = if (isSavingBrief) "Saving…" else "Save message",
+                onClick = { onSaveBrief(CompanyBrief(briefName, briefMessage)) },
+                enabled = !isSavingBrief && (briefName.trim() != brief.name || briefMessage.trim() != brief.message),
+                isLoading = isSavingBrief
             )
         }
         SectionCard(

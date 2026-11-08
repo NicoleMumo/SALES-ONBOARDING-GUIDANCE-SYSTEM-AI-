@@ -69,7 +69,8 @@ agents follow the process. Nothing is used for advertising.
 - **Improving the system** is off unless the company's admin turns it on (Company
   page). Then the consent screen asks each customer an optional question: may
   anonymised steps of this session be used to improve the app? It starts unticked.
-  Only for customers who agree, the app saves a copy to `trainingData/`: industry,
+  Only for customers who agree, the app saves a copy to `trainingData/`: the company,
+  industry,
   customer type, number of questions, the agent as a code, and each check (question,
   passed or not, time). No answers, names, contact details or session ID. The
   database rules let agents only add these copies; nobody can read them in the app,

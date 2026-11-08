@@ -61,7 +61,12 @@ fun AgentHomeScreen(
     unfinishedSession: StoredOnboardingSession? = null,
     onContinueSession: (StoredOnboardingSession) -> Unit = {},
     /** Marks that session abandoned, after the agent confirms. */
-    onCancelSession: (StoredOnboardingSession) -> Unit = {}
+    onCancelSession: (StoredOnboardingSession) -> Unit = {},
+    /** The company open now; the agent may work for several. */
+    companyName: String? = null,
+    onSwitchCompany: (() -> Unit)? = null,
+    /** Shows the company's message to its agents again. */
+    onShowCompanyMessage: (() -> Unit)? = null
 ) {
     val c = Sm.colors
     var confirmCancel by remember { mutableStateOf<StoredOnboardingSession?>(null) }
@@ -69,10 +74,14 @@ fun AgentHomeScreen(
         .getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
         .getBoolean("guide_moving", true)
     AppScreen(
-        title = "SalesMesh",
+        title = companyName ?: "SalesMesh",
+        subtitle = if (companyName != null) "SalesMesh" else null,
         leading = { AppMark() },
         modifier = modifier,
-        actions = { HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut) }
+        actions = {
+            onSwitchCompany?.let { HeaderButton(R.drawable.ic_sm_company, "Switch company", it) }
+            HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut)
+        }
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -125,6 +134,13 @@ fun AgentHomeScreen(
                     PrimaryButton("Start onboarding", onClick = onStartOnboarding)
                 }
             }
+        }
+        if (companyName != null && onShowCompanyMessage != null) {
+            SecondaryButton(
+                text = "Message from $companyName",
+                onClick = onShowCompanyMessage,
+                iconRes = R.drawable.ic_sm_info
+            )
         }
         unfinishedSession?.let { session ->
             val type = CUSTOMER_TYPES[session.context]?.title ?: session.context.replaceFirstChar { it.titlecase(Locale.ROOT) }

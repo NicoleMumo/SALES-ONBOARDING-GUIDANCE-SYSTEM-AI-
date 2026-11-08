@@ -198,6 +198,8 @@ class FirebaseFieldEntryStore(
     ) {
         trainingData.child(recordId).updateChildren(
             mapOf(
+                // Which company allowed sharing; the database checks it does, and the agent works for it.
+                "companyId" to companyId,
                 "industry" to industry,
                 "context" to context,
                 "agentCode" to agentCode,

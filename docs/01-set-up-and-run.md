@@ -81,6 +81,13 @@ await getAuth().setCustomUserClaims(userUid, {
    On first sign-in the app checks the invitation and makes them a member.
    Instead of a password, the agent can enter the company ID and tap
    **Continue with Google**, if that Google account uses the invited email.
+4. On the **Company** page, the admin can write the company name and a message
+   agents see each time they open the company.
+
+An agent can work for several companies. Each company invites the same email;
+the agent joins another one by typing its company ID at sign-in, or under
+**Join another company** on the company list. Switching an agent off in one
+company does not affect the others.
 
 Agents must verify their email (`REQUIRE_AGENT_EMAIL_VERIFICATION` in
 `Auth.kt`, and `auth.token.email_verified` in the database rules for joining a
@@ -185,7 +192,10 @@ an admin and agents. The 43 tests check that:
 - Signed-out visitors can do nothing.
 - An admin can change only their own company's settings, questions and
   invitations, and the industry can only be banking or telecom.
-- A deactivated agent loses access to settings and sessions.
+- A deactivated agent loses access to that company's settings and sessions; an
+  agent who also works for another company keeps access there.
+- Only a company's admin can set its name and message to agents (at most 1,500
+  characters); only its active agents can read them.
 - A completed session cannot be changed, and a session cannot change owner or
   company.
 - Only a company's admin can turn on sharing anonymised steps. Then only its
