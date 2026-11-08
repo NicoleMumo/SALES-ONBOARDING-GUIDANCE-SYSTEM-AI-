@@ -128,6 +128,36 @@ python ml/next_question_v2.py holdout ml/data/onboarding_dataset_v3.csv   # the 
 python ml/next_question_v2.py train   ml/data/onboarding_dataset_v3.csv   # train, compare, export to ml/models/
 ```
 
+**With messier agents (noise).** The simulated sessions are tidy, which is why
+the scores above are so high. `ml/noise_check.py` adds noise to the test
+sessions only (every method trained on clean data): in a share of sessions the
+agent breaks the order again, one question moving to a random point and
+neighbouring questions swapping. In the new-questions part, the held-out
+questions are the ones moved.
+
+| Noise | Model | Plain rule | Best lookup | New questions: model first / top 3 | New questions: plain rule |
+|---|---|---|---|---|---|
+| 0% | 95.2% | 86.5% | 93.0% | 98.8% / 100% | 98.9% |
+| 10% | 93.4% | 85.0% | 91.5% | 95.7% / 98.8% | 96.4% |
+| 20% | 90.5% | 82.0% | 89.0% | 93.0% / 98.2% | 94.1% |
+| 30% | 86.2% | 78.5% | 84.8% | 88.6% / 96.7% | 90.1% |
+
+All methods fall by about the same amount (a random jump cannot be predicted),
+and the model keeps its lead over the rule (7 to 8 points) and the lookup (about
+1.5 points) at every level. On new questions moved to random places it is about
+a point behind the plain rule but far above chance (17%). The perfect scores on
+clean data come from the tidy simulator, not from a perfect model.
+
+**Edge cases.** `ml/edge_case_check.py` runs 21 situations, each with the
+sensible answer written down first: the start of every form, a failed answer
+(it asks for it again, even after three failures), one question left, histories
+longer than the model reads, company questions early, late and mid-way, odd or
+copied descriptions, 120 open questions, and the same input twice. 20 pass. The
+miss: when the last question is answered first, a situation the simulator never
+produced, the model is unsure (top choice 34%). So the app ignores any
+suggestion below 50% and points to the next required question in the form's
+order instead. On the 16,533 test steps the model was never that unsure.
+
 **Try it yourself.** `ml/try_next_question.py` calls the phone's model file:
 
 ```powershell
