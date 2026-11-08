@@ -132,13 +132,17 @@ private fun OverviewContent(analytics: OnboardingAnalytics, agents: List<SalesAg
     fun fieldName(fieldId: String) = analytics.fieldNames[fieldId]
         ?: fieldId.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
+    // With no sessions there is nothing to measure: every bar shows a dash (-1), never 0% or 100%.
+    val noSessions = analytics.sessionCount == 0
+    val nothingYet = "No sessions started yet."
     val bars = buildList {
         add(
             OverviewBar(
                 label = "Finished",
-                share = analytics.completionRate,
+                share = if (noSessions) -1.0 else analytics.completionRate,
                 title = "Sessions finished",
-                detail = "${analytics.completedCount} of ${analytics.sessionCount} started sessions were finished.",
+                detail = if (noSessions) nothingYet else
+                    "${analytics.completedCount} of ${analytics.sessionCount} started sessions were finished.",
                 note = if (analytics.completedCount > 0) {
                     "A finished session takes about ${"%.0f".format(analytics.averageCompletionMinutes)} minutes on average."
                 } else null,
@@ -162,19 +166,21 @@ private fun OverviewContent(analytics: OnboardingAnalytics, agents: List<SalesAg
         add(
             OverviewBar(
                 label = "Filled",
-                share = analytics.averageReadinessPercent / 100,
+                share = if (noSessions) -1.0 else analytics.averageReadinessPercent / 100,
                 title = "Answers filled in",
-                detail = "On average ${"%.0f".format(analytics.averageReadinessPercent)}% of the required answers are filled in.",
-                note = "Across all sessions, finished or not.",
+                detail = if (noSessions) nothingYet else
+                    "On average ${"%.0f".format(analytics.averageReadinessPercent)}% of the required answers are filled in.",
+                note = if (noSessions) null else "Across all sessions, finished or not.",
                 fill = Sm.colors.lime
             )
         )
         add(
             OverviewBar(
                 label = "Unfinished",
-                share = 1 - analytics.completionRate,
+                share = if (noSessions) -1.0 else 1 - analytics.completionRate,
                 title = "Sessions not finished",
-                detail = "${analytics.sessionCount - analytics.completedCount} of ${analytics.sessionCount} started sessions were not finished.",
+                detail = if (noSessions) nothingYet else
+                    "${analytics.sessionCount - analytics.completedCount} of ${analytics.sessionCount} started sessions were not finished.",
                 note = analytics.commonPausePoint?.let { "Most of them stop at: $it." },
                 fill = Sm.colors.cherry
             )
