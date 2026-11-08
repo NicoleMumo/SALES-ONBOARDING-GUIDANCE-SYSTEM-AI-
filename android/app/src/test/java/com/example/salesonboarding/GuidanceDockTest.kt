@@ -39,4 +39,33 @@ class GuidanceDockTest {
     fun nothingIsShownBeforeTheGuidanceIsKnown() {
         assertNull(NextFieldGuidance().pointer())
     }
+
+    private fun risk(level: CompletionRiskLevel) = CompletionRiskGuidance(level, "Offer help.", emptyList())
+
+    @Test
+    fun theGuideCelebratesAFinishedFormAboveEverythingElse() {
+        val guidance = NextFieldGuidance(isComplete = true, riskGuidance = risk(CompletionRiskLevel.HIGH))
+        assertEquals(GuideMood.CELEBRATING, guideMood(guidance, justPassed = false))
+    }
+
+    @Test
+    fun highRiskWorriesTheGuideEvenAfterAnAcceptedAnswer() {
+        val guidance = NextFieldGuidance(nextFieldId = "full_name", riskGuidance = risk(CompletionRiskLevel.HIGH))
+        assertEquals(GuideMood.WORRIED, guideMood(guidance, justPassed = true))
+    }
+
+    @Test
+    fun anAnswerToFixOrMediumRiskConcernsTheGuide() {
+        val toFix = NextFieldGuidance(correction = ValidationErrorDisplay("full_name", "Enter the full name."))
+        val medium = NextFieldGuidance(nextFieldId = "full_name", riskGuidance = risk(CompletionRiskLevel.MEDIUM))
+        assertEquals(GuideMood.CONCERNED, guideMood(toFix, justPassed = false))
+        assertEquals(GuideMood.CONCERNED, guideMood(medium, justPassed = true))
+    }
+
+    @Test
+    fun anAcceptedAnswerMakesTheGuideHappyOtherwiseItIsCalm() {
+        val guidance = NextFieldGuidance(nextFieldId = "date_of_birth")
+        assertEquals(GuideMood.HAPPY, guideMood(guidance, justPassed = true))
+        assertEquals(GuideMood.CALM, guideMood(guidance, justPassed = false))
+    }
 }

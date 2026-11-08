@@ -287,6 +287,9 @@ private const val AUTO_FOLLOW_KEY = "auto_follow"
 /** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
 private const val AUTO_FOLLOW_DELAY_MS = 250L
 
+/** How long the guide smiles after an accepted answer. */
+private const val GUIDE_SMILE_MS = 2000L
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SectionPage(
@@ -322,6 +325,16 @@ private fun SectionPage(
     val focusers = remember(section) { section.fields.associate { it.fieldId to FocusRequester() } }
     val latestGuidance by rememberUpdatedState(guidance)
     var followRequests by remember { mutableIntStateOf(0) }
+    // The guide smiles for a moment after each accepted answer.
+    val checks = state.interactionHistory.filter { it.validationPassed != null }
+    var justPassed by remember { mutableStateOf(false) }
+    LaunchedEffect(checks.size) {
+        if (checks.lastOrNull()?.validationPassed == true) {
+            justPassed = true
+            delay(GUIDE_SMILE_MS)
+            justPassed = false
+        }
+    }
 
     // Scroll to the question the panel opened, and put the cursor in it if it is a text box.
     LaunchedEffect(jumpTarget) {
@@ -357,6 +370,7 @@ private fun SectionPage(
             GuidanceDock(
                 pointer = guidance.pointer(),
                 risk = guidance.riskGuidance,
+                mood = guideMood(guidance, justPassed),
                 fieldName = { id -> allFields.firstOrNull { it.fieldId == id }?.fieldName ?: id },
                 sectionName = { id -> sectionOf[id]?.takeIf { it != section.title } },
                 autoFollow = autoFollow,

@@ -74,6 +74,7 @@ internal fun NextFieldGuidance.pointer(): GuidancePointer? {
 internal fun BoxScope.GuidanceDock(
     pointer: GuidancePointer?,
     risk: CompletionRiskGuidance?,
+    mood: GuideMood,
     fieldName: (String) -> String,
     sectionName: (String) -> String?,
     autoFollow: Boolean,
@@ -123,7 +124,7 @@ internal fun BoxScope.GuidanceDock(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 DockHeader(
-                    risk = risk.takeIf { folded },
+                    mood = mood,
                     autoFollow = autoFollow,
                     onAutoFollowChange = onAutoFollowChange,
                     folded = folded,
@@ -142,7 +143,7 @@ internal fun BoxScope.GuidanceDock(
 
 @Composable
 private fun DockHeader(
-    risk: CompletionRiskGuidance?,
+    mood: GuideMood,
     autoFollow: Boolean,
     onAutoFollowChange: (Boolean) -> Unit,
     folded: Boolean,
@@ -150,18 +151,18 @@ private fun DockHeader(
 ) {
     val c = Sm.colors
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        // The grip shows the panel can be moved.
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.semantics {
-            contentDescription = "Drag to move the guidance panel"
-        }) {
-            repeat(2) { Box(Modifier.size(width = 18.dp, height = 2.dp).background(c.cream.copy(alpha = 0.5f), CircleShape)) }
-        }
+        // The guide shows how the onboarding is going; tapping it folds or opens the panel.
+        GuideMascot(
+            mood,
+            Modifier
+                .size(44.dp)
+                .clickable(role = Role.Button, onClick = onFold)
+        )
         Text(
             "Guidance",
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = c.cream.copy(alpha = 0.75f)
         )
-        if (risk != null) RiskDot(risk.level)
         Box(Modifier.weight(1f))
         Text("Auto-follow", style = MaterialTheme.typography.labelMedium, color = c.cream.copy(alpha = 0.75f))
         SmSwitch(checked = autoFollow, onCheckedChange = onAutoFollowChange)
