@@ -59,41 +59,35 @@ team follows the process.
    **Use** to fill the question. Nothing is sent while typing, only on a tap,
    and at most one request a second, as Nominatim's rules ask.
 6. **Suggestions and warnings.** A guidance panel floats at the bottom of the
-   form and stays in sight while the agent scrolls. It shows, in order of
-   priority: an answer to fix, the AI's "Suggested next" question, or the next
-   required question. Tapping it opens that question, in any section, and puts
-   the cursor in it. When more than one answer needs fixing, the panel lists
-   them all in form order; tapping one opens it. If the session looks likely to
-   be abandoned, the panel also shows a gentle line ("Check in with the
-   customer", then "This customer may need help now"); tapping it shows the
-   advice. The warning builds up slowly so one slip does not alarm the agent:
-   nothing for the first four checked answers, always amber before red, and red
-   only after three high scores in a row. It drops as soon as things improve.
-   The panel can be dragged anywhere on the page or folded to one line, and it
-   never disappears: before any advice it points at the first required
-   question. A small guide character
-   in the panel shows how things are going: calm, pleased after an accepted
-   answer, concerned when something needs fixing or the risk is amber, worried
-   when it is red, and celebrating when every required answer is in. Tapping it
-   folds or opens the panel. The panel's ⋮ menu has two settings, both
-   remembered on the phone: **Auto-follow** (the keyboard's Next key checks the
-   answer and goes straight to where the panel points) and **Moving guide**
-   (turn it off for a still face that uses less battery; it is also still when
-   the phone's "Remove animations" is on). The first time the form opens on a
-   phone, the guide gives a five-step tour of the panel (replay it from ⋮).
-   Each time after that it greets the agent with a fun fact about onboarding
-   for a few seconds (tap to skip), then opens the first question it points at;
-   the panel stays open after the greeting.
-   **While the keyboard is open**, the panel becomes a slim bar just above the
-   keyboard (guide, risk dot, where to go next; tap to jump), the header shrinks
-   and the Next button steps aside, so the box being typed in stays visible.
-   Tapping the guide in the slim bar opens the full panel over the form. On
-   short phones the header is always compact and the panel starts folded.
-   **The Enter key** never leaves the form. Pressed in a box, it checks the
-   answer and moves to the next question in the section (or, with Auto-follow,
-   or at the last question, to where the panel points). Pressed when no box is
-   selected, it goes to where the panel points. All of it is advice; the agent
-   decides.
+   form and stays in sight while the agent scrolls; it can be dragged anywhere.
+   It has only two sizes and moves smoothly between them. **Full** is always the
+   same height: the guide, a status pill ("On track", "Check in" or "Needs
+   help"; tap it for the advice), and one card with the next thing to do: an
+   answer to fix ("Fix 3 answers", with "All 3" listing every one), the AI's
+   "Suggested next" question, the next required question, or Review and submit.
+   **Compact** is one row, the same as the bar shown above the keyboard while
+   typing. Only the agent folds or opens it (the chevron, or tapping the guide),
+   and the choice is remembered; the bar above the keyboard has the same chevron
+   to open the full panel over the form. Tapping the guidance opens that
+   question in any section. If it points at the box being typed in, the tap
+   first checks that answer and then goes to the next step, as Enter does.
+   The risk warning builds up slowly so one slip does not alarm the agent:
+   nothing for the first four checked answers, a check-in before "Needs help",
+   and "Needs help" only after three high scores in a row. The guide's face
+   shows how things are going: calm, pleased after an accepted answer,
+   concerned when something needs fixing, worried when the client may need
+   help, and celebrating when every required answer is in. The panel's ⋮ menu
+   has **Auto-follow** (Enter goes straight to where the panel points) and
+   **Moving guide** (off for a still face that uses less battery; also still
+   when the phone's "Remove animations" is on). The first time the form opens
+   on a phone, the guide gives a five-step tour (replay it from ⋮). Each time
+   after that it greets the agent with a fun fact about onboarding, in a speech
+   bubble above the panel, then opens the first question it points at.
+   **The Enter key** never leaves the form. In a box, it checks the answer and
+   moves to the next question in the section (with Auto-follow, or at the last
+   question, to where the panel points). Arriving at a date question opens its
+   calendar. With no box selected, Enter goes to where the panel points. All of
+   it is advice; the agent decides.
 7. **Review and submit.** The review page lists every answer by section, with an
    Edit button per section and a list of anything still missing. Tapping a
    missing or wrong answer opens its question. Submit stays

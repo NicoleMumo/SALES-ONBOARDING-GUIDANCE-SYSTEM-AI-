@@ -98,7 +98,7 @@ class ValidationRulesTest {
                 "subscriber_type" -> "individual"
                 "contract_type" -> "prepaid"
                 "payment_method" -> "mobile_money"
-                "terms_and_conditions_acceptance" -> "yes"
+                "terms_and_conditions_acceptance", "identification_document" -> "yes"
                 "paperless_billing_preference", "politically_exposed_person_status", "us_person_status" -> "no"
                 else -> "Provided value"
             }

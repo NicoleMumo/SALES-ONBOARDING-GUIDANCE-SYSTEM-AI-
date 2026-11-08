@@ -111,7 +111,10 @@ internal fun QuestionBlock(
     /** Replaces the keyboard's Next, for example to follow the guidance instead. */
     onNext: (() -> Unit)? = null,
     /** Fills and checks another question, used by the ID photo reader's "Use" buttons. */
-    onFillField: ((fieldId: String, value: String) -> Unit)? = null
+    onFillField: ((fieldId: String, value: String) -> Unit)? = null,
+    /** Opens a date question's calendar, when Enter or the guidance arrives at it. */
+    openCalendar: Boolean = false,
+    onCalendarOpened: () -> Unit = {}
 ) {
     val c = Sm.colors
     val value = state.values[field.fieldId].orEmpty()
@@ -168,6 +171,8 @@ internal fun QuestionBlock(
                 hasError = error != null,
                 isValid = isValid,
                 focusRequester = focusRequester,
+                openCalendar = openCalendar,
+                onCalendarOpened = onCalendarOpened,
                 onPicked = { picked ->
                     onValueChange(picked)
                     onCheck()
@@ -310,10 +315,18 @@ private fun DateInput(
     hasError: Boolean,
     isValid: Boolean,
     focusRequester: FocusRequester?,
+    openCalendar: Boolean,
+    onCalendarOpened: () -> Unit,
     onPicked: (String) -> Unit
 ) {
     val c = Sm.colors
     var open by remember { mutableStateOf(false) }
+    LaunchedEffect(openCalendar) {
+        if (openCalendar) {
+            open = true
+            onCalendarOpened()
+        }
+    }
     var focused by remember(field.fieldId) { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp)
     val shown = CalendarDates.readable(value)

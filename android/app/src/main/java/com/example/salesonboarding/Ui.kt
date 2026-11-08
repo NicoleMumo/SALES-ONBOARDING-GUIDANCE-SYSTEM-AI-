@@ -1,5 +1,13 @@
 package com.example.salesonboarding
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
@@ -456,7 +464,8 @@ fun AppScreen(
     val c = Sm.colors
     val typing = WindowInsets.isImeVisible
     val compactHeader = typing || isShortScreen()
-    val footer = if (typing && typingBar != null) typingBar else bottomBar
+    // While typing, a page with a typing bar shows it instead of its bottom bar.
+    val showTypingBar = typing && typingBar != null
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -486,10 +495,29 @@ fun AppScreen(
                 verticalArrangement = Arrangement.spacedBy(Space.l),
                 content = content
             )
-            if (!(typing && typingBar != null) || overlayWhileTyping) overlay?.invoke(this)
+            // The overlay fades away while typing and back after, instead of snapping.
+            if (overlay != null) {
+                // The general version: inside this Box, not the page's Column.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !showTypingBar || overlayWhileTyping,
+                    modifier = Modifier.matchParentSize(),
+                    enter = fadeIn(tween(220)) + slideInVertically(tween(240)) { it / 10 },
+                    exit = fadeOut(tween(140))
+                ) {
+                    Box(Modifier.fillMaxSize()) { overlay(this) }
+                }
+            }
         }
-        if (footer != null) {
-            Surface(
+        if (bottomBar != null || typingBar != null) AnimatedContent(
+            targetState = showTypingBar,
+            transitionSpec = {
+                (fadeIn(tween(180, delayMillis = 60)) togetherWith fadeOut(tween(100)))
+                    .using(SizeTransform(clip = false) { _, _ -> tween(220, easing = FastOutSlowInEasing) })
+            },
+            label = "footer"
+        ) { strip ->
+            val footer = if (strip) typingBar else bottomBar
+            if (footer != null) Surface(
                 color = c.white,
                 shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                 border = BorderStroke(1.dp, c.footerLine)

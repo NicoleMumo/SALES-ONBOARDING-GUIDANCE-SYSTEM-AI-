@@ -184,9 +184,14 @@ object KnownFields {
             "home_address", Type.TEXT,
             "Enter the customer's home address, including the area or street where available."
         ),
+        // Nothing is uploaded, so this is the agent's confirmation that they saw the original;
+        // the document photo reader sits under it to fill the name, ID number and date of birth.
         field(
-            "identification_document", Type.FILE,
-            "Record the identification document provided by the customer."
+            "identification_document", Type.BOOLEAN,
+            "Confirm you have seen the customer's original ID document, not a photocopy. " +
+                "You can take a photo of it below to fill in the name, ID number and date of birth.",
+            listOf(MustBeTrue),
+            name = "Original ID document seen"
         ),
         field(
             "identification_document_number", Type.TEXT,
@@ -233,7 +238,13 @@ object KnownFields {
             "physical_address", Type.TEXT,
             "Enter the customer's current residential or business address."
         ),
-        yesNo("politically_exposed_person_status", "Record the answer given by the customer."),
+        yesNo(
+            "politically_exposed_person_status",
+            "Ask whether the customer holds, or recently held, an important public office, such as a " +
+                "minister, MP, judge or senior military officer, or is a close relative or associate of " +
+                "such a person. Banks must check this to prevent money laundering.",
+            name = "Politically exposed person (PEP)"
+        ),
         field("profession", Type.TEXT, "Enter the customer's job, trade, or occupation."),
         choice(
             Id.SERVICE_TYPE, "Choose the telecom service the customer is signing up for.",
@@ -254,8 +265,10 @@ object KnownFields {
             "Confirm the customer reviewed and accepted the terms presented."
         ),
         yesNo(
-            "us_person_status", "Record the answer given by the customer.",
-            name = "US person status"
+            "us_person_status",
+            "Ask whether the customer is a US citizen, a US resident or green-card holder, or was born " +
+                "in the US. Choose Yes if any applies. Banks must ask this for US tax reporting (FATCA).",
+            name = "US person (FATCA)"
         )
     ).also(::validateCatalog)
 
