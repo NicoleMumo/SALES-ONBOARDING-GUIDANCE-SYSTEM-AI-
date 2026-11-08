@@ -119,7 +119,13 @@ data class OnboardingSessionMetrics(
     /** Answered steps in the order they happened, from the session's saved events. */
     val steps: List<RecordedStep> = emptyList(),
     /** False for sessions saved before answers were checked on leaving the box. */
-    val checksEachAttempt: Boolean = true
+    val checksEachAttempt: Boolean = true,
+    val sessionId: String = "",
+    /** The sales agent's account ID; [agentId] holds their email when it was saved. */
+    val agentUid: String = "",
+    val industry: String = "",
+    val context: String = "",
+    val consentAt: Long? = null
 )
 
 enum class AdminRule(val label: String) {
@@ -174,6 +180,11 @@ interface AdminDataStore {
     fun deleteCustomField(fieldId: String, onResult: (Result<Unit>) -> Unit)
     fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit)
     fun loadSessions(onResult: (Result<List<StoredOnboardingSession>>) -> Unit)
+
+    /** Every session of the company, reduced to its checks and times, for the CSV exports. */
+    fun loadSessionMetrics(onResult: (Result<List<OnboardingSessionMetrics>>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("Exporting sessions is not available here.")))
+    }
 }
 
 class FirebaseAdminDataStore(
@@ -521,45 +532,16 @@ class FirebaseAdminDataStore(
     }
 
     override fun loadAnalytics(onResult: (Result<OnboardingAnalytics>) -> Unit) {
+        loadSessionMetrics { result ->
+            onResult(result.map(OnboardingAnalytics::fromSessions))
+        }
+    }
+
+    override fun loadSessionMetrics(onResult: (Result<List<OnboardingSessionMetrics>>) -> Unit) {
         if (!isConfigured(onResult)) return
         sessions.orderByChild("startedAt").get()
             .addOnSuccessListener { snapshot ->
-                val metrics = snapshot.children.map { session ->
-                    val playbookFields = session.child("playbookSnapshot").children
-                    val validation = session.child("validation").children.mapNotNull { field ->
-                        field.child("isValid").getValue(Boolean::class.java)?.let { valid ->
-                            field.key?.let { it to valid }
-                        }
-                    }.toMap()
-                    OnboardingSessionMetrics(
-                        status = session.child("status").getValue(String::class.java).orEmpty(),
-                        startedAt = session.child("startedAt").value.asLongTimestamp(),
-                        completedAt = session.child("completedAt").value.asLongTimestamp(),
-                        agentId = session.child("agentEmail").getValue(String::class.java)
-                            ?.takeIf(String::isNotBlank)
-                            ?: session.child("agentId").getValue(String::class.java).orEmpty(),
-                        validation = validation,
-                        playbookFieldIds = playbookFields.mapNotNull {
-                            it.child("fieldId").getValue(String::class.java)
-                        },
-                        requiredFieldIds = playbookFields.mapNotNull { field ->
-                            if (field.child("isRequired").getValue(Boolean::class.java) == true) {
-                                field.child("fieldId").getValue(String::class.java)
-                            } else {
-                                null
-                            }
-                        },
-                        fieldNames = playbookFields.mapNotNull { field ->
-                            val fieldId = field.child("fieldId").getValue(String::class.java)
-                            val fieldName = field.child("fieldName").getValue(String::class.java)
-                            if (fieldId != null && fieldName != null) fieldId to fieldName else null
-                        }.toMap(),
-                        steps = session.child("events").children.mapNotNull(DataSnapshot::toRecordedStep),
-                        checksEachAttempt = session.child("answerChecks")
-                            .getValue(String::class.java) == ANSWER_CHECKS_ON_LEAVE
-                    )
-                }
-                onResult(Result.success(OnboardingAnalytics.fromSessions(metrics)))
+                onResult(Result.success(snapshot.children.map(DataSnapshot::toSessionMetrics)))
             }
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
@@ -655,6 +637,49 @@ class FirebaseAdminDataStore(
 }
 
 private fun List<Double>.averageOrZero(): Double = if (isEmpty()) 0.0 else average()
+
+/** One saved session, reduced to what the Overview and the CSV exports need. */
+private fun DataSnapshot.toSessionMetrics(): OnboardingSessionMetrics {
+    val playbookFields = child("playbookSnapshot").children
+    val validation = child("validation").children.mapNotNull { field ->
+        field.child("isValid").getValue(Boolean::class.java)?.let { valid ->
+            field.key?.let { it to valid }
+        }
+    }.toMap()
+    val agentUid = child("agentId").getValue(String::class.java).orEmpty()
+    return OnboardingSessionMetrics(
+        status = child("status").getValue(String::class.java).orEmpty(),
+        startedAt = child("startedAt").value.asLongTimestamp(),
+        completedAt = child("completedAt").value.asLongTimestamp(),
+        agentId = child("agentEmail").getValue(String::class.java)
+            ?.takeIf(String::isNotBlank)
+            ?: agentUid,
+        validation = validation,
+        playbookFieldIds = playbookFields.mapNotNull {
+            it.child("fieldId").getValue(String::class.java)
+        },
+        requiredFieldIds = playbookFields.mapNotNull { field ->
+            if (field.child("isRequired").getValue(Boolean::class.java) == true) {
+                field.child("fieldId").getValue(String::class.java)
+            } else {
+                null
+            }
+        },
+        fieldNames = playbookFields.mapNotNull { field ->
+            val fieldId = field.child("fieldId").getValue(String::class.java)
+            val fieldName = field.child("fieldName").getValue(String::class.java)
+            if (fieldId != null && fieldName != null) fieldId to fieldName else null
+        }.toMap(),
+        steps = child("events").children.mapNotNull(DataSnapshot::toRecordedStep),
+        checksEachAttempt = child("answerChecks")
+            .getValue(String::class.java) == ANSWER_CHECKS_ON_LEAVE,
+        sessionId = child("sessionId").getValue(String::class.java) ?: key.orEmpty(),
+        agentUid = agentUid,
+        industry = child("industry").getValue(String::class.java).orEmpty(),
+        context = child("context").getValue(String::class.java).orEmpty(),
+        consentAt = child("consentAt").value.asLongTimestamp()
+    )
+}
 
 /**
  * One saved session event as an answered step. The app saves an event each time

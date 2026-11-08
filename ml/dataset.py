@@ -51,6 +51,7 @@ Usage:
     python ml/dataset.py generate --version v4    # clients show strain before quitting
     python ml/dataset.py check ml/data/onboarding_dataset_v3.csv
     python ml/dataset.py check ml/data/onboarding_dataset_v3.csv --compare path/to/raw.csv
+    python ml/dataset.py split path/to/salesmesh-training.csv   # real sessions from the app
 """
 
 import argparse
@@ -697,12 +698,15 @@ def generate(n_sessions, seed, version="v3"):
 
 
 def assign_agent_splits(raw, seed):
+    return splits_by_agent(Counter(agent.id for _, agent, *_ in raw), seed)
+
+
+def splits_by_agent(sessions_per_agent, seed):
     """Put each agent wholly in train, validation or test, about 70/15/15 of sessions.
 
     Agents are shuffled with their own seeded RNG (so the session stream is not
     disturbed), then filled into the splits in that order by session count.
     """
-    sessions_per_agent = Counter(agent.id for _, agent, *_ in raw)
     agent_ids = sorted(sessions_per_agent)
     random.Random(seed + 101).shuffle(agent_ids)
     total = sum(sessions_per_agent.values())
@@ -755,6 +759,25 @@ REQUIRED_COLUMNS = {
     "session_status",
     "split",
 }
+
+
+def split_exported_sessions(path, out, seed=2026):
+    """Fill the split column of a Training CSV exported from the app.
+
+    The app leaves `split` empty. Splitting here works as for the simulated data:
+    each sales agent goes wholly to train, validation or test, about 70/15/15 of
+    sessions. Returns the number of sessions in each split.
+    """
+    rows = read_dataset(Path(path))
+    sessions_of_agent = defaultdict(set)
+    for row in rows:
+        sessions_of_agent[row["sales_agent_id"]].add(row["session_id"])
+    split_of = splits_by_agent(Counter({a: len(s) for a, s in sessions_of_agent.items()}), seed)
+    for row in rows:
+        row["split"] = split_of[row["sales_agent_id"]]
+    save(rows, out)
+    return Counter({split: sum(len(sessions_of_agent[a]) for a, s in split_of.items() if s == split)
+                    for split in ("train", "validation", "test")})
 
 
 def read_dataset(path):
@@ -947,11 +970,23 @@ def main():
     check.add_argument("path", type=Path)
     check.add_argument("--compare", type=Path)
 
+    split = commands.add_parser("split", help="fill the split column of a Training CSV exported from the app")
+    split.add_argument("path", type=Path)
+    split.add_argument("--out", type=Path, help="default: <path>_split.csv")
+    split.add_argument("--seed", type=int, default=2026)
+
     args = ap.parse_args()
     if args.command == "check":
         report(args.path)
         if args.compare:
             report(args.compare)
+        return
+    if args.command == "split":
+        out = args.out or args.path.with_name(f"{args.path.stem}_split{args.path.suffix}")
+        counts = split_exported_sessions(args.path, out, args.seed)
+        print(f"wrote {out}: " + ", ".join(f"{name} {counts[name]} sessions" for name in ("train", "validation", "test")))
+        if min(counts.values()) == 0:
+            print("warning: a split is empty; export sessions from more sales agents before training")
         return
 
     if args.sessions <= 0:

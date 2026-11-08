@@ -54,6 +54,12 @@ agents follow the process. Nothing is used for advertising.
   The photo is kept in the app's private cache, not the phone's gallery, and is deleted
   as soon as it has been read. The photo and the text it reads are not uploaded or saved.
 - The models were trained on simulated data, not real customers.
+- An admin can export a **Training CSV** to retrain the models on real sessions. It
+  holds only which question was checked, whether it passed, and when, plus the
+  customer type and industry. It holds no answers and no customer names, and each
+  agent is replaced by a code. Before using it on real data, decide whether the
+  consent text should say that anonymised session steps may be used to improve the
+  app (see "Decisions" below).
 
 ## How long it is kept, and deleting
 
@@ -76,6 +82,8 @@ off stops their access, but keeps the sessions they created.
 | Who gets Firebase console access | They can read everything |
 | Turn on email verification for agents | It is off for testing |
 | Deploy the tested rules to your Firebase project | The rules file only protects data once published |
+| Say in the consent text that anonymised session steps may improve the app | Needed before a Training CSV of real sessions is used to retrain the models |
+| Where exported CSV files are kept, and who may hold them | An export leaves Firebase's access rules behind once saved to a phone or drive |
 
 ## Customer consent
 

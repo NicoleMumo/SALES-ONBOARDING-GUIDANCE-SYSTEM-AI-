@@ -10,7 +10,8 @@ team follows the process.
 ## An agent's session
 
 1. **Sign in.** The agent picks "Sales agent" and enters the company ID, email
-   and password.
+   and password. **Forgot password?** sends a Firebase reset link to the email
+   typed; the app gives the same reply whether or not that email has an account.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
    mobile, broadband, TV, IoT or landline. That choice, plus the company's own
@@ -55,7 +56,19 @@ Admins see five pages in a bottom navigation bar:
 - **Agents**: invite agents by email, see whether each has registered, and turn
   an agent off or on.
 - **Sessions**: search and filter all of the company's sessions. Tap one to open
-  its own page with every saved answer (read-only).
+  its own page with every saved answer (read-only). Two buttons save the
+  sessions as CSV files, in a place the admin chooses:
+  - **Sessions CSV**: one row per session (agent, customer type, status, times,
+    answers checked, failed checks, steps out of order, followed the standard).
+  - **Training CSV**: one row per checked answer, in the columns of the training
+    data (`ml/dataset.py`), so real sessions can retrain the models. Agents are
+    replaced by codes (`AGENT-` plus 12 characters). Only sessions with a known
+    outcome are included: completed, or unfinished with no check for 24 hours
+    (labelled abandoned). Run `python ml/dataset.py split <file>` to fill the
+    `split` column by agent before training.
+
+  Neither file holds answers or customer names; sessions do not save which
+  answer was given to a check, only the question, pass or fail, and the time.
 - **Questions**: the standard questions of the company's industry, grouped
   (Identity, Contact, Business, Money, Service), with a switch for which are
   required. Add, edit or delete the company's own questions (name,

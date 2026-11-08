@@ -28,7 +28,7 @@ each answer is checked, and admins can see how consistently the team follows it.
 
 ### Agents
 
-1. Open the app, choose **Sales agent**, and sign in with the company ID, your email and password. New agent? Tap **Create account** (an admin must have invited your email first).
+1. Open the app, choose **Sales agent**, and sign in with the company ID, your email and password. New agent? Tap **Create account** (an admin must have invited your email first). Forgot your password? Type your email and tap **Forgot password?** for a reset link.
 2. Tap **Start onboarding** and choose the customer type.
 3. Explain the consent points to the customer and tick that they agreed.
 4. Fill in the form section by section. Required questions have a `*`.
@@ -43,6 +43,7 @@ each answer is checked, and admins can see how consistently the team follows it.
 3. **Agents:** tap **Invite an agent** and add their name and work email.
 4. **Questions:** choose which questions are required, or add your own.
 5. **Overview** and **Sessions:** see how the team is doing and read every session.
+6. **Sessions → Sessions CSV / Training CSV:** save the sessions as a spreadsheet. The training file is one row per checked answer, for retraining the models (`python ml/dataset.py split <file>` fills its train/validation/test column). Neither file holds answers or client names.
 
 ---
 

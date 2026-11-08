@@ -184,5 +184,62 @@ class OnboardingDataGeneratorTests(unittest.TestCase):
         self.assertEqual(results["B3 (+ agent id)"], 0.0)
 
 
+class ExportedSessionsTests(unittest.TestCase):
+    # The columns of the app's Training CSV (SessionCsvExport.TRAINING_COLUMNS).
+    APP_COLUMNS = [
+        "session_id", "sales_agent_id", "industry", "context_value", "onboarding_field",
+        "event_name", "event_timestamp", "event_status", "event_duration_minutes",
+        "agent_response_time_minutes", "is_revisit", "previous_onboarding_field",
+        "next_onboarding_field", "validation_status", "failure_reason",
+        "onboarding_progress", "session_status", "split",
+    ]
+
+    def write_export(self, path, agents=20, sessions_per_agent=3):
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self.APP_COLUMNS)
+            writer.writeheader()
+            for a in range(agents):
+                for s in range(sessions_per_agent):
+                    for step, (field, status) in enumerate([("full_name", "in_progress"),
+                                                            ("date_of_birth", "completed")]):
+                        writer.writerow({
+                            "session_id": f"S-{a}-{s}", "sales_agent_id": f"AGENT-{a:012X}",
+                            "industry": "banking", "context_value": "individual",
+                            "onboarding_field": field, "event_name": "entered",
+                            "event_timestamp": f"2026-01-01T08:{step:02d}:00Z", "event_status": "completed",
+                            "event_duration_minutes": "1.00", "agent_response_time_minutes": "0.00",
+                            "is_revisit": "False", "previous_onboarding_field": "",
+                            "next_onboarding_field": "", "validation_status": "passed",
+                            "failure_reason": "", "onboarding_progress": "50.00",
+                            "session_status": status, "split": "",
+                        })
+
+    def test_split_puts_each_sales_agent_in_one_split(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.csv", Path(folder) / "export_split.csv"
+            self.write_export(source)
+
+            counts = dataset.split_exported_sessions(source, out)
+            rows = dataset.read_dataset(out)
+
+        splits_of_agent = defaultdict(set)
+        for row in rows:
+            splits_of_agent[row["sales_agent_id"]].add(row["split"])
+        self.assertTrue(all(len(s) == 1 for s in splits_of_agent.values()))
+        self.assertEqual({"train", "validation", "test"}, {row["split"] for row in rows})
+        self.assertEqual(60, sum(counts.values()))
+
+    def test_an_export_feeds_the_risk_model_rows(self):
+        from consistency import load_split_rows
+
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.csv", Path(folder) / "export_split.csv"
+            self.write_export(source)
+            dataset.split_exported_sessions(source, out)
+            by_split = load_split_rows(out)
+
+        self.assertEqual(60, sum(len(rows) for rows in by_split.values()))
+
+
 if __name__ == "__main__":
     unittest.main()
