@@ -27,6 +27,8 @@ import tensorflow as tf
 from consistency import out_of_order_steps, standard_order
 
 MODELS = Path(__file__).resolve().parent / "models"
+# This analysis is of version 1 of the model (see ml/next_question_v2.py for version 2).
+V1 = MODELS / "v1"
 
 # The app's required questions per form (as in the notebook and the Kotlin playbooks).
 BANKING_INDIVIDUAL_OPTIONAL = {"assets"}
@@ -119,7 +121,7 @@ def lookup_predictions(train, test):
 
 def tflite_predictions(records, meta):
     """The shipped model, called as the app calls it: candidates and their descriptions."""
-    interpreter = tf.lite.Interpreter(model_path=str(MODELS / "onboarding_model.tflite"))
+    interpreter = tf.lite.Interpreter(model_path=str(V1 / "onboarding_model.tflite"))
     interpreter.allocate_tensors()
     inputs = {d["name"]: d for d in interpreter.get_input_details()}
     output = interpreter.get_output_details()[0]
@@ -189,7 +191,7 @@ def main():
     parser.add_argument("--out", default=str(MODELS / "offscript_report.json"))
     args = parser.parse_args()
 
-    meta = json.loads((MODELS / "preprocessing_meta.json").read_text(encoding="utf-8"))
+    meta = json.loads((V1 / "preprocessing_meta.json").read_text(encoding="utf-8"))
     df = pd.read_csv(args.csv)
     train = build_records(df, "train", meta)
     test = build_records(df, "test", meta)

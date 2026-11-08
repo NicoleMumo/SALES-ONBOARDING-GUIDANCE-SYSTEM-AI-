@@ -10,6 +10,9 @@ Two ways to use it:
        python ml/try_next_question.py ask --industry banking --context individual \
            --answered full_name,email_address,mobile_phone_number --last passed
 
+   Add a company's own question with --company-question "Name: description" (repeatable). It
+   goes at the end of the form, as in the app; the model was never trained on it.
+
 2. Watch it on a real test session (an unseen sales agent), step by step, next to the app's
    plain rule ("ask the first unanswered required question in the form's order"):
        python ml/try_next_question.py walk ml/data/onboarding_dataset_v3.csv [--off-script] [--session ID]
@@ -28,6 +31,7 @@ import tensorflow as tf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from consistency import out_of_order_steps, standard_order  # noqa: E402
+from next_question_v2 import candidate_features  # noqa: E402
 from offscript_breakdown import required_fields  # noqa: E402
 
 MODELS = Path(__file__).resolve().parent / "models"
@@ -41,7 +45,7 @@ class ShippedModel:
         self.inputs = {d["name"]: d for d in self.interpreter.get_input_details()}
         self.output = self.interpreter.get_output_details()[0]
         keys = sorted(["input_ids", "attention_mask", "industry_id", "context_id", "validation_id",
-                       "candidate_description_ids", "candidate_mask"], key=len, reverse=True)
+                       "candidate_description_ids", "candidate_mask", "candidate_features"], key=len, reverse=True)
         self.slot = {name: next(k for k in keys if k in name) for name in self.inputs}
 
     def encode(self, text):
@@ -49,15 +53,16 @@ class ShippedModel:
         ids = [vocab.get(t, vocab["<unk>"]) for t in text.lower().replace("-", " ").replace(",", " ").split()][:size]
         return ids + [vocab["<pad>"]] * (size - len(ids))
 
-    def rank(self, answered, industry, context, last, candidates):
-        """Candidates with their probabilities, most likely first."""
+    def rank(self, answered, industry, context, last, candidates, form, required, extra_descriptions=None):
+        """Candidates with their probabilities, most likely first. [form] is the whole form in order."""
+        descriptions = {**self.meta["field_descriptions"], **(extra_descriptions or {})}
         meta, max_len, max_cand = self.meta, self.meta["max_len"], self.meta["max_candidates"]
         ids = [meta["field_to_id"][name] for name in answered if name in meta["field_to_id"]][-max_len:]
         ids = np.asarray([[0] * (max_len - len(ids)) + ids], np.int32)
         desc = np.zeros((1, max_cand, meta["max_desc_len"]), np.int32)
         mask = np.zeros((1, max_cand), np.int32)
         for i, name in enumerate(candidates):
-            desc[0, i] = self.encode(meta["field_descriptions"][name])
+            desc[0, i] = self.encode(descriptions[name])
             mask[0, i] = 1
         values = {
             "input_ids": ids, "attention_mask": (ids > 0).astype(np.int32),
@@ -65,7 +70,10 @@ class ShippedModel:
             "context_id": np.asarray([meta["context_to_id"][context]], np.int32),
             "validation_id": np.asarray([meta["validation_to_id"].get(last, 0)], np.int32),
             "candidate_description_ids": desc, "candidate_mask": mask,
+            "candidate_features": np.zeros((1, max_cand, 5), np.int32),
         }
+        for i, row in enumerate(candidate_features(candidates, form, required, answered)):
+            values["candidate_features"][0, i] = row
         for name, detail in self.inputs.items():
             self.interpreter.set_tensor(detail["index"], values[self.slot[name]])
         self.interpreter.invoke()
@@ -76,16 +84,22 @@ class ShippedModel:
 
 def ask(args, model):
     answered = [f.strip() for f in args.answered.split(",") if f.strip()]
-    playbook = standard_order(args.industry, args.context)
+    # A company's own questions go at the end of the form, under "Company questions", as in the app.
+    company = {}
+    for text in args.company_question:
+        name, _, description = text.partition(":")
+        company["company_" + "_".join(name.lower().split())] = f"{name.strip()}. {description.strip()}"
+    playbook = standard_order(args.industry, args.context) + list(company)
     unknown = [f for f in answered if f not in playbook]
     if unknown:
         raise SystemExit(f"Not in the {args.industry} {args.context} form: {unknown}. Its questions: {playbook}")
     candidates = [f for f in playbook if f not in answered]
-    required = required_fields(args.industry, args.context)
+    required = required_fields(args.industry, args.context) | set(company)
     rule = next((f for f in playbook if f in required and f not in answered), None)
     print(f"\n{args.industry} / {args.context}; answered: {', '.join(answered) or '(none)'}; last check: {args.last}")
     print(f"App's plain rule would ask: {rule}\n\nModel's ranking of the open questions:")
-    for position, (name, p) in enumerate(model.rank(answered, args.industry, args.context, args.last, candidates), 1):
+    ranked = model.rank(answered, args.industry, args.context, args.last, candidates, playbook, required, company)
+    for position, (name, p) in enumerate(ranked, 1):
         print(f"  {position:2}. {name:34} {p * 100:5.1f}%{'   <- rule' if name == rule else ''}")
 
 
@@ -118,7 +132,7 @@ def walk(args, model):
             continue
         candidates = [name for name in playbook if name not in valid]
         rule = next(n for n in playbook if n in required and n not in valid)
-        ranked = model.rank(history, industry, context, str(row["validation_status"]), candidates)
+        ranked = model.rank(history, industry, context, str(row["validation_status"]), candidates, playbook, required)
         actual = str(row["next_onboarding_field"])
         steps += 1
         model_right += ranked[0][0] == actual
@@ -138,6 +152,8 @@ def main():
     a.add_argument("--context", required=True)
     a.add_argument("--answered", default="")
     a.add_argument("--last", default="passed", choices=["passed", "failed", "NONE"])
+    a.add_argument("--company-question", action="append", default=[],
+                   help='"Name: description" of a question the company added (repeatable)')
     w = sub.add_parser("walk")
     w.add_argument("csv")
     w.add_argument("--off-script", action="store_true")

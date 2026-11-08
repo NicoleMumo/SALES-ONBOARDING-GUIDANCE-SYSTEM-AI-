@@ -1,4 +1,6 @@
-"""Can the next-question model score a question it never saw, from its description alone?
+"""Can version 1 of the next-question model score a question it never saw, from its description alone?
+
+(It could not: see the result below. Version 2, ml/next_question_v2.py, can.)
 
 The model (ml/onboarding_transformer.ipynb) does not pick from a fixed list: it compares the
 session with a short text description of each candidate question. The report claims this lets
@@ -164,7 +166,7 @@ def main():
     tf.random.set_seed(42)
 
     df = pd.read_csv(args.csv).sort_values(["session_id", "event_timestamp"])
-    meta = json.loads((MODELS / "preprocessing_meta.json").read_text(encoding="utf-8"))
+    meta = json.loads((MODELS / "v1" / "preprocessing_meta.json").read_text(encoding="utf-8"))
     descriptions_by_field = meta["field_descriptions"]
     known = sorted(set(df["onboarding_field"]) - set(HELD_OUT))
     field_to_id = {f: i + 1 for i, f in enumerate(known)}

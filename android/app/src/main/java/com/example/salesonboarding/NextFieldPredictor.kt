@@ -75,12 +75,18 @@ class TfliteNextFieldPredictor(
     private val fieldDescriptions = metadata.optJSONObject("field_descriptions")?.toStringMap().orEmpty()
     private val maxDescriptionLength = metadata.optInt("max_desc_len", 0)
     private val maxCandidates = metadata.optInt("max_candidates", 0)
+    // Version 2 also gives the model each candidate's place in the form (CandidateFeatures).
+    private val maxFormPosition = metadata.optInt("max_form_position", CandidateFeatures.MAX_FORM_POSITION)
+    private val maxGap = metadata.optInt("max_gap", CandidateFeatures.MAX_GAP)
 
     // endregion
 
     // region Model
 
     private val interpreter = Interpreter(loadAsset(assets, modelAsset))
+
+    /** Version 2 has an eighth input: where each candidate sits in the form. */
+    private val usesCandidateFeatures = interpreter.inputTensorCount == INPUT_NAMES_V2.size
 
     /** Where each named input sits in the model, found by tensor name. */
     private val inputPositions: Map<String, Int> = findInputPositions()
@@ -152,19 +158,23 @@ class TfliteNextFieldPredictor(
             candidateMask[0][index] = 1
         }
 
-        val output = Array(1) { FloatArray(maxCandidates) }
-        val ran = run(
-            mapOf(
-                "input_ids" to arrayOf(inputIds),
-                "attention_mask" to arrayOf(attentionMask),
-                "industry_id" to arrayOf(intArrayOf(industryToId.getValue(industry))),
-                "context_id" to arrayOf(intArrayOf(contextToId.getValue(context))),
-                "validation_id" to arrayOf(intArrayOf(validationToId[lastValidation] ?: 0)),
-                "candidate_description_ids" to candidateIds,
-                "candidate_mask" to candidateMask
-            ),
-            output
+        val inputs = mutableMapOf<String, Any>(
+            "input_ids" to arrayOf(inputIds),
+            "attention_mask" to arrayOf(attentionMask),
+            "industry_id" to arrayOf(intArrayOf(industryToId.getValue(industry))),
+            "context_id" to arrayOf(intArrayOf(contextToId.getValue(context))),
+            "validation_id" to arrayOf(intArrayOf(validationToId[lastValidation] ?: 0)),
+            "candidate_description_ids" to candidateIds,
+            "candidate_mask" to candidateMask
         )
+        if (usesCandidateFeatures) {
+            val features = Array(1) { Array(maxCandidates) { IntArray(CandidateFeatures.COUNT) } }
+            CandidateFeatures.of(fieldHistory, candidates, fieldCatalogue, maxFormPosition, maxGap)
+                .forEachIndexed { index, row -> features[0][index] = row }
+            inputs["candidate_features"] = features
+        }
+        val output = Array(1) { FloatArray(maxCandidates) }
+        val ran = run(inputs, output)
         val scores = output[0]
         // A closed interpreter or a broken (NaN) output means no usable suggestion.
         if (!ran || candidates.indices.any { !scores[it].isFinite() }) return null
@@ -238,7 +248,7 @@ class TfliteNextFieldPredictor(
     // region Start-up checks
 
     private fun findInputPositions(): Map<String, Int> {
-        val expected = INPUT_NAMES.take(interpreter.inputTensorCount)
+        val expected = (if (usesCandidateFeatures) INPUT_NAMES_V2 else INPUT_NAMES).take(interpreter.inputTensorCount)
         val tensorNames = (0 until interpreter.inputTensorCount).map { interpreter.getInputTensor(it).name() }
         val byName = expected.associateWith { name -> tensorNames.indexOfFirst { it.contains(name) } }
         val usable = byName.values.all { it >= 0 } && byName.values.toSet().size == expected.size
@@ -251,9 +261,13 @@ class TfliteNextFieldPredictor(
         check(fieldToId.values.sorted() == (1..fieldToId.size).toList()) {
             "Metadata field_to_id must give each field a unique id from 1 to ${fieldToId.size}"
         }
-        check(interpreter.inputTensorCount == INPUT_NAMES.size) {
-            "Model has ${interpreter.inputTensorCount} inputs; the app needs the ${INPUT_NAMES.size}-input " +
-                    "export that scores candidate descriptions"
+        check(interpreter.inputTensorCount == INPUT_NAMES.size || interpreter.inputTensorCount == INPUT_NAMES_V2.size) {
+            "Model has ${interpreter.inputTensorCount} inputs; the app needs the ${INPUT_NAMES.size}- or " +
+                    "${INPUT_NAMES_V2.size}-input export that scores candidates"
+        }
+        check(!usesCandidateFeatures || metadata.has("candidate_features")) {
+            "The model takes candidate positions but its metadata does not describe them. " +
+                    "Replace the model and metadata files together."
         }
         check(descriptionVocab.isNotEmpty() && maxDescriptionLength > 0 && maxCandidates > 0) {
             "Metadata does not describe candidate scoring"
@@ -291,6 +305,7 @@ class TfliteNextFieldPredictor(
             "input_ids", "attention_mask", "industry_id", "context_id", "validation_id",
             "candidate_description_ids", "candidate_mask"
         )
+        private val INPUT_NAMES_V2 = INPUT_NAMES + "candidate_features"
 
         // Letters, digits, apostrophes and "/" stay inside a word, as in the training vocabulary.
         private val TOKEN_SEPARATORS = Regex("[\\s,._;:!?()\"-]+")
@@ -337,5 +352,43 @@ private object FieldTextSimilarity {
     fun cosine(first: Set<String>, second: Set<String>): Float {
         if (first.isEmpty() || second.isEmpty()) return 0f
         return first.intersect(second).size / sqrt(first.size.toFloat() * second.size)
+    }
+}
+
+/**
+ * What the app knows about where each candidate sits in the form, for version 2 of the model:
+ * its position, its distance from the last question answered, whether it is the first open
+ * question, whether it is the plain rule's choice (the first open required one), and whether it
+ * is required. These are known for any question, including a company's own, which is what lets
+ * the model suggest questions it was not trained on. Must match `candidate_features` in
+ * ml/next_question_v2.py.
+ */
+internal object CandidateFeatures {
+    const val COUNT = 5
+    const val MAX_FORM_POSITION = 39
+    const val MAX_GAP = 12
+
+    /** One row per candidate, in [candidates] order (the form's order, open questions only). */
+    fun of(
+        fieldHistory: List<String>,
+        candidates: List<FormField>,
+        form: List<FormField>,
+        maxFormPosition: Int = MAX_FORM_POSITION,
+        maxGap: Int = MAX_GAP
+    ): List<IntArray> {
+        val positionOf = form.withIndex().associate { (index, field) -> field.fieldId to index }
+        val last = fieldHistory.asReversed().firstNotNullOfOrNull { positionOf[it] } ?: -1
+        val required = { field: FormField -> field.isRequired || field.validationRules.any { it is Required } }
+        val ruleChoice = candidates.firstOrNull(required)?.fieldId
+        return candidates.mapIndexed { index, field ->
+            val position = positionOf[field.fieldId] ?: (form.size + index)
+            intArrayOf(
+                minOf(position, maxFormPosition),
+                (position - last).coerceIn(-maxGap, maxGap) + maxGap,
+                if (index == 0) 1 else 0,
+                if (field.fieldId == ruleChoice) 1 else 0,
+                if (required(field)) 1 else 0
+            )
+        }
     }
 }

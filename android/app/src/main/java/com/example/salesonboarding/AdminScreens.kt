@@ -993,7 +993,7 @@ private fun QuestionsPage(
             }
         } else {
             PrimaryButton("Add a question", onClick = { showAdd = true }, iconRes = R.drawable.ic_sm_plus)
-            SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI model was not trained on them.") {
+            SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI suggests them by their place in the form, though it was never trained on them.") {
                 if (configuration.customFields.isEmpty()) {
                     EmptyState("None yet", "Questions you add appear here.", iconRes = R.drawable.ic_sm_questions)
                 }

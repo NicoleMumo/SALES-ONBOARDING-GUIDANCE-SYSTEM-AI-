@@ -40,12 +40,18 @@ session ended (status, scenario, next field) are never model inputs.
 
 ## Next-question suggestion
 
+**Two versions.** Version 1 (`ml/onboarding_transformer.ipynb`, now in
+`ml/models/v1/`) is the one reported in most of this section. Version 2
+(`ml/next_question_v2.py`), shipped since 8 Nov 2026, is the same Transformer
+with one addition that lets it handle a company's own questions (see "New
+questions" below). Overall they score the same.
+
 **What it sees:** the order of questions answered so far (up to 29), the
-industry, the customer type, whether the last answer passed its check, and a
-short description of each question it may choose from. It never sees the
-customer's answers. It does **not** work for questions it was not trained on,
-such as a company's own questions (see "New questions" below): those are reached
-through the form's order instead.
+industry, the customer type, whether the last answer passed its check, and for
+each question it may choose from: a short description and, in version 2, where
+that question sits in the form (its position, its distance from the last
+question answered, whether it is the first open one, whether it is the plain
+rule's choice, and whether it is required). It never sees the customer's answers.
 
 **How the app uses it:** while a required question is still unanswered, the app
 asks the model to choose among the questions not yet answered correctly (at most
@@ -107,29 +113,56 @@ app's order, which is partly why the app's own rule already scores 86.5%. Only
 the standard forms were tested: not rule changes or edits that make an earlier
 answer wrong.
 
-**New questions: the model cannot score them (tested, 8 Nov 2026).** The design
-compares sessions with question descriptions, which was meant to let it score a
-company's own questions without retraining. `ml/custom_question_check.py` tested
-that: four standard questions (email address, profession, US person, payment
-method; one from each admin question group, chosen before any result) were held
-out of training completely, as if a company had added them later, and the model
-was trained again from scratch. The pass mark, fixed before running: pick the
+**New questions (tested, 8 Nov 2026).** Version 1 compared sessions with
+question descriptions only, which was meant to let it score a company's own
+questions without retraining. `ml/custom_question_check.py` tested that: four
+standard questions (email address, profession, US person, payment method; one
+from each admin question group, chosen before any result) were held out of
+training completely, as if a company had added them later: removed from the
+candidates, the targets, every answered history (as the app does with a
+question it does not know) and the description word list. The model was then
+trained again from scratch. The pass mark, fixed before running: pick the
 held-out question first at least 50% of the time when it is the right next one,
 and have it in the top 3 at least 80% of the time.
 
+Version 1 failed: it never once chose a question it was not trained on. A new
+question's description is mostly unknown words to it, and the description was
+all it had. But any question, including a company's own, has a place in the
+form, which the app knows. Version 2 adds those five facts about each candidate
+(above), so it can learn the general habit ("agents usually go on to the next
+open question, except when ...") as well as each question's own pattern. The
+same held-out test, run on version 2 (`ml/next_question_v2.py holdout`):
+
 | Steps where a held-out question was next (2,927) | First choice | In top 3 |
 |---|---|---|
-| Model that never saw them | **0%** | 42% |
+| Version 1, never saw them | 0% | 42% |
+| **Version 2, never saw them** | **98.8%** | **100%** |
 | Random choice among the open questions | 16% | |
-| Shipped model (trained with them) | 98.5% | |
+| Version 1 trained with them | 98.5% | |
 
-It never once chose a question it was not trained on, so the claim is dropped.
-On every other step it stayed as good as the shipped model (95.6% against
-94.8%). A company's own questions are therefore reached through the form's
-order, not through a suggestion.
+Each held-out question: email 98.3%, profession 100%, US person 100%, payment
+method 97.5%. On the other steps the version 2 trained without them scored
+93.5% (version 1 with everything: 94.8%), and it picked a held-out question
+wrongly on 2.5% of them.
+
+**Version 2 replaced version 1** because it met three conditions fixed before
+it was trained: it passed this test; on the app's 16,533 suggestion steps it was
+no more than 0.5 points below version 1 (it scored 95.2% against 95.0%; right
+where version 1 was wrong 44 times, the reverse 20, z = 3.0); and its TensorFlow
+Lite file matches the trained model (largest difference 0.0000001, no different
+first choice in 50 checks). Off-script sessions 92.2% (version 1 92.0%, lookup
+87.8%); standard-order sessions 97.7% (the same as version 1). One training run
+each; results in `ml/models/next_question_v2_report.json` and
+`ml/models/custom_question_check_v2.json`.
+
+What this does not show: the held-out questions came from the simulator, which
+places them in the form's usual order. A company question is placed at the end
+of the form, and agents may ask it anywhere; the model will suggest it where
+the form puts it until real sessions show otherwise.
 
 ```powershell
-python ml/custom_question_check.py ml/data/onboarding_dataset_v3.csv
+python ml/next_question_v2.py holdout ml/data/onboarding_dataset_v3.csv   # the held-out test
+python ml/next_question_v2.py train   ml/data/onboarding_dataset_v3.csv   # train, compare, export to ml/models/
 ```
 
 **Try it yourself.** `ml/try_next_question.py` calls the phone's model file:
@@ -137,24 +170,28 @@ python ml/custom_question_check.py ml/data/onboarding_dataset_v3.csv
 ```powershell
 # Rank the open questions after the ones answered so far
 python ml/try_next_question.py ask --industry banking --context individual --answered full_name,email_address
+# Add questions a company made up (the model never saw them)
+python ml/try_next_question.py ask --industry banking --context individual --answered full_name --company-question "Loyalty number: the client's loyalty card number"
 # Follow a real test session step by step, next to the app's plain rule
 python ml/try_next_question.py walk ml/data/onboarding_dataset_v3.csv --session SESSION-4CD01894
 ```
 
-In that session the agent starts with the ID document. The model follows the
-agent's flow and is right on 14 of 15 steps; the plain rule keeps asking for
-the next question in the form's order and is right on 7. In the 219 test
-sessions of 10 to 20 answers that left the form's order, the model was right
-2,802 times and the rule 2,244 times. Where the agent keeps to the order, the
-two agree almost everywhere.
+In that session the agent starts with the ID document. Version 1 followed the
+agent's flow and was right on 14 of 15 steps, version 2 on 13; the plain rule
+keeps asking for the next question in the form's order and is right on 7. In
+the 219 test sessions of 10 to 20 answers that left the form's order, version 1
+was right 2,802 times and the rule 2,244 times. Where the agent keeps to the
+order, the two agree almost everywhere. With two made-up company questions
+(loyalty number, branch) at the end of a banking form, version 2 suggests the
+terms while they are open (99.6%), then the loyalty number (90%), then the branch.
 
-**Retraining.** Open `ml/onboarding_transformer.ipynb` in Google Colab (or a
-Python 3.11+ environment with TensorFlow), upload the whole CSV and wait for the
-upload to finish (the notebook stops if the file is cut off), then run all cells.
-It saves `onboarding_model.tflite`, `preprocessing_meta.json` and
-`onboarding_model_flexible.keras` to `ml/models/`. The first two are a matching
-pair: always replace both. Loading the `.keras` file in Python needs the layers
-in `ml/next_field_model.py`.
+**Retraining.** Version 2: `python ml/next_question_v2.py train <csv>` (a few
+minutes on a laptop CPU) writes `onboarding_model.tflite`,
+`preprocessing_meta.json` and `next_question_v2_report.json` to `ml/models/`.
+The first two are a matching pair: always replace both. Version 1: open
+`ml/onboarding_transformer.ipynb` in Google Colab, upload the whole CSV, run all
+cells; its files are kept in `ml/models/v1/` for comparison. Loading version 1's
+`.keras` file in Python needs the layers in `ml/next_field_model.py`.
 
 ## Risk warning
 
@@ -294,9 +331,9 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 
 | File in `ml/models/` | Used by |
 | --- | --- |
-| `onboarding_model.tflite` and `preprocessing_meta.json` | The app (next-question suggestion); a matching pair |
+| `onboarding_model.tflite` and `preprocessing_meta.json` | The app (next-question suggestion, version 2); a matching pair |
 | `risk_model.json` | The app (risk warning) |
-| `onboarding_model_flexible.keras` | Python, to reload the trained model |
+| `v1/` | Version 1 of the next-question model and its metadata, for the comparisons above |
 | `risk_model_report.json` | The evidence for the risk results above |
 | `risk_ceiling_report.json` | The evidence for the F1 ceiling above |
 | `risk_v4_check.json` | The evidence for the v4 check above |
