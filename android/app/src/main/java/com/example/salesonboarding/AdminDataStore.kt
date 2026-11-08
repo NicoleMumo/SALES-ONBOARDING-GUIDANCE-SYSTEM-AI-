@@ -157,6 +157,11 @@ interface AdminDataStore {
         email: String,
         onResult: (Result<Unit>) -> Unit
     )
+    /** The companies that invited [email] and have not switched the invitation off. */
+    fun loadInvitedCompanies(email: String, onResult: (Result<List<String>>) -> Unit) {
+        onResult(Result.success(emptyList()))
+    }
+
     /** Whether [email] has an active invitation to [companyId], without joining the company. */
     fun isInvited(companyId: String, email: String, onResult: (Result<Boolean>) -> Unit) {
         onResult(Result.failure(UnsupportedOperationException("Invitations cannot be checked here.")))
@@ -376,6 +381,26 @@ class FirebaseAdminDataStore(
             .addOnFailureListener { onResult(Result.failure(it)) }
     }
 
+    override fun loadInvitedCompanies(email: String, onResult: (Result<List<String>>) -> Unit) {
+        val key = InvitationIndex.key(email)
+        if (key == null) {
+            onResult(Result.success(emptyList()))
+            return
+        }
+        database.child("invitationsByEmail").child(key).get()
+            .addOnSuccessListener { invited ->
+                onResult(
+                    Result.success(
+                        invited.children
+                            .filter { it.getValue(Boolean::class.java) == true }
+                            .mapNotNull { it.key }
+                            .filter(COMPANY_ID_PATTERN::matches)
+                    )
+                )
+            }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
     override fun isInvited(companyId: String, email: String, onResult: (Result<Boolean>) -> Unit) {
         val normalizedCompanyId = companyId.trim()
         val normalizedEmail = email.trim().lowercase(java.util.Locale.ROOT)
@@ -411,6 +436,7 @@ class FirebaseAdminDataStore(
                         }
                         val pending = invitations.children.mapNotNull { it.toInvitationAgent() }
                             .filterNot { it.email.lowercase(java.util.Locale.ROOT) in registeredEmails }
+                        fileInvitationsByEmail(invitations)
                         onResult(Result.success((registered + pending).sortedBy { it.email }))
                     }
                     .addOnFailureListener { onResult(Result.failure(it)) }
@@ -535,7 +561,7 @@ class FirebaseAdminDataStore(
                         !committed -> onResult(
                             Result.failure(IllegalArgumentException("An invitation already exists for this email."))
                         )
-                        else -> onResult(Result.success(Unit))
+                        else -> fileInvitation(normalizedEmail, true) { onResult(it) }
                     }
                 }
             }
@@ -549,9 +575,16 @@ class FirebaseAdminDataStore(
     ) {
         if (!isConfigured(onResult)) return
         if (agentId.startsWith(INVITATION_ID_PREFIX)) {
-            agents.child(agentId.removePrefix(INVITATION_ID_PREFIX)).child("isActive")
-                .setValue(isActive)
-                .addOnSuccessListener { onResult(Result.success(Unit)) }
+            val invitation = agents.child(agentId.removePrefix(INVITATION_ID_PREFIX))
+            invitation.child("isActive").setValue(isActive)
+                .addOnSuccessListener {
+                    invitation.child("email").get()
+                        .addOnSuccessListener { email ->
+                            val address = email.getValue(String::class.java)
+                            if (address == null) onResult(Result.success(Unit)) else fileInvitation(address, isActive, onResult)
+                        }
+                        .addOnFailureListener { onResult(Result.success(Unit)) }
+                }
                 .addOnFailureListener { onResult(Result.failure(it)) }
         } else {
             companyRoot.child("members").child(agentId).get()
@@ -567,6 +600,9 @@ class FirebaseAdminDataStore(
                     )
                     if (!invitationKey.isNullOrBlank()) {
                         updates["/companies/$companyId/agentInvitations/$invitationKey/isActive"] = isActive
+                    }
+                    membership.child("email").getValue(String::class.java)?.let(InvitationIndex::key)?.let { key ->
+                        updates["/invitationsByEmail/$key/$companyId"] = isActive
                     }
                     database.updateChildren(updates)
                         .addOnSuccessListener { onResult(Result.success(Unit)) }
@@ -754,6 +790,26 @@ class FirebaseAdminDataStore(
         )
     }
 
+    /** Files this company's invitation under the email, so the agent finds it with no company ID. */
+    private fun fileInvitation(email: String, isActive: Boolean, onResult: (Result<Unit>) -> Unit) {
+        val key = InvitationIndex.key(email)
+        if (key == null) {
+            onResult(Result.success(Unit))
+            return
+        }
+        database.child("invitationsByEmail").child(key).child(companyId).setValue(isActive)
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    private fun fileInvitationsByEmail(invitations: DataSnapshot) {
+        val updates = invitations.children.mapNotNull { invitation ->
+            val key = invitation.child("email").getValue(String::class.java)?.let(InvitationIndex::key) ?: return@mapNotNull null
+            "/invitationsByEmail/$key/$companyId" to (invitation.child("isActive").getValue(Boolean::class.java) == true)
+        }.toMap()
+        if (updates.isNotEmpty()) database.updateChildren(updates)
+    }
+
     private fun <T> isConfigured(onResult: (Result<T>) -> Unit): Boolean {
         if (COMPANY_ID_PATTERN.matches(companyId)) return true
         onResult(Result.failure(IllegalStateException("A trusted company ID is required for this action.")))
@@ -884,4 +940,17 @@ private fun Any?.asLongTimestamp(): Long? = (this as? Number)?.toLong()
 object CompanyBriefLimits {
     const val NAME = 80
     const val MESSAGE = 1500
+}
+
+/**
+ * Where an invitation is filed by email: the address in lower case with dots as commas,
+ * which the database rules can work out from the signed-in person's email to let only them
+ * read it. Null for an address the database cannot use as a key.
+ */
+object InvitationIndex {
+    fun key(email: String): String? {
+        val address = email.trim().lowercase(java.util.Locale.ROOT)
+        if (address.isEmpty() || address.any { it in "#$[]/" }) return null
+        return address.replace('.', ',')
+    }
 }

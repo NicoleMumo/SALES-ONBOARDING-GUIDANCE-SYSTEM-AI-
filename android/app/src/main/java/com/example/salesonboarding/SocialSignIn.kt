@@ -19,9 +19,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Sign-in with a Google account, through Firebase Authentication, which is free on
- * Firebase's no-cost plan. An account can only be used if its email was invited by the
- * company's administrator (agents) or given admin access by the Firebase owner (admins):
- * the same database rules as for email and password decide that.
+ * Firebase's no-cost plan. An account can only be used if a company invited its email
+ * (agents) or the Firebase owner gave it admin access (admins): the same checks and
+ * database rules as for email and password decide that.
  */
 enum class SocialProvider(val label: String) {
     GOOGLE("Google")
@@ -45,7 +45,7 @@ object SocialSignInSetup {
 /** What the sign-in screen needs: the providers set up in this build, and how to start one. */
 class SocialSignIn(
     val providers: List<SocialProvider>,
-    val start: (provider: SocialProvider, companyId: String, role: UserRole, onResult: (Result<SignedInUser>) -> Unit) -> Unit
+    val start: (provider: SocialProvider, onResult: (Result<SignedInUser>) -> Unit) -> Unit
 )
 
 @Composable
@@ -57,7 +57,7 @@ fun rememberSocialSignIn(membershipStore: AdminDataStore): SocialSignIn {
     return remember(googleClientId) {
         SocialSignIn(
             providers = listOfNotNull(SocialProvider.GOOGLE.takeIf { googleClientId != null }),
-            start = { provider, companyId, role, onResult ->
+            start = { provider, onResult ->
                 scope.launch {
                     val clientId = googleClientId
                     if (clientId == null) {
@@ -66,7 +66,7 @@ fun rememberSocialSignIn(membershipStore: AdminDataStore): SocialSignIn {
                     }
                     try {
                         val credential = googleCredential(context, clientId)
-                        signInWithProvider(membershipStore, credential, provider.label, companyId, role, onResult)
+                        signInWithProvider(membershipStore, credential, provider.label, onResult)
                     } catch (_: GetCredentialCancellationException) {
                         onResult(Result.failure(SignInCancelledException()))
                     } catch (_: NoCredentialException) {

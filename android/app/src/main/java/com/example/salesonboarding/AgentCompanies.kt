@@ -10,23 +10,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
@@ -91,25 +82,21 @@ internal const val DEFAULT_COMPANY_MESSAGE =
     "Your administrator has not written a message yet. Follow the company's usual onboarding steps: " +
         "the guide will show you what to ask next and what to fix."
 
-/** "Which company is this client for?": one card per company, and a box to join another. */
+/** "Which company is this client for?": one card per company, and a check for new invitations. */
 @Composable
 fun CompanyPickerScreen(
     companies: List<CompanyMembership>,
     openingCompanyId: String?,
     errorMessage: String?,
-    isJoining: Boolean,
+    isChecking: Boolean,
     onPick: (CompanyMembership) -> Unit,
-    onJoin: (companyId: String) -> Unit,
+    onCheckInvitations: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    infoMessage: String? = null
 ) {
-    val c = Sm.colors
-    var newCompanyId by remember { mutableStateOf("") }
-    val busy = openingCompanyId != null || isJoining
-    fun join() {
-        if (!busy && COMPANY_ID_PATTERN.matches(newCompanyId.trim())) onJoin(newCompanyId.trim())
-    }
+    val busy = openingCompanyId != null || isChecking
     AppScreen(
         title = "Your companies",
         subtitle = "Which company is this client for?",
@@ -119,6 +106,7 @@ fun CompanyPickerScreen(
         modifier = modifier
     ) {
         errorMessage?.let { Banner(it, Tone.Negative) }
+        infoMessage?.let { Banner(it, Tone.Positive) }
         companies.forEach { company ->
             CompanyCard(
                 company = company,
@@ -128,36 +116,13 @@ fun CompanyPickerScreen(
             )
         }
         SectionCard(
-            title = "Join another company",
-            subtitle = "Enter the company ID its administrator gave you. It must have invited your email."
+            title = "Invited by another company?",
+            subtitle = "Companies that invite your email are added when you sign in. Check now to add one without signing out."
         ) {
-            OutlinedTextField(
-                value = newCompanyId,
-                onValueChange = { newCompanyId = it.trim() },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Company ID") },
-                singleLine = true,
-                enabled = !busy,
-                isError = newCompanyId.isNotEmpty() && !COMPANY_ID_PATTERN.matches(newCompanyId),
-                supportingText = { Text("3 to 64 letters, digits, _ or -") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { join() }),
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = c.ink,
-                    unfocusedBorderColor = c.border,
-                    errorBorderColor = c.cherry,
-                    focusedTextColor = c.ink,
-                    unfocusedTextColor = c.ink,
-                    cursorColor = c.ink,
-                    focusedLabelColor = c.ink,
-                    unfocusedLabelColor = c.muted
-                )
-            )
             SecondaryButton(
-                text = if (isJoining) "Joining…" else "Join company",
-                onClick = ::join,
-                enabled = !busy && COMPANY_ID_PATTERN.matches(newCompanyId)
+                text = if (isChecking) "Checking…" else "Check for new invitations",
+                onClick = onCheckInvitations,
+                enabled = !busy
             )
         }
     }
@@ -270,9 +235,9 @@ private fun CompanyPickerPreview() {
             ),
             openingCompanyId = null,
             errorMessage = null,
-            isJoining = false,
+            isChecking = false,
             onPick = {},
-            onJoin = {},
+            onCheckInvitations = {},
             onSignOut = {}
         )
     }

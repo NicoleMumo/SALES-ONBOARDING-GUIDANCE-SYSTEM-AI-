@@ -16,6 +16,15 @@
         }
       }
     },
+    "invitationsByEmail": {
+      "$emailKey": {
+        ".read": "auth != null && auth.token.email != null && $emailKey == auth.token.email.toLowerCase().replace('.', ',')",
+        "$companyId": {
+          ".write": "auth != null && auth.token.admin == true && auth.token.companyId == $companyId",
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
     "companies": {
       "$companyId": {
         "settings": {

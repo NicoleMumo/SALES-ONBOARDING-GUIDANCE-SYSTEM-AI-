@@ -30,9 +30,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             SalesOnboardingTheme {
                 var signedIn by remember { mutableStateOf(false) }
-                var showAdminRegistration by remember { mutableStateOf(false) }
-                var showAgentRegistration by remember { mutableStateOf(false) }
-                var loginRole by remember { mutableStateOf(UserRole.ADMIN) }
+                var showRegistration by remember { mutableStateOf(false) }
                 var selectedRole by remember { mutableStateOf<UserRole?>(null) }
                 var agentId by remember { mutableStateOf("") }
                 var companyId by remember { mutableStateOf("") }
@@ -49,7 +47,8 @@ class MainActivity : ComponentActivity() {
                 var showCompanyBrief by remember { mutableStateOf(false) }
                 var openingCompanyId by remember { mutableStateOf<String?>(null) }
                 var companyError by remember { mutableStateOf<String?>(null) }
-                var isJoiningCompany by remember { mutableStateOf(false) }
+                var isCheckingInvitations by remember { mutableStateOf(false) }
+                var companyInfo by remember { mutableStateOf<String?>(null) }
                 var showAgentSessions by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var selectedContext by remember { mutableStateOf<String?>(null) }
@@ -137,31 +136,38 @@ class MainActivity : ComponentActivity() {
                         agentCompanies = user.companies
                         selectedIndustry = null
                         showAgentHome = true
-                        // One company, or the one typed at sign-in, opens straight away.
-                        val first = user.companies.firstOrNull { it.companyId == user.preferredCompanyId }
-                            ?: user.companies.singleOrNull()
-                        if (first != null) openCompany(first) else showCompanyPicker = true
+                        // An agent of one company goes straight in; with more, they choose.
+                        val only = user.companies.singleOrNull()
+                        if (only != null) openCompany(only) else showCompanyPicker = true
                     } else {
                         showAgentHome = false
                         loadFieldConfiguration(user.companyId)
                     }
                 }
-                /** Joins another company by its ID, if it invited this agent's email. */
-                fun joinCompany(newCompanyId: String) {
+                /** Joins any company that invited this agent's email since they signed in. */
+                fun checkInvitations() {
                     val email = FirebaseAuth.getInstance().currentUser?.email.orEmpty()
-                    isJoiningCompany = true
+                    isCheckingInvitations = true
                     companyError = null
-                    membershipStore.enrollAgent(newCompanyId, agentId, email) { joined ->
-                        joined.onSuccess {
+                    companyInfo = null
+                    membershipStore.loadInvitedCompanies(email) { invited ->
+                        val known = agentCompanies.map { it.companyId }.toSet()
+                        val toJoin = invited.getOrDefault(emptyList()).filter { it !in known }
+                        fun finish() {
                             membershipStore.loadAgentCompanies(agentId, email) { reloaded ->
-                                isJoiningCompany = false
-                                agentCompanies = reloaded.getOrDefault(agentCompanies).filter { it.isActive }
-                                agentCompanies.firstOrNull { it.companyId == newCompanyId }?.let(::openCompany)
+                                isCheckingInvitations = false
+                                val active = reloaded.getOrDefault(agentCompanies).filter { it.isActive }
+                                val added = active.count { it.companyId !in known }
+                                agentCompanies = active
+                                companyInfo = if (added == 0) "No new invitations for $email." else
+                                    "Added $added ${if (added == 1) "company" else "companies"}."
                             }
-                        }.onFailure {
-                            isJoiningCompany = false
-                            companyError = "Could not join $newCompanyId. Check the ID, and that this company invited $email."
                         }
+                        fun joinNext(index: Int) {
+                            if (index == toJoin.size) finish()
+                            else membershipStore.enrollAgent(toJoin[index], agentId, email) { joinNext(index + 1) }
+                        }
+                        joinNext(0)
                     }
                 }
                 /** Opens an unfinished session where it stopped (from My sessions or the home screen). */
@@ -190,6 +196,7 @@ class MainActivity : ComponentActivity() {
                     showCompanyBrief = false
                     openingCompanyId = null
                     companyError = null
+                    companyInfo = null
                     trainingAgreed = false
                     showAgentHome = false
                     showAgentSessions = false
@@ -204,32 +211,16 @@ class MainActivity : ComponentActivity() {
                     fieldConfigurationRequestId++
                 }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (!signedIn && showAdminRegistration) {
-                        AdminRegistrationScreen(
-                            onBackToSignIn = { showAdminRegistration = false },
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                    } else if (!signedIn && showAgentRegistration) {
-                        AgentRegistrationScreen(
-                            onBackToSignIn = { showAgentRegistration = false },
+                    if (!signedIn && showRegistration) {
+                        RegistrationScreen(
+                            onBackToSignIn = { showRegistration = false },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (!signedIn) {
                         SignInScreen(
                             membershipStore = membershipStore,
                             onSignedIn = ::startSignedInSession,
-                            onRegisterAdmin = {
-                                loginRole = UserRole.ADMIN
-                                showAgentRegistration = false
-                                showAdminRegistration = true
-                            },
-                            onRegisterAgent = {
-                                loginRole = UserRole.SALES_AGENT
-                                showAdminRegistration = false
-                                showAgentRegistration = true
-                            },
-                            initialRole = loginRole,
-                            onRoleSelected = { loginRole = it },
+                            onRegister = { showRegistration = true },
                             // Full screen: the photo runs under the status bar and the
                             // sheet pads the system bars itself.
                             modifier = Modifier
@@ -248,9 +239,10 @@ class MainActivity : ComponentActivity() {
                             companies = agentCompanies,
                             openingCompanyId = openingCompanyId,
                             errorMessage = companyError,
-                            isJoining = isJoiningCompany,
+                            isChecking = isCheckingInvitations,
+                            infoMessage = companyInfo,
                             onPick = ::openCompany,
-                            onJoin = ::joinCompany,
+                            onCheckInvitations = ::checkInvitations,
                             onSignOut = ::signOut,
                             // Back to the company already open, if there is one.
                             onBack = openedCompany?.let { { showCompanyPicker = false; companyError = null } },

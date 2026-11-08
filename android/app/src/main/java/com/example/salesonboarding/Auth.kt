@@ -111,10 +111,8 @@ enum class UserRole(val label: String) {
 }
 
 data class LoginFormState(
-    val companyId: String = "",
     val email: String = "",
     val password: String = "",
-    val role: UserRole = UserRole.SALES_AGENT,
     val errorMessage: String? = null,
     val isSubmitting: Boolean = false,
     val infoMessage: String? = null
@@ -136,10 +134,6 @@ object LoginFormValidator {
     fun validate(email: String, password: String): String? =
         validateEmail(email) ?: if (password.isBlank()) "Enter your password." else null
 
-    fun validateCompanyId(companyId: String): String? =
-        if (COMPANY_ID_PATTERN.matches(companyId.trim())) null
-        else "Enter the company ID provided by your administrator."
-
     fun validateEmail(email: String): String? {
         if (email.isBlank()) return "Enter your email address."
         if (!EMAIL_PATTERN.matches(email.trim())) {
@@ -151,75 +145,50 @@ object LoginFormValidator {
     private val EMAIL_PATTERN = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
 }
 
+/**
+ * One sign-in for everyone. Whether the person is an administrator or a sales agent comes
+ * from their account, not from a choice on this screen; a sales agent's companies come from
+ * the invitations sent to their email, so no company ID is typed.
+ */
 @Composable
 fun UnifiedLoginScreen(
-    onLogin: (
-        companyId: String,
-        email: String,
-        password: String,
-        role: UserRole,
-        onResult: (Result<UserRole>) -> Unit
-    ) -> Unit,
-    onRegisterAdmin: () -> Unit,
-    onRegisterAgent: () -> Unit,
-    initialRole: UserRole = UserRole.SALES_AGENT,
-    onRoleSelected: (UserRole) -> Unit = {},
+    onLogin: (email: String, password: String, onResult: (Result<UserRole>) -> Unit) -> Unit,
+    onRegister: () -> Unit,
     onResetPassword: (email: String, onResult: (String?) -> Unit) -> Unit = { _, onResult ->
         onResult(PasswordReset.FAILED_MESSAGE)
     },
-    /** Google, when set up in this build; none hides the "or" part. */
+    /** Google, when set up in this build. */
     socialProviders: List<SocialProvider> = emptyList(),
-    onSocialLogin: (
-        provider: SocialProvider,
-        companyId: String,
-        role: UserRole,
-        onResult: (Result<UserRole>) -> Unit
-    ) -> Unit = { _, _, _, onResult -> onResult(Result.failure(SignInCancelledException())) },
+    onSocialLogin: (provider: SocialProvider, onResult: (Result<UserRole>) -> Unit) -> Unit = { _, onResult ->
+        onResult(Result.failure(SignInCancelledException()))
+    },
     modifier: Modifier = Modifier
 ) {
-    var state by remember { mutableStateOf(LoginFormState(role = initialRole)) }
-    val isAgent = state.role == UserRole.SALES_AGENT
+    var state by remember { mutableStateOf(LoginFormState()) }
     val enabled = !state.isSubmitting
     val colors = LocalSignInColors.current
     val fonts = rememberSignInFonts()
 
+    fun showFailure(failure: Throwable) {
+        state = state.copy(
+            isSubmitting = false,
+            errorMessage = if (failure is SignInCancelledException) null else failure.message ?: "Sign-in failed. Try again."
+        )
+    }
+
     fun submit() {
-        val error = (if (isAgent && state.companyId.isNotBlank()) LoginFormValidator.validateCompanyId(state.companyId) else null)
-            ?: LoginFormValidator.validate(state.email, state.password)
+        val error = LoginFormValidator.validate(state.email, state.password)
         if (error != null) {
             state = state.copy(errorMessage = error)
             return
         }
         state = state.copy(isSubmitting = true, errorMessage = null, infoMessage = null)
-        onLogin(state.companyId.trim(), state.email.trim(), state.password, state.role) { result ->
-            result.onFailure { failure ->
-                state = state.copy(
-                    isSubmitting = false,
-                    errorMessage = failure.message ?: "Sign-in failed. Try again."
-                )
-            }
-        }
+        onLogin(state.email.trim(), state.password) { result -> result.onFailure(::showFailure) }
     }
 
-    // No email or password: the provider gives the email. A returning agent may leave the
-    // company ID empty; a first sign-in needs it to find the invitation.
     fun socialSubmit(provider: SocialProvider) {
-        val companyId = state.companyId.trim()
-        val error = if (isAgent && companyId.isNotEmpty()) LoginFormValidator.validateCompanyId(companyId) else null
-        if (error != null) {
-            state = state.copy(errorMessage = error, infoMessage = null)
-            return
-        }
         state = state.copy(isSubmitting = true, errorMessage = null, infoMessage = null)
-        onSocialLogin(provider, companyId, state.role) { result ->
-            result.onFailure { failure ->
-                state = state.copy(
-                    isSubmitting = false,
-                    errorMessage = if (failure is SignInCancelledException) null
-                    else failure.message ?: "Sign-in failed. Try again."
-                )
-            }
-        }
+        onSocialLogin(provider) { result -> result.onFailure(::showFailure) }
     }
 
     // Uses the email already typed, so the person does not have to enter it twice.
@@ -240,23 +209,20 @@ fun UnifiedLoginScreen(
     }
 
     SignInFrame(modifier) {
-        RoleSwitch(state.role, enabled, colors, fonts) { role ->
-            state = state.copy(role = role, errorMessage = null, infoMessage = null)
-            onRoleSelected(role)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "Sign in",
+                color = colors.ink,
+                style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 22.sp),
+                modifier = Modifier.semantics { heading() }
+            )
+            Text(
+                "Sales agents and administrators use the same sign-in.",
+                color = colors.fieldLabel,
+                style = TextStyle(fontFamily = fonts.text, fontSize = 14.sp)
+            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Agents sign in to a company, so the login logic needs its ID.
-            if (isAgent) {
-                SignInField(
-                    label = "Company ID · first time or new company",
-                    value = state.companyId,
-                    onValueChange = { state = state.copy(companyId = it.trim(), errorMessage = null) },
-                    icon = Icons.Outlined.Home,
-                    enabled = enabled,
-                    colors = colors,
-                    fonts = fonts
-                )
-            }
             SignInField(
                 label = "Email",
                 value = state.email,
@@ -301,8 +267,8 @@ fun UnifiedLoginScreen(
             )
         }
         SignInButton(state.isSubmitting, colors, fonts, onClick = ::submit)
-        // Only an invited email (agents) or an account given admin access can get in; a
-        // refused account is told why after it is picked.
+        // Only an invited email or an account given admin access can get in; a refused
+        // account is told why after it is picked.
         socialProviders.forEach { provider ->
             SocialButton(provider, enabled, colors, fonts) { socialSubmit(provider) }
         }
@@ -311,14 +277,9 @@ fun UnifiedLoginScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SignInLink(
-                if (isAgent) "New agent? Create account" else "Register",
-                enabled, colors, fonts,
-                onClick = if (isAgent) onRegisterAgent else onRegisterAdmin
-            )
+            SignInLink("Create account", enabled, colors, fonts, onClick = onRegister)
             SignInLink("Forgot password?", enabled, colors, fonts, onClick = ::resetPassword)
         }
-
     }
 }
 
@@ -430,45 +391,6 @@ private fun SignInPhoto(height: Dp, colors: SignInColors, fonts: SignInFonts) {
                 ),
                 modifier = Modifier.semantics { heading() }
             )
-        }
-    }
-}
-
-/** Sales agent or administrator: two equal buttons, 46 dp tall with a 48 dp touch area. */
-@Composable
-private fun RoleSwitch(
-    selected: UserRole,
-    enabled: Boolean,
-    colors: SignInColors,
-    fonts: SignInFonts,
-    onSelect: (UserRole) -> Unit
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = Modifier.selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        listOf(UserRole.SALES_AGENT, UserRole.ADMIN).forEach { role ->
-            val isSelected = role == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .minimumInteractiveComponentSize()
-                    .heightIn(min = 46.dp)
-                    .clip(shape)
-                    .background(if (isSelected) colors.ink else Color.Transparent)
-                    .border(1.5.dp, colors.ink, shape)
-                    .selectable(selected = isSelected, enabled = enabled, role = Role.RadioButton) { onSelect(role) }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    role.label,
-                    color = if (isSelected) colors.onInk else colors.ink,
-                    textAlign = TextAlign.Center,
-                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                )
-            }
         }
     }
 }
@@ -735,18 +657,11 @@ fun AccountRegistrationScreen(
     instructions: String,
     completionMessage: String,
     onBackToSignIn: () -> Unit,
-    onRegister: (
-        companyId: String,
-        email: String,
-        password: String,
-        onResult: (Result<Unit>) -> Unit
-    ) -> Unit,
-    requiresCompanyId: Boolean = false,
+    onRegister: (email: String, password: String, onResult: (Result<Unit>) -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = LocalSignInColors.current
     val fonts = rememberSignInFonts()
-    var companyId by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmedPassword by remember { mutableStateOf("") }
@@ -757,9 +672,7 @@ fun AccountRegistrationScreen(
     BackHandler(enabled = !isSubmitting, onBack = onBackToSignIn)
 
     fun submit() {
-        val companyIdError = if (requiresCompanyId) LoginFormValidator.validateCompanyId(companyId) else null
         val validationError = when {
-            companyIdError != null -> companyIdError
             LoginFormValidator.validateEmail(email) != null -> LoginFormValidator.validateEmail(email)
             password.length < MIN_PASSWORD_LENGTH -> "Use a password with at least $MIN_PASSWORD_LENGTH characters."
             password != confirmedPassword -> "The passwords do not match."
@@ -770,7 +683,7 @@ fun AccountRegistrationScreen(
             return
         }
         isSubmitting = true
-        onRegister(companyId.trim(), email.trim(), password) { result ->
+        onRegister(email.trim(), password) { result ->
             isSubmitting = false
             result.onSuccess {
                 registered = true
@@ -793,17 +706,6 @@ fun AccountRegistrationScreen(
         Text(title, color = colors.ink, style = heading)
         Text(instructions, color = colors.fieldLabel, style = body)
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (requiresCompanyId) {
-                SignInField(
-                    label = "Company ID",
-                    value = companyId,
-                    onValueChange = { companyId = it.trim(); errorMessage = null },
-                    icon = Icons.Outlined.Home,
-                    enabled = enabled,
-                    colors = colors,
-                    fonts = fonts
-                )
-            }
             SignInField(
                 label = "Email",
                 value = email,
@@ -881,9 +783,8 @@ private const val MIN_PASSWORD_LENGTH = 8
 private fun SignInPreview() {
     SalesOnboardingTheme {
         UnifiedLoginScreen(
-            onLogin = { _, _, _, _, _ -> },
-            onRegisterAdmin = {},
-            onRegisterAgent = {},
+            onLogin = { _, _, _ -> },
+            onRegister = {},
             socialProviders = listOf(SocialProvider.GOOGLE)
         )
     }
@@ -907,9 +808,7 @@ data class SignedInUser(
     val companyId: String,
     val role: UserRole,
     /** The companies a sales agent works for and may open now. */
-    val companies: List<CompanyMembership> = emptyList(),
-    /** The company whose ID the agent typed at sign-in, opened straight away. */
-    val preferredCompanyId: String? = null
+    val companies: List<CompanyMembership> = emptyList()
 )
 
 /** The sign-in screen, connected to Firebase. [onSignedIn] runs before the screen is told of the success. */
@@ -917,31 +816,25 @@ data class SignedInUser(
 fun SignInScreen(
     membershipStore: AdminDataStore,
     onSignedIn: (SignedInUser) -> Unit,
-    onRegisterAdmin: () -> Unit,
-    onRegisterAgent: () -> Unit,
-    initialRole: UserRole,
-    onRoleSelected: (UserRole) -> Unit,
+    onRegister: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val social = rememberSocialSignIn(membershipStore)
     UnifiedLoginScreen(
         socialProviders = social.providers,
-        onSocialLogin = { provider, companyId, role, onResult ->
-            social.start(provider, companyId, role) { result ->
+        onSocialLogin = { provider, onResult ->
+            social.start(provider) { result ->
                 result.onSuccess(onSignedIn)
                 onResult(result.map(SignedInUser::role))
             }
         },
-        onLogin = { companyId, email, password, role, onResult ->
-            signIn(membershipStore, companyId, email, password, role) { result ->
+        onLogin = { email, password, onResult ->
+            signIn(membershipStore, email, password) { result ->
                 result.onSuccess(onSignedIn)
                 onResult(result.map(SignedInUser::role))
             }
         },
-        onRegisterAdmin = onRegisterAdmin,
-        onRegisterAgent = onRegisterAgent,
-        initialRole = initialRole,
-        onRoleSelected = onRoleSelected,
+        onRegister = onRegister,
         onResetPassword = { email, onResult ->
             FirebaseAuth.getInstance().sendPasswordResetEmail(email)
                 .addOnCompleteListener { task ->
@@ -952,50 +845,29 @@ fun SignInScreen(
     )
 }
 
+/** One "Create account" for everyone: invited agents and future administrators alike. */
 @Composable
-fun AdminRegistrationScreen(onBackToSignIn: () -> Unit, modifier: Modifier = Modifier) {
+fun RegistrationScreen(onBackToSignIn: () -> Unit, modifier: Modifier = Modifier) {
     AccountRegistrationScreen(
-        title = "Administrator registration",
-        instructions = "Create an account, verify your email, then ask the Firebase owner to assign your company ID and administrator access.",
-        completionMessage = "Account created. After verification, ask the Firebase owner to assign your company and admin role before signing in.",
+        title = "Create account",
+        instructions = "Use the email a company invited, or the email your administrator account will use. " +
+            "Choose a password, then open the link we send to confirm the email.",
+        completionMessage = "Account created. Open the link we sent to your email, then sign in. " +
+            "Sales agents see the companies that invited them. For administrator access, ask the Firebase owner.",
         onBackToSignIn = onBackToSignIn,
-        onRegister = { _, email, password, onResult -> registerAdminAccount(email, password, onResult) },
-        modifier = modifier
-    )
-}
-
-@Composable
-fun AgentRegistrationScreen(onBackToSignIn: () -> Unit, modifier: Modifier = Modifier) {
-    AccountRegistrationScreen(
-        title = "Create agent account",
-        instructions = if (REQUIRE_AGENT_EMAIL_VERIFICATION) {
-            "Enter your company ID and the invited work email. Choose a password, then verify your email before signing in."
-        } else {
-            "Enter your company ID and the invited work email, then choose your password."
-        },
-        completionMessage = if (REQUIRE_AGENT_EMAIL_VERIFICATION) {
-            "Your account was created. Check your email and verify the address, then sign in with the password you chose."
-        } else {
-            "Your account was created. Sign in with your email and the password you chose."
-        },
-        onBackToSignIn = onBackToSignIn,
-        onRegister = ::registerAgentAccount,
-        requiresCompanyId = true,
+        onRegister = ::registerAccount,
         modifier = modifier
     )
 }
 
 /**
- * Signs in with Firebase, then checks the role in the account's token against the role
- * the person chose. Admins need a company claim and a verified email; agents need an
- * active membership of the company they typed (or an invitation, which enrols them).
+ * Signs in with Firebase, then decides from the account who the person is: an account the
+ * Firebase owner gave admin access opens its company's dashboard, any other is a sales agent.
  */
 private fun signIn(
     membershipStore: AdminDataStore,
-    requestedCompanyId: String,
     email: String,
     password: String,
-    requestedRole: UserRole,
     onResult: (Result<SignedInUser>) -> Unit
 ) {
     FirebaseAuth.getInstance()
@@ -1007,9 +879,7 @@ private fun signIn(
                 return@addOnSuccessListener
             }
             user.getIdToken(true)
-                .addOnSuccessListener { token ->
-                    checkAccess(membershipStore, user, token.claims, requestedCompanyId, email, requestedRole, onResult)
-                }
+                .addOnSuccessListener { token -> checkAccess(membershipStore, user, token.claims, onResult) }
                 .addOnFailureListener { error -> signOutAndFail(onResult, loginFailureForDisplay(error)) }
         }
         .addOnFailureListener { error ->
@@ -1018,17 +888,14 @@ private fun signIn(
 }
 
 /**
- * Signs in with a Google account, then applies the same checks as [signIn].
- * A new agent account is kept only if its email was invited to the company: otherwise it is
- * deleted again, so an uninvited person never keeps an account. A new admin account is kept
- * (signed out), because the Firebase owner needs it to give admin access.
+ * Signs in with a Google account, then applies the same checks as [signIn]. A new account is
+ * kept only if some company invited its email: otherwise it is deleted again, so an uninvited
+ * person never keeps an account. (A future administrator creates an account first.)
  */
 internal fun signInWithProvider(
     membershipStore: AdminDataStore,
     credential: AuthCredential,
     providerName: String,
-    requestedCompanyId: String,
-    requestedRole: UserRole,
     onResult: (Result<SignedInUser>) -> Unit
 ) {
     val auth = FirebaseAuth.getInstance()
@@ -1051,9 +918,7 @@ internal fun signInWithProvider(
 
             fun continueSignIn() {
                 user.getIdToken(true)
-                    .addOnSuccessListener { token ->
-                        checkAccess(membershipStore, user, token.claims, requestedCompanyId, email.orEmpty(), requestedRole, onResult)
-                    }
+                    .addOnSuccessListener { token -> checkAccess(membershipStore, user, token.claims, onResult) }
                     .addOnFailureListener { error -> signOutAndFail(onResult, loginFailureForDisplay(error)) }
             }
 
@@ -1063,33 +928,21 @@ internal fun signInWithProvider(
                 } else {
                     signOutAndFail(onResult, IllegalStateException("Your $providerName account did not share an email address."))
                 }
-                isNew && requestedRole == UserRole.ADMIN -> signOutAndFail(
-                    onResult,
-                    IllegalStateException("Signed in with $providerName as $email. Ask the Firebase owner to give this account administrator access, then sign in again.")
-                )
-                isNew -> if (requestedCompanyId.isBlank()) {
-                    removeAndFail("First time here? Enter the company ID from your invitation, then continue with $providerName.")
-                } else {
-                    membershipStore.isInvited(requestedCompanyId, email) { invited ->
-                        when {
-                            invited.getOrDefault(false).not() -> removeAndFail(
-                                "$email is not invited to company $requestedCompanyId. Ask your administrator to invite this email, or check the company ID."
-                            )
-                            // Google confirms the email; any other account is sent a link first.
-                            user.isEmailVerified -> membershipStore.enrollAgent(requestedCompanyId, user.uid, email) { enrolment ->
-                                enrolment.onSuccess { continueSignIn() }.onFailure {
-                                    signOutAndFail(onResult, IllegalStateException("Could not join company $requestedCompanyId. Try again.", it))
-                                }
-                            }
-                            else -> user.sendEmailVerification().addOnCompleteListener { sent ->
-                                signOutAndFail(
-                                    onResult,
-                                    IllegalStateException(
-                                        if (sent.isSuccessful) "We sent a link to $email. Open it to confirm the email, then enter the company ID and continue with $providerName again."
-                                        else "Confirm $email before signing in. The link could not be sent; try again in a few minutes."
-                                    )
+                isNew -> membershipStore.loadInvitedCompanies(email) { invited ->
+                    when {
+                        invited.getOrDefault(emptyList()).isEmpty() -> removeAndFail(
+                            "No company has invited $email yet. Ask your administrator to invite this email, then try again."
+                        )
+                        // Google confirms the email; any other account is sent a link first.
+                        user.isEmailVerified -> continueSignIn()
+                        else -> user.sendEmailVerification().addOnCompleteListener { sent ->
+                            signOutAndFail(
+                                onResult,
+                                IllegalStateException(
+                                    if (sent.isSuccessful) "We sent a link to $email. Open it to confirm the email, then continue with $providerName again."
+                                    else "Confirm $email before signing in. The link could not be sent; try again in a few minutes."
                                 )
-                            }
+                            )
                         }
                     }
                 }
@@ -1104,33 +957,25 @@ internal fun signInWithProvider(
         }
 }
 
+/** Admin or sales agent, from the account's own marks; then the checks for that role. */
 private fun checkAccess(
     membershipStore: AdminDataStore,
     user: FirebaseUser,
     claims: Map<String, Any>,
-    requestedCompanyId: String,
-    email: String,
-    requestedRole: UserRole,
     onResult: (Result<SignedInUser>) -> Unit
 ) {
     val claimedCompanyId = claims["companyId"] as? String
-    val trustedRole = if (claims["admin"] == true) UserRole.ADMIN else UserRole.SALES_AGENT
+    val isAdmin = claims["admin"] == true
     when {
-        trustedRole != requestedRole -> signOutAndFail(
-            onResult,
-            IllegalStateException("This account does not have ${requestedRole.label.lowercase()} access.")
-        )
-        trustedRole == UserRole.ADMIN && !COMPANY_ID_PATTERN.matches(claimedCompanyId.orEmpty()) -> signOutAndFail(
+        isAdmin && !COMPANY_ID_PATTERN.matches(claimedCompanyId.orEmpty()) -> signOutAndFail(
             onResult,
             IllegalStateException("This admin account has no valid company assignment. Ask the Firebase owner to set its companyId claim.")
         )
-        trustedRole == UserRole.ADMIN && !user.isEmailVerified -> signOutAndFail(
+        isAdmin && !user.isEmailVerified -> signOutAndFail(
             onResult,
             IllegalStateException("Verify this email address before administrator access can be enabled.")
         )
-        trustedRole == UserRole.ADMIN -> onResult(
-            Result.success(SignedInUser(user.uid, requireNotNull(claimedCompanyId), trustedRole))
-        )
+        isAdmin -> onResult(Result.success(SignedInUser(user.uid, requireNotNull(claimedCompanyId), UserRole.ADMIN)))
         REQUIRE_AGENT_EMAIL_VERIFICATION && !user.isEmailVerified ->
             user.sendEmailVerification().addOnCompleteListener { verification ->
                 val message = if (verification.isSuccessful) {
@@ -1140,33 +985,26 @@ private fun checkAccess(
                 }
                 signOutAndFail(onResult, IllegalStateException(message, verification.exception))
             }
-        else -> signInAgent(membershipStore, user, requestedCompanyId, email, onResult)
+        else -> signInAgent(membershipStore, user, onResult)
     }
 }
 
+/**
+ * A sales agent's companies: those they joined, plus every company that has invited their
+ * email since, which they join now. No company ID is typed.
+ */
 private fun signInAgent(
     membershipStore: AdminDataStore,
     user: FirebaseUser,
-    requestedCompanyId: String,
-    email: String,
     onResult: (Result<SignedInUser>) -> Unit
 ) {
-    val userEmail = user.email ?: email
-    val requested = requestedCompanyId.trim()
+    val email = user.email.orEmpty()
 
     fun finish(companies: List<CompanyMembership>) {
         val active = companies.filter { it.isActive }
         when {
             active.isNotEmpty() -> onResult(
-                Result.success(
-                    SignedInUser(
-                        userId = user.uid,
-                        companyId = "",
-                        role = UserRole.SALES_AGENT,
-                        companies = active,
-                        preferredCompanyId = requested.takeIf { id -> active.any { it.companyId == id } }
-                    )
-                )
+                Result.success(SignedInUser(user.uid, companyId = "", role = UserRole.SALES_AGENT, companies = active))
             )
             companies.isNotEmpty() -> signOutAndFail(
                 onResult,
@@ -1174,128 +1012,69 @@ private fun signInAgent(
             )
             else -> signOutAndFail(
                 onResult,
-                IllegalStateException("You have not joined a company yet. Enter the company ID from your invitation.")
+                IllegalStateException(
+                    "No company has invited $email yet. Ask your administrator to invite this email. " +
+                        "Administrators: ask the Firebase owner for admin access."
+                )
             )
         }
     }
 
-    membershipStore.loadAgentCompanies(user.uid, userEmail) { loaded ->
-        loaded.onSuccess { companies ->
-            // A company ID typed at sign-in joins that company, if it invited this email.
-            if (requested.isEmpty() || companies.any { it.companyId == requested }) {
-                finish(companies)
-                return@onSuccess
-            }
-            membershipStore.enrollAgent(requested, user.uid, userEmail) { joined ->
-                joined.onSuccess {
-                    membershipStore.loadAgentCompanies(user.uid, userEmail) { reloaded ->
-                        finish(reloaded.getOrDefault(companies))
-                    }
-                }.onFailure { error ->
-                    signOutAndFail(
-                        onResult,
-                        IllegalStateException(
-                            "$userEmail is not invited to company $requested. Check the company ID, or leave it empty to open your companies.",
-                            error
-                        )
-                    )
-                }
-            }
-        }.onFailure { error ->
+    membershipStore.loadAgentCompanies(user.uid, email) { loaded ->
+        val companies = loaded.getOrElse { error ->
             signOutAndFail(
                 onResult,
-                IllegalStateException("Could not verify this agent account. Try again when Firebase is available.", error)
+                IllegalStateException("Could not verify this account. Try again when Firebase is available.", error)
             )
+            return@loadAgentCompanies
+        }
+        membershipStore.loadInvitedCompanies(email) { invited ->
+            val toJoin = invited.getOrDefault(emptyList()).filter { id -> companies.none { it.companyId == id } }
+            if (toJoin.isEmpty()) {
+                finish(companies)
+                return@loadInvitedCompanies
+            }
+            // Join each new company in turn; one that fails (for example a switched-off
+            // invitation) is skipped, the others still open.
+            fun joinNext(index: Int) {
+                if (index == toJoin.size) {
+                    membershipStore.loadAgentCompanies(user.uid, email) { reloaded -> finish(reloaded.getOrDefault(companies)) }
+                    return
+                }
+                membershipStore.enrollAgent(toJoin[index], user.uid, email) { joinNext(index + 1) }
+            }
+            joinNext(0)
         }
     }
 }
 
-private fun registerAdminAccount(email: String, password: String, onResult: (Result<Unit>) -> Unit) {
-    FirebaseAuth.getInstance()
-        .createUserWithEmailAndPassword(email, password)
+/** Creates an account and sends the link that confirms its email; the person signs in after. */
+private fun registerAccount(email: String, password: String, onResult: (Result<Unit>) -> Unit) {
+    val auth = FirebaseAuth.getInstance()
+    auth.createUserWithEmailAndPassword(email.trim().lowercase(Locale.ROOT), password)
         .addOnSuccessListener { authResult ->
             val newUser = authResult.user
             if (newUser == null) {
                 signOutAndFail(onResult, IllegalStateException("Firebase created no account."))
                 return@addOnSuccessListener
             }
-            newUser.sendEmailVerification()
-                .addOnSuccessListener {
-                    FirebaseAuth.getInstance().signOut()
-                    onResult(Result.success(Unit))
-                }
-                .addOnFailureListener { error ->
-                    signOutAndFail(
-                        onResult,
-                        IllegalStateException(
-                            "Your account was created, but Firebase could not send the verification email. Contact the project owner before trying to register again.",
-                            error
-                        )
-                    )
-                }
-        }
-        .addOnFailureListener { error -> signOutAndFail(onResult, loginFailureForDisplay(error)) }
-}
-
-private fun registerAgentAccount(
-    companyId: String,
-    email: String,
-    password: String,
-    onResult: (Result<Unit>) -> Unit
-) {
-    if (!COMPANY_ID_PATTERN.matches(companyId.trim())) {
-        onResult(Result.failure(IllegalArgumentException("Enter the company ID provided by your administrator.")))
-        return
-    }
-    val auth = FirebaseAuth.getInstance()
-    val normalizedEmail = email.trim().lowercase(Locale.ROOT)
-    auth.createUserWithEmailAndPassword(normalizedEmail, password)
-        .addOnSuccessListener { authResult ->
-            val newUser = authResult.user
-            if (newUser == null) {
+            newUser.sendEmailVerification().addOnCompleteListener { verification ->
                 auth.signOut()
-                onResult(Result.failure(IllegalStateException("Firebase created no account.")))
-                return@addOnSuccessListener
-            }
-
-            fun rejectAndRemoveAccount(reason: Exception) {
-                newUser.delete().addOnCompleteListener { deletion ->
-                    auth.signOut()
-                    val error = if (deletion.isSuccessful) {
-                        reason
-                    } else {
-                        IllegalStateException(
-                            "${reason.message} The unapproved account could not be removed; contact the administrator.",
-                            deletion.exception
-                        )
-                    }
-                    onResult(Result.failure(error))
-                }
-            }
-
-            if (REQUIRE_AGENT_EMAIL_VERIFICATION) {
-                newUser.sendEmailVerification().addOnCompleteListener { verification ->
-                    if (verification.isSuccessful) {
-                        auth.signOut()
-                        onResult(Result.success(Unit))
-                    } else {
-                        rejectAndRemoveAccount(
+                if (verification.isSuccessful) {
+                    onResult(Result.success(Unit))
+                } else {
+                    onResult(
+                        Result.failure(
                             IllegalStateException(
-                                "Your account was created, but Firebase could not send the verification email.",
+                                "Your account was created, but the confirmation email could not be sent. Sign in to get a new link.",
                                 verification.exception
                             )
                         )
-                    }
+                    )
                 }
-            } else {
-                auth.signOut()
-                onResult(Result.success(Unit))
             }
         }
-        .addOnFailureListener { error ->
-            auth.signOut()
-            onResult(Result.failure(loginFailureForDisplay(error)))
-        }
+        .addOnFailureListener { error -> signOutAndFail(onResult, loginFailureForDisplay(error)) }
 }
 
 private fun <T> signOutAndFail(onResult: (Result<T>) -> Unit, error: Throwable) {

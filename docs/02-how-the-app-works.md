@@ -9,21 +9,19 @@ team follows the process.
 
 ## An agent's session
 
-1. **Sign in.** The agent picks "Sales agent" and enters their email and
-   password. The company ID is needed only the first time, or to join another
-   company that invited them. **Forgot password?** sends a Firebase reset link to the email
-   typed; the app gives the same reply whether or not that email has an account.
-   **Continue with Google** signs in without a password, but only if that
-   Google account's email was invited by the company's
-   admin (the same database rules as for passwords decide). The first time, the
-   agent enters the company ID; after that it can be left empty. An uninvited
-   account is deleted again at once. The button appears only when it is set up
-   (see [01-set-up-and-run.md](01-set-up-and-run.md)). An admin can also use
-   Google, once the Firebase owner has given that account admin
-   access.
+1. **Sign in.** One sign-in for everyone: email and password, or **Continue
+   with Google**. There is no role to pick and no company ID to type. An account
+   the Firebase owner gave admin access opens the admin pages; any other account
+   is a sales agent, who joins every company that invited their email (found
+   by email alone). **Create account** is the same for agents and future admins.
+   **Forgot password?** sends a Firebase reset link to the email typed; the app
+   gives the same reply whether or not that email has an account. A new Google
+   account that no company invited is deleted again at once. The Google button
+   appears only when it is set up (see [01-set-up-and-run.md](01-set-up-and-run.md)).
    **Choose the company.** An agent can work for several companies. With one
    company, it opens straight away; with more, the agent picks the company this
-   client is for (and can join another by its ID). Each time a company is
+   client is for. **Check for new invitations** adds a company that invited them
+   since they signed in. Each time a company is
    opened, its **message to agents** is shown first: what the company does and
    what to watch for, written by its admin. Then its home screen, with its name
    at the top, a **Message from ...** button to read it again, and a switch

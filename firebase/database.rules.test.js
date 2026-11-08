@@ -42,6 +42,11 @@ function seedData() {
       "agent-beta": { [BETA]: true },
       "agent-both": { [ACME]: true, [BETA]: true },
     },
+    // Invitations filed by email (dots as commas), so an agent needs no company ID to sign in.
+    invitationsByEmail: {
+      "new@acme,com": { [ACME]: true, [BETA]: true },
+      "one@acme,com": { [ACME]: true },
+    },
     companies: {
       [ACME]: {
         settings: {
@@ -339,6 +344,31 @@ describe("Realtime Database access rules", function () {
       await assertSucceeds(set(ref(adminBeta(), path(BETA, "members/agent-both/isActive")), false));
       await assertFails(set(ref(agentBoth(), path(BETA, "onboardingSessions/c")), newSession(BETA, "agent-both")));
       await assertSucceeds(set(ref(agentBoth(), path(ACME, "onboardingSessions/d")), newSession(ACME, "agent-both")));
+    });
+  });
+
+  describe("finding invitations by email, with no company ID", function () {
+    const newAgent = () => as("agent-new", { email: "new@acme.com", email_verified: true });
+
+    it("lets a person read the invitations filed under their own email only", async function () {
+      await assertSucceeds(get(ref(newAgent(), "invitationsByEmail/new@acme,com")));
+      await assertSucceeds(get(ref(as("agent-new", { email: "New@Acme.com" }), "invitationsByEmail/new@acme,com")));
+      await assertFails(get(ref(newAgent(), "invitationsByEmail/one@acme,com")));
+      await assertFails(get(ref(newAgent(), "invitationsByEmail")));
+      await assertFails(get(ref(signedOut(), "invitationsByEmail/new@acme,com")));
+    });
+
+    it("lets an admin file an invitation for their own company only", async function () {
+      await assertSucceeds(set(ref(adminAcme(), `invitationsByEmail/fresh@acme,com/${ACME}`), true));
+      await assertSucceeds(set(ref(adminAcme(), `invitationsByEmail/one@acme,com/${ACME}`), false));
+      await assertFails(set(ref(adminAcme(), `invitationsByEmail/fresh@acme,com/${BETA}`), true));
+      await assertFails(set(ref(adminAcme(), `invitationsByEmail/fresh@acme,com/${ACME}`), "yes"));
+      await assertFails(get(ref(adminAcme(), "invitationsByEmail/new@acme,com")));
+    });
+
+    it("never lets an agent file an invitation", async function () {
+      await assertFails(set(ref(newAgent(), `invitationsByEmail/new@acme,com/${ACME}`), true));
+      await assertFails(set(ref(newAgent(), `invitationsByEmail/new@acme,com/other`), true));
     });
   });
 

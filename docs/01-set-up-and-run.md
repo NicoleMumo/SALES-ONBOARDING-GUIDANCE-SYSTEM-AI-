@@ -65,7 +65,7 @@ await getAuth().setCustomUserClaims(userUid, {
 });
 ```
 
-1. The admin registers in the app (Administrator > Register) and verifies
+1. The admin creates an account in the app (**Create account**) and verifies
    their email.
 2. The project owner sets the claims above. Company IDs are 3 to 64 letters,
    digits, `_` or `-`, and should never change.
@@ -75,19 +75,20 @@ await getAuth().setCustomUserClaims(userUid, {
 
 ## 3. Invite an agent
 
-1. The admin opens **Agents** and adds the agent's name and work email.
-2. The admin gives the agent the company ID.
-3. The agent creates an account with that email and company ID, then signs in.
-   On first sign-in the app checks the invitation and makes them a member.
-   Instead of a password, the agent can enter the company ID and tap
-   **Continue with Google**, if that Google account uses the invited email.
-4. On the **Company** page, the admin can write the company name and a message
+1. The admin opens **Agents** and adds the agent's name and work email. The
+   invitation is also filed under that email (`invitationsByEmail/`), which only
+   that person can read, so the agent never needs the company ID.
+2. The agent taps **Create account** with that email, confirms it from the
+   link, and signs in (or taps **Continue with Google** with that Gmail). On
+   sign-in the app joins every company that invited the email.
+3. On the **Company** page, the admin can write the company name and a message
    agents see each time they open the company.
 
-An agent can work for several companies. Each company invites the same email;
-the agent joins another one by typing its company ID at sign-in, or under
-**Join another company** on the company list. Switching an agent off in one
-company does not affect the others.
+An agent can work for several companies: each company invites the same email.
+A company that invites them later is added at their next sign-in, or straight
+away with **Check for new invitations** on the company list. Switching an agent
+off in one company does not affect the others. Invitations made before this
+existed are filed by email the first time the admin opens the app.
 
 Agents must verify their email (`REQUIRE_AGENT_EMAIL_VERIFICATION` in
 `Auth.kt`, and `auth.token.email_verified` in the database rules for joining a

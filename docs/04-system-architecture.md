@@ -48,6 +48,7 @@ companies/{companyId}/
     agentInvitations, members/{agentUid}, fieldRuleOverrides, fieldDefinitions
     onboardingSessions/{sessionId}/  answers, checks, consent time, frozen question list
 agentCompanies/{agentUid}/{companyId}  the companies each agent works for (one or more)
+invitationsByEmail/{email, dots as commas}/{companyId}  invitations, readable only by that email
 ```
 
 Not saved: the ID photo and the text read from it.
