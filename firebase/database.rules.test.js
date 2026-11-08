@@ -306,7 +306,7 @@ describe("Realtime Database access rules", function () {
       await assertSucceeds(
         set(
           ref(agent1(), path(ACME, "onboardingSessions/new")),
-          newSession(ACME, "agent-1", { consentAt: 1999, consentBy: "agent-1" }),
+          newSession(ACME, "agent-1", { consentAt: 1999 }),
         ),
       );
     });
