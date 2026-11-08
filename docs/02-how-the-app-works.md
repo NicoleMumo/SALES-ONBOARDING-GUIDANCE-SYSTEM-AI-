@@ -182,8 +182,8 @@ model was tried and rejected for this.
 ## Accounts and companies
 
 - A Firebase sign-in alone gives no access. Admins need the `admin` and
-  `companyId` claims set by the project owner; agents need an invitation and an
-  active membership of the company they type.
+  `companyId` claims set by the project owner; agents need an invitation to their
+  email and an active membership of the company they open.
 - Every failed step of a sign-in signs the person out again, so a half-finished
   sign-in never leaves a session open.
 - Signing out clears everything from the session in memory (company, agent,
