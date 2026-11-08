@@ -32,10 +32,15 @@ team follows the process.
 5. **Answers are checked when the agent leaves the box**, picks an option, ticks
    a box, or changes section, never while typing. A wrong answer shows its
    message under the box; a correct one shows a tick.
-6. **Suggestions and warnings.** The AI's suggestion for the next question is
-   marked "Suggested next" (with a link if it is in another section). If the
-   session looks likely to be abandoned, an amber or red banner says so and
-   suggests offering help. Both are advice; the agent decides.
+6. **Suggestions and warnings.** A guidance panel floats at the bottom of the
+   form and stays in sight while the agent scrolls. It shows, in order of
+   priority: an answer to fix, the AI's "Suggested next" question, or the next
+   required question. Tapping it opens that question, in any section, and puts
+   the cursor in it. If the session looks likely to be abandoned, the panel also
+   shows an amber or red line; tapping it shows the advice. The panel can be
+   dragged anywhere on the page or folded to one line. With **Auto-follow** on
+   (remembered on the phone), the keyboard's Next key checks the answer and goes
+   straight to where the panel points. All of it is advice; the agent decides.
 7. **Review and submit.** The review page lists every answer by section, with an
    Edit button per section and a list of anything still missing. Submit stays
    off until every required answer is valid. The app shows "Onboarding

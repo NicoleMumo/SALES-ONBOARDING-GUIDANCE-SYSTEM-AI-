@@ -51,6 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -89,7 +91,12 @@ internal fun QuestionBlock(
     state: LiveValidationState,
     imeAction: ImeAction,
     onValueChange: (String) -> Unit,
-    onCheck: () -> Unit
+    onCheck: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Puts the cursor in this question's box when the guidance panel jumps to it. */
+    focusRequester: FocusRequester? = null,
+    /** Replaces the keyboard's Next, for example to follow the guidance instead. */
+    onNext: (() -> Unit)? = null
 ) {
     val c = Sm.colors
     val value = state.values[field.fieldId].orEmpty()
@@ -104,7 +111,7 @@ internal fun QuestionBlock(
         onCheck()
     }
 
-    Column {
+    Column(modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 buildAnnotatedString {
@@ -138,7 +145,9 @@ internal fun QuestionBlock(
                 isValid = isValid,
                 imeAction = imeAction,
                 onValueChange = onValueChange,
-                onCheck = onCheck
+                onCheck = onCheck,
+                focusRequester = focusRequester,
+                onNext = onNext
             )
         }
         if (error != null) {
@@ -170,7 +179,9 @@ private fun TextInput(
     isValid: Boolean,
     imeAction: ImeAction,
     onValueChange: (String) -> Unit,
-    onCheck: () -> Unit
+    onCheck: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    onNext: (() -> Unit)? = null
 ) {
     val c = Sm.colors
     val focusManager = LocalFocusManager.current
@@ -206,6 +217,7 @@ private fun TextInput(
                 onValueChange = onValueChange,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
                     .onFocusChanged { focus ->
                         // Check the answer when the agent leaves the box, never while typing.
                         if (hadFocus && !focus.isFocused) onCheck()
@@ -228,8 +240,8 @@ private fun TextInput(
                     imeAction = imeAction
                 ),
                 keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
-                    onDone = { focusManager.clearFocus() }
+                    onNext = { onNext?.invoke() ?: focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = { onNext?.invoke() ?: focusManager.clearFocus() }
                 )
             )
         }
