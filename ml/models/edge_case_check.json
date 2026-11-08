@@ -1,0 +1,132 @@
+{
+  "passed": 20,
+  "cases": 21,
+  "results": [
+    {
+      "case": "start of the form (banking/individual)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 100%, email_address 0%, mobile_phone_number 0%"
+    },
+    {
+      "case": "start of the form (banking/business)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 99%, business_name 1%, email_address 0%"
+    },
+    {
+      "case": "start of the form (telecom/mobile)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 99%, email_address 0%, contact_phone_number 0%"
+    },
+    {
+      "case": "start of the form (telecom/broadband)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 99%, email_address 0%, contact_phone_number 0%"
+    },
+    {
+      "case": "start of the form (telecom/tv)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 99%, email_address 0%, contact_phone_number 0%"
+    },
+    {
+      "case": "start of the form (telecom/iot)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 99%, email_address 0%, contact_phone_number 0%"
+    },
+    {
+      "case": "start of the form (telecom/landline)",
+      "expected": "suggest the form's first question, full_name",
+      "pass": true,
+      "got": "full_name 99%, email_address 0%, contact_phone_number 0%"
+    },
+    {
+      "case": "last answer failed (email)",
+      "expected": "suggest email_address again",
+      "pass": true,
+      "got": "email_address 100%, mobile_phone_number 0%, date_of_birth 0%"
+    },
+    {
+      "case": "same answer failed 3 times",
+      "expected": "suggest mobile_phone_number again",
+      "pass": true,
+      "got": "mobile_phone_number 100%, date_of_birth 0%, email_address 0%"
+    },
+    {
+      "case": "one question left",
+      "expected": "suggest terms_and_conditions_acceptance with ~100%",
+      "pass": true,
+      "got": "terms_and_conditions_acceptance 100%"
+    },
+    {
+      "case": "45 answers, longer than the model reads",
+      "expected": "answer safely; suggest the next open question, identification_document",
+      "pass": true,
+      "got": "identification_document 97%, identification_document_type 3%, identification_document_number 0%"
+    },
+    {
+      "case": "last question answered first",
+      "expected": "suggest the first open question, full_name",
+      "pass": false,
+      "got": "identification_document 34%, identification_document_type 30%, identification_document_number 22%"
+    },
+    {
+      "case": "starts with the ID document",
+      "expected": "suggest identification_document_type (follow the agent)",
+      "pass": true,
+      "got": "identification_document_type 100%, identification_document_number 0%, full_name 0%"
+    },
+    {
+      "case": "company question while the form is half done",
+      "expected": "suggest a standard question, not the company one",
+      "pass": true,
+      "got": "date_of_birth 98%, home_address 2%, identification_document 0%"
+    },
+    {
+      "case": "only company questions left",
+      "expected": "suggest the first company question",
+      "pass": true,
+      "got": "company_loyalty_number 90%, company_branch 10%"
+    },
+    {
+      "case": "company question answered mid-way",
+      "expected": "still suggest mobile_phone_number next",
+      "pass": true,
+      "got": "mobile_phone_number 97%, date_of_birth 3%, home_address 0%"
+    },
+    {
+      "case": "odd company descriptions",
+      "expected": "answer safely; suggest a company question",
+      "pass": true,
+      "got": "company_a 91%, company_b 9%, company_c 0%"
+    },
+    {
+      "case": "company copy of the email description",
+      "expected": "still suggest email_address (the real one)",
+      "pass": true,
+      "got": "email_address 93%, mobile_phone_number 7%, date_of_birth 0%"
+    },
+    {
+      "case": "114 open questions (100 company ones)",
+      "expected": "answer safely; suggest full_name",
+      "pass": true,
+      "got": "120 candidates; full_name 99%, business_name 1%, email_address 0%"
+    },
+    {
+      "case": "same input twice",
+      "expected": "identical rankings",
+      "pass": true,
+      "got": "contact_phone_number 97%, date_of_birth 3%, gender 0%"
+    },
+    {
+      "case": "last check unknown",
+      "expected": "answer safely",
+      "pass": true,
+      "got": "email_address 93%, contact_phone_number 7%, date_of_birth 0%"
+    }
+  ]
+}

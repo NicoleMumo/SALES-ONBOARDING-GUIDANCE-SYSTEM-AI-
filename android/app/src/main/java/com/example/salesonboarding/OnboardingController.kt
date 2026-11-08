@@ -377,6 +377,8 @@ class OnboardingFormController(
                     val prediction = if (predictor == null) {
                         null
                     } else {
+                        // When the model is unsure (a situation it never learned, such as the
+                        // last question answered first), the form's order guides instead.
                         predictor.predictAmongCandidates(
                             predictorInput.fieldHistory,
                             industry,
@@ -384,7 +386,7 @@ class OnboardingFormController(
                             predictorInput.lastValidation,
                             predictionCandidates,
                             fields
-                        )
+                        )?.takeIf { it.confidence >= MIN_SUGGESTION_CONFIDENCE }
                     }
                     guidance.value = buildGuidance(state, prediction)
                 } else {
@@ -637,3 +639,11 @@ class InMemoryFieldEntryStore : FieldEntryStore {
 }
 
 // endregion
+
+/**
+ * A suggestion the model gives less than this share of its belief to is not shown; the next
+ * required question in the form's order is pointed to instead. On the 16,533 test steps the
+ * shipped model was never this unsure, so this only changes situations it never learned
+ * (ml/edge_case_check.py).
+ */
+internal const val MIN_SUGGESTION_CONFIDENCE = 0.5f

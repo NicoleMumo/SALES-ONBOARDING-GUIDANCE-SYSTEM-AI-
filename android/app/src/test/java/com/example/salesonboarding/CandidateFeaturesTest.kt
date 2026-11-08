@@ -51,4 +51,30 @@ class CandidateFeaturesTest {
         assertEquals(listOf(13, 13, 1, 1, 1), rows[0].toList())
         assertEquals(listOf(14, 14, 0, 0, 1), rows[1].toList())
     }
+
+    @Test
+    fun nothingAnsweredYetCountsFromBeforeTheFirstQuestion() {
+        val rows = CandidateFeatures.of(emptyList(), form, form)
+        // The first question is one step on from "nothing answered" (gap +1).
+        assertEquals(listOf(0, 13, 1, 1, 1), rows[0].toList())
+    }
+
+    @Test
+    fun farPositionsAndLongGapsAreCappedAsInTraining() {
+        val long = (0 until 60).map { i ->
+            FormField(fieldId = "q$i", fieldName = "Q$i", fieldType = "text", isRequired = false,
+                validationRules = emptyList(), description = "")
+        }
+        val rows = CandidateFeatures.of(listOf("q0"), long.drop(1), long)
+        assertEquals(listOf(1, 13, 1, 0, 0), rows.first().toList())
+        assertEquals(listOf(39, 24, 0, 0, 0), rows.last().toList())
+    }
+
+    @Test
+    fun aCandidateMissingFromTheFormIsPlacedAfterIt() {
+        val stray = FormField(fieldId = "stray", fieldName = "Stray", fieldType = "text", isRequired = true,
+            validationRules = listOf(Required), description = "")
+        val rows = CandidateFeatures.of(emptyList(), listOf(stray), form)
+        assertEquals(form.size, rows.single()[0])
+    }
 }

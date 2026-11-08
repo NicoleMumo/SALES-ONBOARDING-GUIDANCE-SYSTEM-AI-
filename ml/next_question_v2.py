@@ -109,6 +109,7 @@ def steps_of(df, split, field_to_id, max_len, hidden=(), v1_meta=None):
                 "session_id": session_id,
                 "industry": industry,
                 "ids": [0] * (max_len - len(ids)) + ids,
+                "history": list(history),
                 "industry_name": industry, "context_name": context,
                 "validation": str(row["validation_status"]),
                 "candidates": candidates,
