@@ -191,6 +191,11 @@ interface AdminDataStore {
     }
     fun loadRuleConfiguration(onResult: (Result<FieldRuleConfiguration>) -> Unit)
     fun saveRequiredRule(fieldId: String, enabled: Boolean, onResult: (Result<Unit>) -> Unit)
+
+    /** Puts a standard question in the form, or takes it out. Compliance questions always stay. */
+    fun saveFieldShown(fieldId: String, shown: Boolean, onResult: (Result<Unit>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("This setting cannot be changed here.")))
+    }
     fun addCustomField(
         fieldId: String,
         name: String,
@@ -616,7 +621,8 @@ class FirebaseAdminDataStore(
         if (!isConfigured(onResult)) return
         rules.get().addOnSuccessListener { ruleSnapshot ->
             fields.get().addOnSuccessListener { fieldsSnapshot ->
-                val overrides = ruleSnapshot.children.associate { field ->
+                // Only a saved required setting changes a question; "hidden" alone does not.
+                val overrides = ruleSnapshot.children.filter { it.hasChild("required") }.associate { field ->
                     val required = field.child("required").getValue(Boolean::class.java) == true
                     field.key.orEmpty() to FieldRuleOverride(
                         addRules = if (required) {
@@ -641,7 +647,11 @@ class FirebaseAdminDataStore(
                     )
                     return@addOnSuccessListener
                 }
-                onResult(Result.success(FieldRuleConfiguration(overrides, customFields)))
+                val hidden = ruleSnapshot.children
+                    .filter { it.child("hidden").getValue(Boolean::class.java) == true }
+                    .mapNotNull { it.key }
+                    .toSet()
+                onResult(Result.success(FieldRuleConfiguration(overrides, customFields, hiddenFieldIds = hidden)))
             }
                 .addOnFailureListener { onResult(Result.failure(it)) }
         }.addOnFailureListener { onResult(Result.failure(it)) }
@@ -655,6 +665,19 @@ class FirebaseAdminDataStore(
         if (!isConfigured(onResult)) return
         if (!isValidFieldId(fieldId, onResult)) return
         rules.child(fieldId).child("required").setValue(enabled)
+            .addOnSuccessListener { onResult(Result.success(Unit)) }
+            .addOnFailureListener { onResult(Result.failure(it)) }
+    }
+
+    override fun saveFieldShown(fieldId: String, shown: Boolean, onResult: (Result<Unit>) -> Unit) {
+        if (!isConfigured(onResult)) return
+        if (!isValidFieldId(fieldId, onResult)) return
+        if (fieldId in FieldRuleConfiguration.DEFAULT_LOCKED_FIELD_IDS) {
+            onResult(Result.failure(IllegalArgumentException("Compliance questions are always asked.")))
+            return
+        }
+        // Shown is the default, so turning a question back on removes the setting.
+        rules.child(fieldId).child("hidden").setValue(if (shown) null else true)
             .addOnSuccessListener { onResult(Result.success(Unit)) }
             .addOnFailureListener { onResult(Result.failure(it)) }
     }

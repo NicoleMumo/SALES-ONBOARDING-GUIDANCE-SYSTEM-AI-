@@ -508,15 +508,25 @@ fun AppScreen(
                 }
             }
         }
+        // 0: bottom bar; 1: typing bar; 2: none, because the full guidance is open over the form.
+        val footerKind = when {
+            showTypingBar && overlayWhileTyping -> 2
+            showTypingBar -> 1
+            else -> 0
+        }
         if (bottomBar != null || typingBar != null) AnimatedContent(
-            targetState = showTypingBar,
+            targetState = footerKind,
             transitionSpec = {
                 (fadeIn(tween(180, delayMillis = 60)) togetherWith fadeOut(tween(100)))
                     .using(SizeTransform(clip = false) { _, _ -> tween(220, easing = FastOutSlowInEasing) })
             },
             label = "footer"
-        ) { strip ->
-            val footer = if (strip) typingBar else bottomBar
+        ) { kind ->
+            val footer = when (kind) {
+                0 -> bottomBar
+                1 -> typingBar
+                else -> null
+            }
             if (footer != null) Surface(
                 color = c.white,
                 shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

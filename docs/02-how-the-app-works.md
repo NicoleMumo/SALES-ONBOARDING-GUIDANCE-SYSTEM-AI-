@@ -134,11 +134,17 @@ Admins see five pages in a bottom navigation bar:
   Neither file holds answers or customer names; sessions do not save which
   answer was given to a check, only the question, pass or fail, and the time.
 - **Questions**: the standard questions of the company's industry, grouped
-  (Identity, Contact, Business, Money, Service), with a switch for which are
-  required. Add, edit or delete the company's own questions (name,
-  instructions, answer type, checks, choices). Seven questions
-  always stay required: full name, date of birth, ID type, ID number, politically
-  exposed person status, US person status, and acceptance of the terms.
+  (Identity, Contact, Business, Money, Service). Each one has three choices
+  side by side: **Required** (must be answered), **Optional** (asked, can be
+  skipped) or **Off** (left out of the form; shown struck through). A line at
+  the top counts them ("18 required · 6 optional · 3 off"), and **Preview the
+  form agents see** shows the form for each client type, section by section,
+  with required questions starred. Seven compliance questions show a lock and
+  "Always asked" and cannot be changed: full name, date of birth, ID type, ID
+  number, politically exposed person (PEP), US person (FATCA), and acceptance
+  of the terms. Changes apply to new sessions. Add, edit or delete the
+  company's own questions (name, instructions, answer type, checks, choices)
+  under **Yours**.
 - **Company**: copy the company ID to give to agents, and set the onboarding
   industry (agents cannot sign in until it is set). **Allow sessions to improve
   the system** (off by default) makes the consent screen ask each customer the

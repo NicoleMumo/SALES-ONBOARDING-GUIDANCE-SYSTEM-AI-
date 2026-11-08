@@ -1,5 +1,13 @@
 package com.example.salesonboarding
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
@@ -296,6 +304,20 @@ fun AdminDashboardScreen(
                                 configuration = updatedConfiguration
                                 if (isCurrentAdminScope()) {
                                     onConfigurationChanged(updatedConfiguration)
+                                }
+                            }
+                        }
+                    },
+                    onShownChanged = { fieldId, shown ->
+                        store.saveFieldShown(fieldId, shown) {
+                            if (!isCurrentAdminScope()) return@saveFieldShown
+                            handle(it) {
+                                store.loadRuleConfiguration { loaded ->
+                                    if (!isCurrentAdminScope()) return@loadRuleConfiguration
+                                    handle(loaded) {
+                                        configuration = it
+                                        onConfigurationChanged(it)
+                                    }
                                 }
                             }
                         }
@@ -736,6 +758,131 @@ private fun ProgressBar(share: Float) {
 private typealias QuestionSaver =
     (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit
 
+/** How one standard question appears in the form. */
+private enum class QuestionState(val label: String) {
+    REQUIRED("Required"), OPTIONAL("Optional"), OFF("Off"), ALWAYS("Always asked")
+}
+
+/**
+ * One question with its three choices side by side, the chosen one filled in. A question that
+ * is off is struck through; a compliance question shows a lock and "Always asked" instead.
+ */
+@Composable
+private fun QuestionStateRow(name: String, state: QuestionState, onChoose: (QuestionState) -> Unit) {
+    val c = Sm.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            Text(
+                name,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    textDecoration = if (state == QuestionState.OFF) TextDecoration.LineThrough else null
+                ),
+                color = if (state == QuestionState.OFF) c.muted else c.ink,
+                modifier = Modifier.weight(1f)
+            )
+            if (state == QuestionState.ALWAYS) {
+                SmIcon(R.drawable.ic_sm_lock, c.muted, size = 16.dp, description = "Compliance question")
+                Text("Always asked", style = MaterialTheme.typography.labelMedium, color = c.mutedStrong)
+            }
+        }
+        if (state != QuestionState.ALWAYS) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, c.line, RoundedCornerShape(12.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                listOf(QuestionState.REQUIRED, QuestionState.OPTIONAL, QuestionState.OFF).forEach { option ->
+                    val chosen = option == state
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .heightIn(min = 40.dp)
+                            .background(
+                                when {
+                                    !chosen -> Color.Transparent
+                                    option == QuestionState.OFF -> c.cherryTrack
+                                    option == QuestionState.REQUIRED -> c.ink
+                                    else -> c.limeSoft
+                                },
+                                RoundedCornerShape(9.dp)
+                            )
+                            .clickable(role = Role.RadioButton) { if (!chosen) onChoose(option) }
+                            .semantics {
+                                contentDescription = "$name: ${option.label}"
+                                stateDescription = if (chosen) "Selected" else "Not selected"
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            option.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = when {
+                                chosen && option == QuestionState.REQUIRED -> c.cream
+                                chosen -> c.ink
+                                else -> c.muted
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The form an agent would see for each client type, with the company's settings applied. */
+@Composable
+private fun FormPreviewSheet(industry: String, configuration: FieldRuleConfiguration, onDismiss: () -> Unit) {
+    val c = Sm.colors
+    val contexts = IndustrySelectionValidator.contextsFor(industry)
+    var context by remember { mutableStateOf(contexts.firstOrNull()) }
+    SmSheet("Form preview", onDismiss = onDismiss) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Space.s)
+        ) {
+            contexts.forEach { option ->
+                SmChip(clientTypeLabel(option), selected = option == context, onClick = { context = option })
+            }
+        }
+        val sections = remember(industry, context, configuration) {
+            context?.let { OnboardingPlaybooks.forIndustry(industry, configuration, it).sections() }.orEmpty()
+        }
+        Text(
+            "${sections.sumOf { it.fields.size }} questions in ${sections.size} sections. * required",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.muted
+        )
+        sections.forEach { section ->
+            Text(section.title.uppercase(Locale.ROOT), style = smCapsStyle(), color = c.muted)
+            section.fields.forEach { field ->
+                Text(
+                    buildAnnotatedString {
+                        append(field.fieldName)
+                        if (field.isRequired || field.validationRules.any { it is Required }) {
+                            withStyle(SpanStyle(color = c.cherry)) { append(" *") }
+                        }
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.ink
+                )
+            }
+        }
+    }
+}
+
+private fun clientTypeLabel(context: String): String = when (context) {
+    "tv" -> "TV"
+    "iot" -> "IoT"
+    else -> context.replaceFirstChar { it.titlecase(Locale.ROOT) }
+}
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun QuestionsPage(
@@ -747,8 +894,10 @@ private fun QuestionsPage(
     onAddField: QuestionSaver,
     onUpdateField: QuestionSaver,
     onDeleteField: (String, (Result<Unit>) -> Unit) -> Unit,
-    onRequiredChanged: (String, Boolean) -> Unit
+    onRequiredChanged: (String, Boolean) -> Unit,
+    onShownChanged: (String, Boolean) -> Unit
 ) {
+    var showPreview by remember { mutableStateOf(false) }
     var showCustom by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<FormField?>(null) }
     var showAdd by remember { mutableStateOf(false) }
@@ -759,7 +908,14 @@ private fun QuestionsPage(
     // Only the questions this company's industry actually asks.
     val industryIds = industry?.let(OnboardingPlaybooks::fieldIdsFor)
     val ofIndustry = KnownFields.all.filter { industryIds == null || it.fieldId in industryIds }
-    val requiredCount = ofIndustry.count { field -> configuration.rulesFor(field).any { it is Required } }
+    fun stateOf(field: FormField): QuestionState = when {
+        field.fieldId in locked -> QuestionState.ALWAYS
+        configuration.isHidden(field.fieldId) -> QuestionState.OFF
+        configuration.rulesFor(field).any { it is Required } -> QuestionState.REQUIRED
+        else -> QuestionState.OPTIONAL
+    }
+    val states = ofIndustry.groupingBy { stateOf(it) }.eachCount()
+    val requiredCount = (states[QuestionState.REQUIRED] ?: 0) + (states[QuestionState.ALWAYS] ?: 0)
     val groups = ofIndustry
         .filter { query.isBlank() || query in it.fieldName.lowercase(Locale.ROOT) }
         .groupBy { QuestionGroups.of(it.fieldId) }
@@ -776,18 +932,29 @@ private fun QuestionsPage(
             SmChip("Yours ${configuration.customFields.size}", selected = showCustom, onClick = { showCustom = true })
         }
         if (!showCustom) {
+            // What agents will be asked, at a glance, and a preview of the form itself.
             Text(
-                "$requiredCount of ${ofIndustry.size} required",
+                "$requiredCount required · ${states[QuestionState.OPTIONAL] ?: 0} optional · ${states[QuestionState.OFF] ?: 0} off",
+                style = MaterialTheme.typography.titleSmall,
+                color = Sm.colors.ink
+            )
+            Text(
+                "Required: must be answered. Optional: asked, can be skipped. Off: not in the form. " +
+                    "Questions with a lock are needed for compliance and are always asked.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
+            if (industry != null) {
+                SecondaryButton("Preview the form agents see", onClick = { showPreview = true }, iconRes = R.drawable.ic_sm_questions)
+            }
             AdminTextField(search, { search = it }, placeholder = "Search questions", searchIcon = true)
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                // Questions switched off stay off; only the ones asked change.
                 TextButton(onClick = {
-                    ofIndustry.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, true) }
+                    ofIndustry.filter { stateOf(it) == QuestionState.OPTIONAL }.forEach { onRequiredChanged(it.fieldId, true) }
                 }) { Text("Make all required") }
                 TextButton(onClick = {
-                    ofIndustry.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, false) }
+                    ofIndustry.filter { stateOf(it) == QuestionState.REQUIRED }.forEach { onRequiredChanged(it.fieldId, false) }
                 }) { Text("Make all optional") }
             }
             if (groups.isEmpty()) {
@@ -798,34 +965,32 @@ private fun QuestionsPage(
                 SectionCard {
                     fields.forEachIndexed { index, field ->
                         if (index > 0) HorizontalDivider(color = Sm.colors.divider)
-                        val required = configuration.rulesFor(field).any { it is Required }
-                        val isLocked = field.fieldId in locked
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Space.s)
-                        ) {
-                            Text(field.fieldName, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink, modifier = Modifier.weight(1f))
-                            if (isLocked) SmIcon(R.drawable.ic_sm_lock, Sm.colors.muted, size = 18.dp, description = "Locked")
-                            SmSwitch(
-                                checked = required,
-                                onCheckedChange = { onRequiredChanged(field.fieldId, it) },
-                                enabled = !isLocked,
-                                modifier = Modifier.semantics {
-                                    contentDescription = "${field.fieldName} is " + if (required) "required" else "optional"
+                        QuestionStateRow(
+                            name = field.fieldName,
+                            state = stateOf(field),
+                            onChoose = { chosen ->
+                                val current = stateOf(field)
+                                when (chosen) {
+                                    QuestionState.OFF -> onShownChanged(field.fieldId, false)
+                                    QuestionState.REQUIRED, QuestionState.OPTIONAL -> {
+                                        if (current == QuestionState.OFF) onShownChanged(field.fieldId, true)
+                                        onRequiredChanged(field.fieldId, chosen == QuestionState.REQUIRED)
+                                    }
+                                    QuestionState.ALWAYS -> Unit
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
                 }
             }
             Text(
-                "Locked questions always stay required.",
+                "Locked questions are needed for compliance: they are always asked and always required.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
+            if (showPreview && industry != null) {
+                FormPreviewSheet(industry, configuration, onDismiss = { showPreview = false })
+            }
         } else {
             PrimaryButton("Add a question", onClick = { showAdd = true }, iconRes = R.drawable.ic_sm_plus)
             SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI model was not trained on them.") {

@@ -409,6 +409,8 @@ private fun SectionPage(
     var typingIn by remember { mutableStateOf<String?>(null) }
     // The agent can open the full panel while typing, from the slim bar's guide.
     var expandWhileTyping by remember { mutableStateOf(false) }
+    // Opened over the form for this bout of typing only.
+    LaunchedEffect(typingIn) { if (typingIn == null) expandWhileTyping = false }
 
     /**
      * Enter on question [index] of this section: the answer is checked by leaving the box,
@@ -552,7 +554,8 @@ private fun SectionPage(
                 offset = dockOffset,
                 onOffsetChange = onDockOffsetChange,
                 onOpenField = ::openFromGuidance,
-                onReview = { onGoTo(sections.size) }
+                onReview = { onGoTo(sections.size) },
+                onCollapse = if (expandWhileTyping) ({ expandWhileTyping = false }) else null
             )
         }
     ) {

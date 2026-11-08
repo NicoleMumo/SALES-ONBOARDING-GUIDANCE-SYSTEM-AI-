@@ -161,7 +161,9 @@ internal fun BoxScope.GuidanceDock(
     offset: Offset,
     onOffsetChange: (Offset) -> Unit,
     onOpenField: (String) -> Unit,
-    onReview: () -> Unit
+    onReview: () -> Unit,
+    /** While typing, folding goes back to the bar above the keyboard instead. */
+    onCollapse: (() -> Unit)? = null
 ) {
     val c = Sm.colors
     val preferences = LocalContext.current.getSharedPreferences(GUIDE_PREFERENCES, Context.MODE_PRIVATE)
@@ -242,7 +244,7 @@ internal fun BoxScope.GuidanceDock(
                                 guideMoving = guideMoving,
                                 onGuideMovingChange = onGuideMovingChange,
                                 onReplayTour = onReplayTour,
-                                onFold = { setFolded(true) }
+                                onFold = { onCollapse?.invoke() ?: setFolded(true) }
                             )
                             MainCard(pointer, fixes, fieldName, sectionName, onOpenField, onReview)
                         }

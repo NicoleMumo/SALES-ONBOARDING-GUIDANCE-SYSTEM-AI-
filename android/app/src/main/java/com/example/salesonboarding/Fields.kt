@@ -322,8 +322,13 @@ data class FieldRuleOverride(
 class FieldRuleConfiguration(
     private val overrides: Map<String, FieldRuleOverride> = emptyMap(),
     val customFields: List<FormField> = emptyList(),
-    private val lockedFieldIds: Set<String> = DEFAULT_LOCKED_FIELD_IDS
+    private val lockedFieldIds: Set<String> = DEFAULT_LOCKED_FIELD_IDS,
+    /** Standard questions the admin switched off: they are left out of the form. */
+    private val hiddenFieldIds: Set<String> = emptySet()
 ) {
+    /** Whether the admin took this question out of the form. Compliance questions never are. */
+    fun isHidden(fieldId: String): Boolean = fieldId in hiddenFieldIds && fieldId !in lockedFieldIds
+
     /**
      * The field with this configuration's overrides applied (unchanged if it has none).
      * Locked fields can gain rules but never lose them, so an admin cannot make a
@@ -347,7 +352,8 @@ class FieldRuleConfiguration(
     fun withoutCustomField(fieldId: String): FieldRuleConfiguration = FieldRuleConfiguration(
         overrides = overrides,
         customFields = customFields.filterNot { it.fieldId == fieldId },
-        lockedFieldIds = lockedFieldIds
+        lockedFieldIds = lockedFieldIds,
+        hiddenFieldIds = hiddenFieldIds
     )
 
     /** Adds or replaces a custom field. Its id must be a safe database key. */
@@ -358,7 +364,8 @@ class FieldRuleConfiguration(
         return FieldRuleConfiguration(
             overrides = overrides,
             customFields = customFields.filterNot { it.fieldId == field.fieldId } + field,
-            lockedFieldIds = lockedFieldIds
+            lockedFieldIds = lockedFieldIds,
+            hiddenFieldIds = hiddenFieldIds
         )
     }
 
@@ -527,7 +534,8 @@ object OnboardingPlaybooks {
             }
         }
         val catalogue = KnownFields.all.associateBy(FormField::fieldId)
-        val industryFields = fieldIds.map { fieldId ->
+        // Questions the admin switched off are left out; the rest keep their order.
+        val industryFields = fieldIds.filterNot(configuration::isHidden).map { fieldId ->
             val field = catalogue[fieldId] ?: if (fieldId == "business_name") {
                 FormField(
                     fieldId = "business_name",
