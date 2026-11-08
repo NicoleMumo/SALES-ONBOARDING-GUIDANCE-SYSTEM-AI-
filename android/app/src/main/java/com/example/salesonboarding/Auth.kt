@@ -95,6 +95,7 @@ import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseUser
 import java.util.Locale
 
@@ -111,8 +112,21 @@ data class LoginFormState(
     val password: String = "",
     val role: UserRole = UserRole.SALES_AGENT,
     val errorMessage: String? = null,
-    val isSubmitting: Boolean = false
+    val isSubmitting: Boolean = false,
+    val infoMessage: String? = null
 )
+
+object PasswordReset {
+    /** The same reply whether or not the email has an account, so the screen does not reveal who has one. */
+    const val SENT_MESSAGE = "If an account uses this email, a link to reset the password has been sent to it."
+    const val FAILED_MESSAGE = "Could not send the reset email. Check the connection and try again."
+
+    /** What to tell the person after Firebase answers: null means show [SENT_MESSAGE]. */
+    fun failureMessage(error: Exception?): String? = when (error) {
+        null, is FirebaseAuthInvalidUserException -> null
+        else -> FAILED_MESSAGE
+    }
+}
 
 object LoginFormValidator {
     fun validate(email: String, password: String): String? =
@@ -146,6 +160,9 @@ fun UnifiedLoginScreen(
     onRegisterAgent: () -> Unit,
     initialRole: UserRole = UserRole.SALES_AGENT,
     onRoleSelected: (UserRole) -> Unit = {},
+    onResetPassword: (email: String, onResult: (String?) -> Unit) -> Unit = { _, onResult ->
+        onResult(PasswordReset.FAILED_MESSAGE)
+    },
     modifier: Modifier = Modifier
 ) {
     var state by remember { mutableStateOf(LoginFormState(role = initialRole)) }
@@ -161,7 +178,7 @@ fun UnifiedLoginScreen(
             state = state.copy(errorMessage = error)
             return
         }
-        state = state.copy(isSubmitting = true, errorMessage = null)
+        state = state.copy(isSubmitting = true, errorMessage = null, infoMessage = null)
         onLogin(state.companyId.trim(), state.email.trim(), state.password, state.role) { result ->
             result.onFailure { failure ->
                 state = state.copy(
@@ -172,9 +189,26 @@ fun UnifiedLoginScreen(
         }
     }
 
+    // Uses the email already typed, so the person does not have to enter it twice.
+    fun resetPassword() {
+        val error = LoginFormValidator.validateEmail(state.email)
+        if (error != null) {
+            state = state.copy(errorMessage = "$error Then tap Forgot password.", infoMessage = null)
+            return
+        }
+        state = state.copy(isSubmitting = true, errorMessage = null, infoMessage = null)
+        onResetPassword(state.email.trim()) { failure ->
+            state = state.copy(
+                isSubmitting = false,
+                errorMessage = failure,
+                infoMessage = if (failure == null) PasswordReset.SENT_MESSAGE else null
+            )
+        }
+    }
+
     SignInFrame(modifier) {
         RoleSwitch(state.role, enabled, colors, fonts) { role ->
-            state = state.copy(role = role, errorMessage = null)
+            state = state.copy(role = role, errorMessage = null, infoMessage = null)
             onRoleSelected(role)
         }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -221,6 +255,32 @@ fun UnifiedLoginScreen(
             ) {
                 Icon(Icons.Outlined.Warning, contentDescription = null, tint = colors.action, modifier = Modifier.size(18.dp))
                 Text(message, color = colors.action, style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.Medium, fontSize = 14.sp))
+            }
+        }
+        state.infoMessage?.let { message ->
+            Text(
+                message,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                color = colors.ink,
+                style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            )
+        }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Box(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(enabled = enabled, role = Role.Button, onClick = ::resetPassword)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Forgot password?",
+                    color = colors.action,
+                    style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                )
             }
         }
         SignInButton(state.isSubmitting, colors, fonts, onClick = ::submit)
@@ -777,6 +837,12 @@ fun SignInScreen(
         onRegisterAgent = onRegisterAgent,
         initialRole = initialRole,
         onRoleSelected = onRoleSelected,
+        onResetPassword = { email, onResult ->
+            FirebaseAuth.getInstance().sendPasswordResetEmail(email)
+                .addOnCompleteListener { task ->
+                    onResult(PasswordReset.failureMessage(if (task.isSuccessful) null else task.exception))
+                }
+        },
         modifier = modifier
     )
 }
