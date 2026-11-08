@@ -61,6 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 
 // region The form, connected to its controller
 
@@ -345,6 +348,7 @@ private const val TOUR_SEEN_KEY = "guide_tour_seen"
 private const val GREETING_MS = 6000L
 
 /** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
+private const val FOLLOW_WAIT_MS = 1_000L
 private const val AUTO_FOLLOW_DELAY_MS = 250L
 
 /** How long the guide smiles after an accepted answer. */
@@ -393,7 +397,13 @@ private fun SectionPage(
     val pointer = guidancePointer(guidance, allFields, state)
     val fixes = answersToFix(allFields, state)
     val latestPointer by rememberUpdatedState(pointer)
+    val latestState by rememberUpdatedState(state)
     var followRequests by remember { mutableIntStateOf(0) }
+    // The question Enter was pressed in, so the follow does not send the cursor back to it.
+    var followFrom by remember { mutableStateOf<String?>(null) }
+    var followChecksBefore by remember { mutableIntStateOf(0) }
+    // A physical Enter is one press: its key-up must not count as a second Enter.
+    var enterStartedOutsideBox by remember { mutableStateOf(false) }
     // The question whose box has the cursor, if any: Enter elsewhere follows the guidance.
     var typingIn by remember { mutableStateOf<String?>(null) }
     // The agent can open the full panel while typing, from the slim bar's guide.
@@ -405,9 +415,15 @@ private fun SectionPage(
      * of the section, or from no box, to where the guidance points. Enter never presses a button.
      */
     fun enterFrom(index: Int?) {
+        // Counted before leaving the box, because leaving it is what records the check.
+        followChecksBefore = state.interactionHistory.size
         focusManager.clearFocus()
+        val from = index?.let { section.fields.getOrNull(it)?.fieldId }
         val next = index?.let { section.fields.getOrNull(it + 1) }
-        if (autoFollow || next == null) followRequests++ else onOpenField(next.fieldId)
+        if (autoFollow || next == null) {
+            followFrom = from
+            followRequests++
+        } else onOpenField(next.fieldId)
     }
     // The guide smiles for a moment after each accepted answer.
     val checks = state.interactionHistory.filter { it.validationPassed != null }
@@ -429,11 +445,19 @@ private fun SectionPage(
         if (jumpFocus) runCatching { focusers.getValue(target).requestFocus() } // choices have no text box
         onJumpDone()
     }
-    // After Enter checks the answer, go where the updated guidance points.
+    // After Enter checks the answer, go where the updated guidance points. It first waits (up
+    // to a second) for that check to be recorded, so it never follows the guidance from before.
     LaunchedEffect(followRequests) {
         if (followRequests == 0) return@LaunchedEffect
+        val from = followFrom
+        val checksBefore = followChecksBefore
+        if (from != null) {
+            withTimeoutOrNull(FOLLOW_WAIT_MS) {
+                snapshotFlow { latestState.interactionHistory.size }.first { it > checksBefore }
+            }
+        }
         delay(AUTO_FOLLOW_DELAY_MS)
-        latestPointer?.fieldId?.let(onOpenField)
+        followTarget(from, latestPointer, allFields, latestState)?.let(onOpenField)
     }
 
     AppScreen(
@@ -442,11 +466,23 @@ private fun SectionPage(
         onBack = if (page > 0) ({ onGoTo(page - 1) }) else onLeave,
         actions = { if (!isOnline) StatusPill("Offline", Tone.Caution) },
         // Enter with no box selected follows the guidance; it never presses a button or leaves.
+        // A press that starts in a box is that box's Next; only its own key-down counts.
         modifier = modifier.onPreviewKeyEvent { event ->
             val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
-            if (!enter || typingIn != null) return@onPreviewKeyEvent false
-            if (event.type == KeyEventType.KeyUp) enterFrom(null)
-            true
+            if (!enter) return@onPreviewKeyEvent false
+            when (event.type) {
+                KeyEventType.KeyDown -> {
+                    enterStartedOutsideBox = typingIn == null
+                    enterStartedOutsideBox
+                }
+                KeyEventType.KeyUp -> {
+                    val outside = enterStartedOutsideBox
+                    enterStartedOutsideBox = false
+                    if (outside) enterFrom(null)
+                    outside
+                }
+                else -> false
+            }
         },
         bottomBar = {
             draftSaveStatus?.let { DraftStatusLine(it) }

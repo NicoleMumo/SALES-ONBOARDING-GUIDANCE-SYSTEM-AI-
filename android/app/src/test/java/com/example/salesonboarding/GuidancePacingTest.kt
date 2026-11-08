@@ -95,3 +95,39 @@ class GuidanceListsTest {
         )
     }
 }
+
+class EnterFollowTest {
+    private val fields = listOf(
+        KnownFields.get("full_name"),
+        KnownFields.get("email_address"),
+        KnownFields.get("date_of_birth")
+    )
+
+    @Test
+    fun aGoodAnswerMovesOnEvenIfTheGuidanceStillPointsAtIt() {
+        val session = LiveValidationSession("s", fields)
+        session.updateField("email_address", "mary@example.com")
+        session.checkField("email_address")
+        val stale = GuidancePointer(GuidanceStep.NEXT_REQUIRED, "email_address")
+
+        assertEquals("date_of_birth", followTarget("email_address", stale, fields, session.stateFlow.value))
+    }
+
+    @Test
+    fun aWrongAnswerIsOpenedAgainToBeFixed() {
+        val session = LiveValidationSession("s", fields)
+        session.updateField("email_address", "not an email")
+        session.checkField("email_address")
+        val fix = GuidancePointer(GuidanceStep.FIX, "email_address")
+
+        assertEquals("email_address", followTarget("email_address", fix, fields, session.stateFlow.value))
+    }
+
+    @Test
+    fun otherwiseEnterGoesWhereTheGuidancePoints() {
+        val state = LiveValidationSession("s", fields).stateFlow.value
+        val next = GuidancePointer(GuidanceStep.NEXT_REQUIRED, "full_name")
+        assertEquals("full_name", followTarget("email_address", next, fields, state))
+        assertEquals("full_name", followTarget(null, next, fields, state))
+    }
+}

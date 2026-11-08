@@ -95,6 +95,26 @@ internal fun guidancePointer(
     ?: fields.firstOrNull { it.isRequiredFor(state.values) && !it.isAnsweredIn(state) }
         ?.let { GuidancePointer(GuidanceStep.NEXT_REQUIRED, it.fieldId) }
 
+/**
+ * Where Enter in question [from] should send the cursor: where the guidance points, unless
+ * that is the question just left. Then a wrong answer is opened again to be fixed, and a
+ * good one moves on to the next unanswered question in form order (the guidance may not have
+ * caught up yet). Null when nothing is left to answer after it.
+ */
+internal fun followTarget(
+    from: String?,
+    pointer: GuidancePointer?,
+    fields: List<FormField>,
+    state: LiveValidationState
+): String? {
+    val target = pointer?.fieldId
+    if (from == null || target != from) return target
+    val left = fields.firstOrNull { it.fieldId == from } ?: return target
+    if (errorFor(left, state) != null) return from
+    val after = fields.indexOf(left)
+    return fields.drop(after + 1).firstOrNull { !it.isAnsweredIn(state) }?.fieldId
+}
+
 /** Every answer that needs fixing, in the form's order. */
 internal fun answersToFix(fields: List<FormField>, state: LiveValidationState): List<String> {
     val wrong = ValidationErrorDisplayMapper.forState(state).map { it.fieldId }.toSet()
