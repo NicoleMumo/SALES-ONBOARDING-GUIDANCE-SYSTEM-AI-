@@ -1,7 +1,12 @@
-﻿package com.example.salesonboarding
+package com.example.salesonboarding
 
 import android.content.Context
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -54,9 +59,15 @@ fun AgentHomeScreen(
     modifier: Modifier = Modifier,
     /** The agent's most recent unfinished session, offered as one tap to continue. */
     unfinishedSession: StoredOnboardingSession? = null,
-    onContinueSession: (StoredOnboardingSession) -> Unit = {}
+    onContinueSession: (StoredOnboardingSession) -> Unit = {},
+    /** Marks that session abandoned, after the agent confirms. */
+    onCancelSession: (StoredOnboardingSession) -> Unit = {}
 ) {
     val c = Sm.colors
+    var confirmCancel by remember { mutableStateOf<StoredOnboardingSession?>(null) }
+    val guideMoving = LocalContext.current
+        .getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
+        .getBoolean("guide_moving", true)
     AppScreen(
         title = "SalesMesh",
         leading = { AppMark() },
@@ -69,15 +80,38 @@ fun AgentHomeScreen(
             color = c.ink
         ) {
             Column {
-                Box(Modifier.fillMaxWidth().height(130.dp)) {
+                Box(Modifier.fillMaxWidth().height(if (isShortScreen()) 150.dp else 190.dp)) {
                     Image(
                         painter = painterResource(R.drawable.home_photo),
                         contentDescription = null, // decorative
                         contentScale = ContentScale.Crop,
-                        alignment = BiasAlignment(horizontalBias = 0f, verticalBias = 0.24f), // 50% across, 62% down
+                        // The laptop and the mouse on the desk, not just the keyboard.
+                        alignment = BiasAlignment(horizontalBias = 0.1f, verticalBias = -0.1f),
                         modifier = Modifier.matchParentSize()
                     )
-                    Box(Modifier.matchParentSize().background(c.window.copy(alpha = 0.18f)))
+                    // The photo fades into the card, so the headline reads as part of it.
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to c.ink))
+                    )
+                    // The guide waits on the photo, ready for the next customer.
+                    Row(
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 18.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(Modifier.size(54.dp).background(c.ink, CircleShape), contentAlignment = Alignment.Center) {
+                            GuideMascot(GuideMood.HAPPY, Modifier.size(46.dp), animated = guideMoving)
+                        }
+                        Text(
+                            "Ready when you are.",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = c.cream
+                        )
+                    }
                 }
                 Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     Text(
@@ -114,12 +148,31 @@ fun AgentHomeScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = c.mutedStrong
                         )
+                        Text(
+                            "Cancel session",
+                            style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
+                            color = c.cherryDeep,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .clickable(role = Role.Button) { confirmCancel = session }
+                        )
                     }
                     Box(Modifier.size(44.dp).background(c.lime, CircleShape), contentAlignment = Alignment.Center) {
                         SmIcon(R.drawable.ic_sm_arrow, c.ink, size = 20.dp)
                     }
                 }
             }
+        }
+        confirmCancel?.let { session ->
+            AlertDialog(
+                onDismissRequest = { confirmCancel = null },
+                title = { Text("Cancel this session?") },
+                text = { Text("It will be marked abandoned and can no longer be continued. Unfinished sessions are also cancelled after 48 hours untouched.") },
+                confirmButton = {
+                    TextButton(onClick = { confirmCancel = null; onCancelSession(session) }) { Text("Cancel session") }
+                },
+                dismissButton = { TextButton(onClick = { confirmCancel = null }) { Text("Keep it") } }
+            )
         }
         Surface(
             onClick = onViewSessions,

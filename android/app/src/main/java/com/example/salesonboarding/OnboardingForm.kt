@@ -41,6 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -189,8 +195,10 @@ fun OnboardingForm(
     var submitted by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
-    // The question the guidance panel was asked to open; the section page scrolls to it.
+    // The question the guidance panel was asked to open; the section page scrolls to it,
+    // and puts the cursor in it unless [jumpFocus] is false.
     var jumpTarget by remember { mutableStateOf<String?>(null) }
+    var jumpFocus by remember { mutableStateOf(true) }
     // Where the agent dragged the panel, kept while moving between sections.
     var dockX by rememberSaveable { mutableFloatStateOf(0f) }
     var dockY by rememberSaveable { mutableFloatStateOf(0f) }
@@ -216,12 +224,16 @@ fun OnboardingForm(
         }
     }
 
-    /** Opens the section holding [fieldId], then scrolls to that question and focuses it. */
-    fun openField(fieldId: String) {
+    /**
+     * Opens the section holding [fieldId] and scrolls to that question; with [focus], the
+     * cursor goes in its box (and the keyboard opens).
+     */
+    fun openField(fieldId: String, focus: Boolean = true) {
         val target = sections.indexOfFirst { section -> section.fields.any { it.fieldId == fieldId } }
         if (target < 0) return
         if (target != page) goTo(target)
         onSectionOpened(fieldId)
+        jumpFocus = focus
         jumpTarget = fieldId
     }
 
@@ -231,13 +243,14 @@ fun OnboardingForm(
             greeting = null
         }
     }
-    val firstPointed = guidance.pointer()?.fieldId
+    val firstPointed = guidancePointer(guidance, playbook.fields, state)?.fieldId
     LaunchedEffect(showTour, greeting, firstPointed) {
         if (showTour || greeting != null || guidanceStarted || submitted || page == reviewPage) return@LaunchedEffect
         val target = firstPointed ?: return@LaunchedEffect
         delay(300) // let the page settle first
         guidanceStarted = true
-        openField(target)
+        // Scroll to the first question without opening the keyboard, so the panel stays in sight.
+        openField(target, focus = false)
     }
     // The phone's Back button follows each page's back arrow (see AppScreen).
 
@@ -289,6 +302,7 @@ fun OnboardingForm(
                 onValueChange = onValueChange,
                 onCheckField = onCheckField,
                 jumpTarget = jumpTarget,
+                jumpFocus = jumpFocus,
                 onJumpDone = { jumpTarget = null },
                 onOpenField = ::openField,
                 dockOffset = Offset(dockX, dockY),
@@ -353,6 +367,7 @@ private fun SectionPage(
     onValueChange: (fieldId: String, value: String) -> Unit,
     onCheckField: (fieldId: String) -> Unit,
     jumpTarget: String?,
+    jumpFocus: Boolean,
     onJumpDone: () -> Unit,
     onOpenField: (String) -> Unit,
     dockOffset: Offset,
@@ -374,8 +389,26 @@ private fun SectionPage(
     }
     val bringers = remember(section) { section.fields.associate { it.fieldId to BringIntoViewRequester() } }
     val focusers = remember(section) { section.fields.associate { it.fieldId to FocusRequester() } }
-    val latestGuidance by rememberUpdatedState(guidance)
+    // Where the guidance points (never empty while something is left) and every answer to fix.
+    val pointer = guidancePointer(guidance, allFields, state)
+    val fixes = answersToFix(allFields, state)
+    val latestPointer by rememberUpdatedState(pointer)
     var followRequests by remember { mutableIntStateOf(0) }
+    // The question whose box has the cursor, if any: Enter elsewhere follows the guidance.
+    var typingIn by remember { mutableStateOf<String?>(null) }
+    // The agent can open the full panel while typing, from the slim bar's guide.
+    var expandWhileTyping by remember { mutableStateOf(false) }
+
+    /**
+     * Enter on question [index] of this section: the answer is checked by leaving the box,
+     * then the cursor goes to the next question in order, or, with auto-follow on, at the end
+     * of the section, or from no box, to where the guidance points. Enter never presses a button.
+     */
+    fun enterFrom(index: Int?) {
+        focusManager.clearFocus()
+        val next = index?.let { section.fields.getOrNull(it + 1) }
+        if (autoFollow || next == null) followRequests++ else onOpenField(next.fieldId)
+    }
     // The guide smiles for a moment after each accepted answer.
     val checks = state.interactionHistory.filter { it.validationPassed != null }
     var justPassed by remember { mutableStateOf(false) }
@@ -393,14 +426,14 @@ private fun SectionPage(
         val bringer = bringers[target] ?: return@LaunchedEffect
         delay(50) // let the section lay out first
         bringer.bringIntoView()
-        runCatching { focusers.getValue(target).requestFocus() } // choices have no text box
+        if (jumpFocus) runCatching { focusers.getValue(target).requestFocus() } // choices have no text box
         onJumpDone()
     }
-    // Auto-follow: after Next checks the answer, go where the updated guidance points.
+    // After Enter checks the answer, go where the updated guidance points.
     LaunchedEffect(followRequests) {
         if (followRequests == 0) return@LaunchedEffect
         delay(AUTO_FOLLOW_DELAY_MS)
-        latestGuidance.pointer()?.fieldId?.let(onOpenField)
+        latestPointer?.fieldId?.let(onOpenField)
     }
 
     AppScreen(
@@ -408,7 +441,13 @@ private fun SectionPage(
         subtitle = "$customerType · Step ${page + 1} of ${sections.size}",
         onBack = if (page > 0) ({ onGoTo(page - 1) }) else onLeave,
         actions = { if (!isOnline) StatusPill("Offline", Tone.Caution) },
-        modifier = modifier,
+        // Enter with no box selected follows the guidance; it never presses a button or leaves.
+        modifier = modifier.onPreviewKeyEvent { event ->
+            val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
+            if (!enter || typingIn != null) return@onPreviewKeyEvent false
+            if (event.type == KeyEventType.KeyUp) enterFrom(null)
+            true
+        },
         bottomBar = {
             draftSaveStatus?.let { DraftStatusLine(it) }
             PrimaryButton(
@@ -416,13 +455,29 @@ private fun SectionPage(
                 onClick = { onGoTo(page + 1) }
             )
         },
+        // While the keyboard is open, the guidance is a slim bar above it instead (see AppScreen).
+        typingBar = {
+            GuidanceStrip(
+                pointer = pointer,
+                risk = guidance.riskGuidance,
+                mood = guideMood(guidance, justPassed),
+                fixes = fixes,
+                guideMoving = guideMoving,
+                fieldName = { id -> allFields.firstOrNull { it.fieldId == id }?.fieldName ?: id },
+                onOpenField = onOpenField,
+                onReview = { onGoTo(sections.size) },
+                onExpand = { expandWhileTyping = !expandWhileTyping }
+            )
+        },
+        overlayWhileTyping = expandWhileTyping,
         // The suggestion and the risk warning float over the form, so they stay in sight.
         overlay = {
             GuidanceDock(
-                pointer = guidance.pointer(),
+                pointer = pointer,
                 risk = guidance.riskGuidance,
                 // The guide smiles while it greets the agent.
                 mood = if (greeting != null) GuideMood.HAPPY else guideMood(guidance, justPassed),
+                fixes = fixes,
                 fieldName = { id -> allFields.firstOrNull { it.fieldId == id }?.fieldName ?: id },
                 sectionName = { id -> sectionOf[id]?.takeIf { it != section.title } },
                 autoFollow = autoFollow,
@@ -450,16 +505,18 @@ private fun SectionPage(
                     field = field,
                     allFields = playbook.fields,
                     state = state,
-                    // With auto-follow on, every box's Enter key follows the guidance.
-                    imeAction = if (autoFollow || index != section.fields.lastIndex) ImeAction.Next else ImeAction.Done,
+                    // Enter always moves on to a question (see enterFrom), never to a button.
+                    imeAction = ImeAction.Next,
                     onValueChange = { onValueChange(field.fieldId, it) },
                     onCheck = { onCheckField(field.fieldId) },
-                    modifier = Modifier.bringIntoViewRequester(bringers.getValue(field.fieldId)),
+                    modifier = Modifier
+                        .bringIntoViewRequester(bringers.getValue(field.fieldId))
+                        .onFocusChanged { focus ->
+                            if (focus.hasFocus) typingIn = field.fieldId
+                            else if (typingIn == field.fieldId) typingIn = null
+                        },
                     focusRequester = focusers.getValue(field.fieldId),
-                    onNext = if (autoFollow) ({
-                        focusManager.clearFocus() // leaving the box checks the answer
-                        followRequests++
-                    }) else null,
+                    onNext = { enterFrom(index) },
                     onFillField = { id, found ->
                         onValueChange(id, found)
                         onCheckField(id)

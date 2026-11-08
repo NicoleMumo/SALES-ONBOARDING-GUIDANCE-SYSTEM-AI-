@@ -16,8 +16,8 @@ import java.util.TimeZone
  * replaces each sales agent with a pseudonym.
  */
 object SessionCsvExport {
-    /** An unfinished session with no check for this long is labelled abandoned for training. */
-    const val ABANDONED_AFTER_MILLIS = 24L * 60 * 60 * 1000
+    /** An unfinished session with no check for this long is labelled abandoned, as in the app. */
+    const val ABANDONED_AFTER_MILLIS = SessionExpiry.STALE_AFTER_MILLIS
 
     val SESSION_COLUMNS = listOf(
         "session_id", "sales_agent", "industry", "client_type", "status",
@@ -90,6 +90,7 @@ object SessionCsvExport {
             val lastCheck = session.steps.maxOf { it.timestampMillis }
             when {
                 session.status.equals("completed", ignoreCase = true) -> session to "completed"
+                session.status.equals("abandoned", ignoreCase = true) -> session to "abandoned"
                 nowMillis - lastCheck >= ABANDONED_AFTER_MILLIS -> session to "abandoned"
                 else -> null
             }

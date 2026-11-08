@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -115,6 +117,7 @@ private val INTRO_STEPS = listOf(
 fun GuideIntro(onFinish: () -> Unit, guideMoving: Boolean, modifier: Modifier = Modifier) {
     val c = Sm.colors
     var step by rememberSaveable { mutableIntStateOf(0) }
+    val short = isShortScreen()
     val entrance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         entrance.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
@@ -130,6 +133,7 @@ fun GuideIntro(onFinish: () -> Unit, guideMoving: Boolean, modifier: Modifier = 
     ) {
         Column(
             Modifier
+                .verticalScroll(rememberScrollState()) // short phones can scroll the tour
                 .padding(24.dp)
                 .widthIn(max = 420.dp)
                 .alpha(entrance.value.coerceIn(0f, 1f))
@@ -148,7 +152,7 @@ fun GuideIntro(onFinish: () -> Unit, guideMoving: Boolean, modifier: Modifier = 
             ) { index ->
                 val current = INTRO_STEPS[index]
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    GuideMascot(current.mood, Modifier.size(140.dp), animated = guideMoving)
+                    GuideMascot(current.mood, Modifier.size(if (short) 96.dp else 140.dp), animated = guideMoving)
                     Surface(shape = RoundedCornerShape(24.dp), color = c.cream, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(current.title, style = MaterialTheme.typography.headlineSmall, color = c.ink)

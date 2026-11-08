@@ -171,7 +171,7 @@ fun SessionHistoryContent(
             horizontalArrangement = Arrangement.spacedBy(Space.s),
             verticalArrangement = Arrangement.spacedBy(Space.s)
         ) {
-            listOf("all" to "All", "completed" to "Completed", "in_progress" to "In progress").forEach { (value, label) ->
+            listOf("all" to "All", "completed" to "Completed", "in_progress" to "In progress", "abandoned" to "Abandoned").forEach { (value, label) ->
                 SmChip(label, selected = selectedStatus == value, onClick = { selectedStatus = value })
             }
             listOf("banking" to "Banking", "telecom" to "Telecom").forEach { (value, label) ->

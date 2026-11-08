@@ -322,6 +322,30 @@ data class CompletionRiskGuidance(
     val reasons: List<String>
 )
 
+/**
+ * Paces the warning the agent sees, so it builds up instead of jumping to red. The model's
+ * own level is unchanged; only what is shown is paced: nothing for the first [quietChecks]
+ * checks, amber before red, and red only after [highStreak] high scores in a row. The shown
+ * level rises at most one step per check and falls as soon as the model's level falls.
+ */
+class RiskWarningPacer(private val quietChecks: Int = 4, private val highStreak: Int = 3) {
+    private var checks = 0
+    private var highRun = 0
+    private var shown = CompletionRiskLevel.LOW
+
+    fun next(modelLevel: CompletionRiskLevel): CompletionRiskLevel {
+        checks++
+        highRun = if (modelLevel == CompletionRiskLevel.HIGH) highRun + 1 else 0
+        val target = when {
+            checks <= quietChecks || modelLevel == CompletionRiskLevel.LOW -> CompletionRiskLevel.LOW
+            modelLevel == CompletionRiskLevel.HIGH && highRun >= highStreak -> CompletionRiskLevel.HIGH
+            else -> CompletionRiskLevel.MEDIUM
+        }
+        shown = if (target.ordinal > shown.ordinal) CompletionRiskLevel.entries[shown.ordinal + 1] else target
+        return shown
+    }
+}
+
 object CompletionRiskGuidanceMapper {
     fun from(result: CompletionRiskResult): CompletionRiskGuidance? =
         when (result.level) {

@@ -8,6 +8,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -55,6 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
+/** Gentle words, so a warning prompts the agent to help without alarming them. */
+internal fun riskTitle(level: CompletionRiskLevel): String = when (level) {
+    CompletionRiskLevel.HIGH -> "This customer may need help now"
+    else -> "Check in with the customer"
+}
+
 /** What the guidance points at next. */
 internal enum class GuidanceStep { FIX, SUGGESTED, NEXT_REQUIRED, DONE }
 
@@ -76,6 +84,24 @@ internal fun NextFieldGuidance.pointer(): GuidancePointer? {
 }
 
 /**
+ * Where the guidance points, never empty while anything is left to do: the engine's pick
+ * ([pointer]) or, before its first answer, the first required question not yet answered.
+ */
+internal fun guidancePointer(
+    guidance: NextFieldGuidance,
+    fields: List<FormField>,
+    state: LiveValidationState
+): GuidancePointer? = guidance.pointer()
+    ?: fields.firstOrNull { it.isRequiredFor(state.values) && !it.isAnsweredIn(state) }
+        ?.let { GuidancePointer(GuidanceStep.NEXT_REQUIRED, it.fieldId) }
+
+/** Every answer that needs fixing, in the form's order. */
+internal fun answersToFix(fields: List<FormField>, state: LiveValidationState): List<String> {
+    val wrong = ValidationErrorDisplayMapper.forState(state).map { it.fieldId }.toSet()
+    return fields.map { it.fieldId }.filter { it in wrong }
+}
+
+/**
  * The guidance panel. It floats over the form, so the suggestion and the risk warning stay
  * in sight while the agent scrolls. Tapping the suggestion opens that question; the panel
  * can be dragged anywhere on the page and folded to one line. "Auto-follow" makes the
@@ -86,6 +112,8 @@ internal fun BoxScope.GuidanceDock(
     pointer: GuidancePointer?,
     risk: CompletionRiskGuidance?,
     mood: GuideMood,
+    /** Every answer that needs fixing, in the form's order. */
+    fixes: List<String>,
     fieldName: (String) -> String,
     sectionName: (String) -> String?,
     autoFollow: Boolean,
@@ -101,9 +129,10 @@ internal fun BoxScope.GuidanceDock(
     onOpenField: (String) -> Unit,
     onReview: () -> Unit
 ) {
-    if (pointer == null && risk == null && greeting == null) return
     val c = Sm.colors
-    var folded by rememberSaveable { mutableStateOf(false) }
+    // On a short phone the panel starts folded to one line, to leave room for the form.
+    val short = isShortScreen()
+    var folded by rememberSaveable { mutableStateOf(short) }
     var showRiskDetail by remember { mutableStateOf(false) }
     var dockSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -156,8 +185,9 @@ internal fun BoxScope.GuidanceDock(
                 if (!folded && risk != null) {
                     RiskLine(risk, expanded = showRiskDetail, onToggle = { showRiskDetail = !showRiskDetail })
                 }
-                if (pointer != null) {
-                    PointerLine(pointer, fieldName, sectionName, onOpenField, onReview)
+                when {
+                    fixes.size > 1 && !folded -> FixList(fixes, fieldName, sectionName, onOpenField)
+                    pointer != null -> PointerLine(pointer, fieldName, sectionName, onOpenField, onReview)
                 }
             }
         }
@@ -231,6 +261,115 @@ private fun DockHeader(
     }
 }
 
+/**
+ * The guidance while the keyboard is open: one slim bar just above it. It takes its own room
+ * instead of floating over the page, so the box being typed in is never hidden behind it.
+ */
+@Composable
+internal fun GuidanceStrip(
+    pointer: GuidancePointer?,
+    risk: CompletionRiskGuidance?,
+    mood: GuideMood,
+    fixes: List<String>,
+    guideMoving: Boolean,
+    fieldName: (String) -> String,
+    onOpenField: (String) -> Unit,
+    onReview: () -> Unit,
+    /** Tapping the guide opens the full panel over the page, even while typing. */
+    onExpand: () -> Unit
+) {
+    val c = Sm.colors
+    val fix = pointer?.step == GuidanceStep.FIX
+    val label = when (pointer?.step) {
+        GuidanceStep.FIX -> if (fixes.size > 1) "Fix (${fixes.size})" else "Fix"
+        GuidanceStep.SUGGESTED -> "Next"
+        GuidanceStep.NEXT_REQUIRED -> "Next required"
+        GuidanceStep.DONE -> "All in"
+        null -> risk?.level?.let(::riskTitle).orEmpty()
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .background(c.ink, RoundedCornerShape(14.dp))
+            .clickable(enabled = pointer != null, role = Role.Button) {
+                pointer?.fieldId?.let(onOpenField) ?: onReview()
+            }
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        GuideMascot(
+            mood,
+            Modifier
+                .size(38.dp)
+                .clickable(role = Role.Button, onClick = onExpand)
+                .semantics { contentDescription = "Open the full guidance" },
+            animated = guideMoving
+        )
+        if (risk != null) RiskDot(risk.level)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = if (fix) c.cherry else c.lime
+        )
+        Text(
+            pointer?.fieldId?.let(fieldName) ?: if (pointer?.step == GuidanceStep.DONE) "Review and submit" else "",
+            style = MaterialTheme.typography.titleSmall,
+            color = c.cream,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (pointer != null) SmIcon(R.drawable.ic_sm_arrow, c.cream, size = 18.dp)
+    }
+}
+
+/** Every answer to fix, each one tap away, so none is missed. */
+@Composable
+private fun FixList(
+    fixes: List<String>,
+    fieldName: (String) -> String,
+    sectionName: (String) -> String?,
+    onOpenField: (String) -> Unit
+) {
+    val c = Sm.colors
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "Fix ${fixes.size} answers",
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = c.cream
+        )
+        Column(
+            Modifier
+                .heightIn(max = 168.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            fixes.forEach { id ->
+                Surface(
+                    onClick = { onOpenField(id) },
+                    shape = RoundedCornerShape(12.dp),
+                    color = c.cherry,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            listOfNotNull(fieldName(id), sectionName(id)).joinToString(" · "),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = c.white,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SmIcon(R.drawable.ic_sm_arrow, c.white, size = 18.dp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** The guide's hello when the form opens, with a fun fact. Tap to dismiss. */
 @Composable
 private fun GreetingBubble(greeting: GuideGreeting, onDismiss: () -> Unit) {
@@ -274,7 +413,7 @@ private fun RiskLine(risk: CompletionRiskGuidance, expanded: Boolean, onToggle: 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RiskDot(risk.level)
             Text(
-                if (high) "High chance this customer stops" else "This customer may not finish",
+                riskTitle(risk.level),
                 style = MaterialTheme.typography.titleSmall,
                 color = c.cream,
                 modifier = Modifier.weight(1f)

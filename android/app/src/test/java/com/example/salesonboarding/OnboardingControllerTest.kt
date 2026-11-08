@@ -550,7 +550,19 @@ class OnboardingFormControllerTest {
         )
         runCurrent()
 
+        // The model already scores the session high, but the warning waits so one bad start
+        // does not upset the sales agent.
         assertEquals(CompletionRiskLevel.HIGH, controller.riskFlow.value?.level)
+        assertEquals(null, controller.guidanceFlow.value.riskGuidance?.level)
+
+        repeat(5) {
+            controller.recordRiskEvent(
+                CompletionRiskEvent(2.0, validationPassed = false, isRevisit = true, progressPercent = 25.0)
+            )
+        }
+        runCurrent()
+
+        assertEquals(CompletionRiskLevel.HIGH, controller.guidanceFlow.value.riskGuidance?.level)
         assertEquals(
             "Pause and help the customer complete the remaining information.",
             controller.guidanceFlow.value.riskGuidance?.message

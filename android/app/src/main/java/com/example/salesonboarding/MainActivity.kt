@@ -199,11 +199,20 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (showAgentHome && selectedIndustry == null) {
-                        // The latest unfinished session, offered on the home screen.
+                        // The latest unfinished session, offered on the home screen. Sessions
+                        // left untouched for 48 hours are marked abandoned instead (SessionExpiry).
                         var unfinished by remember(agentId) { mutableStateOf<StoredOnboardingSession?>(null) }
-                        LaunchedEffect(agentId, sessionHistoryStore) {
+                        var sessionsLoaded by remember(agentId) { mutableIntStateOf(0) }
+                        val sessionWriter = remember(database, companyId) {
+                            companyId.takeIf(COMPANY_ID_PATTERN::matches)?.let { FirebaseFieldEntryStore(database, it) }
+                        }
+                        LaunchedEffect(agentId, sessionHistoryStore, sessionsLoaded) {
                             sessionHistoryStore?.loadAgentSessions(agentId) { result ->
-                                unfinished = result.getOrNull()?.firstOrNull { it.status == "in_progress" }
+                                val now = System.currentTimeMillis()
+                                val open = result.getOrNull().orEmpty().filter { it.status == "in_progress" }
+                                open.filter { SessionExpiry.isStale(it, now) }
+                                    .forEach { stale -> sessionWriter?.abandonSession(stale.sessionId) {} }
+                                unfinished = open.firstOrNull { !SessionExpiry.isStale(it, now) }
                             }
                         }
                         AgentHomeScreen(
@@ -216,6 +225,10 @@ class MainActivity : ComponentActivity() {
                             onSignOut = ::signOut,
                             unfinishedSession = unfinished,
                             onContinueSession = ::resumeSession,
+                            onCancelSession = { session ->
+                                unfinished = null
+                                sessionWriter?.abandonSession(session.sessionId) { sessionsLoaded++ }
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (selectedIndustry == null) {

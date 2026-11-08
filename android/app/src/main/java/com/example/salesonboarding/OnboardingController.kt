@@ -279,6 +279,9 @@ class OnboardingFormController(
     private var hasDraftChanges = initialValues.values.any { !it.isNullOrBlank() }
     private var draftSaveJob: Job? = null
     private var draftSaveRequestId = 0
+    // What the agent sees builds up gradually (see RiskWarningPacer); riskFlow keeps the model's level.
+    private val warningPacer = RiskWarningPacer()
+    private var shownRisk: CompletionRiskResult? = null
 
     init {
         if (!isResumingSession) {
@@ -422,6 +425,7 @@ class OnboardingFormController(
             isBanking = industry == "banking",
             isBusiness = context == "business"
         ) ?: CompletionRiskScorer.score(events)
+        shownRisk = risk.value?.let { it.copy(level = warningPacer.next(it.level)) }
         currentRiskEvents = events
     }
 
@@ -532,7 +536,10 @@ class OnboardingFormController(
         state: LiveValidationState,
         prediction: FieldPrediction?
     ): NextFieldGuidance {
-        val correction = ValidationErrorDisplayMapper.forState(state).firstOrNull()
+        // The first answer to fix in the form's order, so fixes are visited top to bottom.
+        val correction = ValidationErrorDisplayMapper.forState(state).minByOrNull { error ->
+            fields.indexOfFirst { it.fieldId == error.fieldId }.let { if (it < 0) Int.MAX_VALUE else it }
+        }
         if (correction != null) {
             val fieldName = fields.firstOrNull { it.fieldId == correction.fieldId }?.fieldName
                 ?: correction.fieldId
@@ -540,7 +547,7 @@ class OnboardingFormController(
                 prediction = prediction,
                 correction = correction,
                 message = "Correct $fieldName: ${correction.message}",
-                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from),
+                riskGuidance = shownRisk?.let(CompletionRiskGuidanceMapper::from),
                 modelUnavailable = modelUnavailable
             )
         }
@@ -553,7 +560,7 @@ class OnboardingFormController(
                 prediction = prediction,
                 message = "All required information is complete. You can continue.",
                 isComplete = true,
-                riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from),
+                riskGuidance = shownRisk?.let(CompletionRiskGuidanceMapper::from),
                 modelUnavailable = modelUnavailable
             )
         }
@@ -566,7 +573,7 @@ class OnboardingFormController(
             prediction = prediction,
             nextFieldId = recommendedField.fieldId,
             message = "Collect ${recommendedField.fieldName} next.",
-            riskGuidance = risk.value?.let(CompletionRiskGuidanceMapper::from),
+            riskGuidance = shownRisk?.let(CompletionRiskGuidanceMapper::from),
             modelUnavailable = modelUnavailable
         )
     }
