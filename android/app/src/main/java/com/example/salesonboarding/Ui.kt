@@ -7,12 +7,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
@@ -423,8 +427,14 @@ fun AppMark(modifier: Modifier = Modifier, size: Dp = 44.dp) {
 
 /**
  * The frame every screen uses: the cream header, a white page, and an optional footer that
- * stays in reach. Set [scrollable] to false when the content scrolls by itself.
+ * stays in reach. Set [scrollable] to false when the content scrolls by itself. [overlay]
+ * floats above the page and stays put while it scrolls.
+ *
+ * Small screens: while the keyboard is open, or on a short phone, the header shrinks so
+ * the page keeps its room. While the keyboard is open, [typingBar] (if given) replaces
+ * [bottomBar] and [overlay] is hidden, so nothing floats over the box being typed in.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppScreen(
     title: String,
@@ -435,11 +445,18 @@ fun AppScreen(
     scrollable: Boolean = true,
     leading: (@Composable () -> Unit)? = null,
     bottomBar: (@Composable ColumnScope.() -> Unit)? = null,
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
+    typingBar: (@Composable ColumnScope.() -> Unit)? = null,
+    /** Shows [overlay] while typing too, when the agent asks for it. */
+    overlayWhileTyping: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     // The phone's Back button does what the header's back arrow does.
     if (onBack != null) BackHandler(onBack = onBack)
     val c = Sm.colors
+    val typing = WindowInsets.isImeVisible
+    val compactHeader = typing || isShortScreen()
+    val footer = if (typing && typingBar != null) typingBar else bottomBar
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -448,17 +465,30 @@ fun AppScreen(
             // already padded by the activity's Scaffold, so it is not counted twice.
             .windowInsetsPadding(WindowInsets.ime.exclude(WindowInsets.navigationBars))
     ) {
-        ScreenHeader(title = title, subtitle = subtitle, onBack = onBack, leading = leading, actions = actions)
-        Column(
-            modifier = Modifier
+        ScreenHeader(
+            title = title,
+            subtitle = subtitle,
+            onBack = onBack,
+            leading = leading,
+            actions = actions,
+            compact = compactHeader
+        )
+        Box(
+            Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .let { if (scrollable) it.verticalScroll(rememberScrollState()) else it }
-                .padding(horizontal = Space.xl, vertical = Space.l),
-            verticalArrangement = Arrangement.spacedBy(Space.l),
-            content = content
-        )
-        if (bottomBar != null) {
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .let { if (scrollable) it.verticalScroll(rememberScrollState()) else it }
+                    .padding(horizontal = Space.xl, vertical = Space.l),
+                verticalArrangement = Arrangement.spacedBy(Space.l),
+                content = content
+            )
+            if (!(typing && typingBar != null) || overlayWhileTyping) overlay?.invoke(this)
+        }
+        if (footer != null) {
             Surface(
                 color = c.white,
                 shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -467,18 +497,30 @@ fun AppScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = Space.xl, end = Space.xl, top = 14.dp, bottom = Space.l),
+                        .padding(
+                            start = if (typing) Space.m else Space.xl,
+                            end = if (typing) Space.m else Space.xl,
+                            top = if (typing) 6.dp else 14.dp,
+                            bottom = if (typing) 6.dp else Space.l
+                        ),
                     verticalArrangement = Arrangement.spacedBy(Space.m),
-                    content = bottomBar
+                    content = footer
                 )
             }
         }
     }
 }
 
+/** A phone too short to give the full header its room, such as a small or older phone. */
+@Composable
+fun isShortScreen(): Boolean = LocalConfiguration.current.screenHeightDp < SHORT_SCREEN_DP
+
+private const val SHORT_SCREEN_DP = 680
+
 /**
  * The cream bar at the top of every screen: 132 dp tall, rounded at the bottom, with a thin
  * line under it. A back arrow on the left (agent pages) or round buttons on the right.
+ * [compact] makes it about half as tall, with a smaller title, for when room is short.
  */
 @Composable
 fun ScreenHeader(
@@ -488,11 +530,13 @@ fun ScreenHeader(
     onBack: (() -> Unit)? = null,
     /** Something before the title, such as the brand mark on the agent's home screen. */
     leading: (@Composable () -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {}
+    actions: @Composable RowScope.() -> Unit = {},
+    compact: Boolean = false
 ) {
     val c = Sm.colors
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val top = max(52.dp, statusBar + 8.dp)
+    val top = if (compact) statusBar + 4.dp else max(52.dp, statusBar + 8.dp)
+    val barHeight = if (compact) 56.dp else 80.dp
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = c.cream,
@@ -501,7 +545,7 @@ fun ScreenHeader(
     ) {
         Row(
             modifier = Modifier
-                .height(top + 80.dp)
+                .height(top + barHeight)
                 .padding(start = if (onBack == null) Space.xl else 20.dp, end = 20.dp, top = top),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -516,13 +560,13 @@ fun ScreenHeader(
             Column(Modifier.weight(1f)) {
                 Text(
                     title,
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge,
                     color = c.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading() }
                 )
-                if (subtitle != null) {
+                if (subtitle != null && !compact) {
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),

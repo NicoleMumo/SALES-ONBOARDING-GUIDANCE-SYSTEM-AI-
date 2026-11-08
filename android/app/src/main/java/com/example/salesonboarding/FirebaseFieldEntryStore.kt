@@ -1,5 +1,6 @@
 package com.example.salesonboarding
 
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.MutableData
@@ -20,8 +21,21 @@ data class StoredOnboardingSession(
     val validatedFieldIds: Set<String> = emptySet(),
     val resumeFieldId: String? = null,
     /** The customer agreed that anonymised steps of this session may improve the system. */
-    val trainingConsent: Boolean = false
+    val trainingConsent: Boolean = false,
+    /** When the session was last saved, for telling a stale unfinished session. */
+    val updatedAt: Long? = null
 )
+
+/** Unfinished sessions are abandoned when cancelled, or after [STALE_AFTER_MILLIS] untouched. */
+object SessionExpiry {
+    const val STALE_AFTER_MILLIS = 48L * 60 * 60 * 1000
+
+    fun lastActivity(session: StoredOnboardingSession): Long? = session.updatedAt ?: session.startedAt
+
+    fun isStale(session: StoredOnboardingSession, nowMillis: Long): Boolean =
+        session.status == "in_progress" &&
+            lastActivity(session)?.let { nowMillis - it >= STALE_AFTER_MILLIS } == true
+}
 
 interface SessionHistoryStore {
     fun loadAgentSessions(agentUid: String, onResult: (Result<List<StoredOnboardingSession>>) -> Unit)
@@ -51,6 +65,10 @@ interface OnboardingSessionStore : FieldEntryStore {
     ) {}
     fun appendTrainingStep(recordId: String, fieldId: String, passed: Boolean, atMillis: Long) {}
     fun markTrainingCompleted(recordId: String) {}
+    /** Marks an unfinished session abandoned, so it can no longer be continued or changed. */
+    fun abandonSession(sessionId: String, onResult: (Result<Unit>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("Sessions cannot be cancelled here.")))
+    }
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
     fun appendEvent(sessionId: String, type: String, fieldId: String?)
     fun markCompleted(sessionId: String)
@@ -128,8 +146,8 @@ class FirebaseFieldEntryStore(
     ) {
         requireValidSessionId(sessionId)
         sessions.child(sessionId).updateChildren(
+            // The session ID is the key of this record, so it is not stored again inside it.
             mapOf(
-                "sessionId" to sessionId,
                 "companyId" to companyId,
                 "agentId" to agentId,
                 "agentEmail" to agentEmail.trim(),
@@ -159,7 +177,8 @@ class FirebaseFieldEntryStore(
     override fun recordConsent(sessionId: String, agentId: String, atMillis: Long) {
         requireValidSessionId(sessionId)
         sessions.child(sessionId).updateChildren(
-            mapOf("consentAt" to atMillis, "consentBy" to agentId)
+            // The agent who recorded consent is the session's own agentId: no one else can write it.
+            mapOf("consentAt" to atMillis)
         ).reportFailure("Could not save the customer's consent for session '$sessionId'.")
     }
 
@@ -201,6 +220,28 @@ class FirebaseFieldEntryStore(
         ).reportFailure("Could not save an anonymised step to '$recordId'.")
     }
 
+    override fun abandonSession(sessionId: String, onResult: (Result<Unit>) -> Unit) {
+        requireValidSessionId(sessionId)
+        // Only a session still in progress is abandoned; a completed one is left as it is.
+        sessions.child(sessionId).runTransaction(object : Transaction.Handler {
+            override fun doTransaction(currentData: MutableData): Transaction.Result {
+                if (currentData.child("status").getValue(String::class.java) != "in_progress") {
+                    return Transaction.abort()
+                }
+                val now = System.currentTimeMillis()
+                currentData.child("status").value = "abandoned"
+                currentData.child("abandonedAt").value = now
+                currentData.child("updatedAt").value = now
+                currentData.child("resumeFieldId").value = null
+                return Transaction.success(currentData)
+            }
+
+            override fun onComplete(error: DatabaseError?, committed: Boolean, currentData: DataSnapshot?) {
+                onResult(if (error != null) Result.failure(error.toException()) else Result.success(Unit))
+            }
+        }, false)
+    }
+
     override fun markTrainingCompleted(recordId: String) {
         trainingData.child(recordId).updateChildren(
             mapOf("status" to "completed", "updatedAt" to System.currentTimeMillis())
@@ -217,7 +258,6 @@ class FirebaseFieldEntryStore(
         requireValidFieldId(fieldId)
         sessions.child(sessionId).child("validation").child(fieldId).setValue(
             mapOf(
-                "fieldId" to fieldId,
                 "isValid" to isValid,
                 "errorMessage" to message,
                 "updatedAt" to System.currentTimeMillis()
@@ -286,7 +326,6 @@ class FirebaseFieldEntryStore(
                     return Transaction.abort()
                 }
                 currentData.child("updatedAt").value = now
-                currentData.child("lastSavedAt").value = now
                 currentData.child("resumeFieldId").value = resumeFieldId
                 entries.forEach { entry ->
                     currentData.child("entries").child(entry.fieldId).value =
@@ -375,10 +414,8 @@ private fun requireEntriesBelongToSession(sessionId: String, entries: List<Field
     }
 }
 
+/** An answer is saved under entries/{fieldId} of its session, so the path already names both. */
 private fun FieldEntry.toDatabaseValue(): Map<String, Any?> = mapOf(
-    "entryId" to entryId,
-    "sessionId" to sessionId,
-    "fieldId" to fieldId,
     "value" to value,
     "timestamp" to timestamp,
     "isValid" to isValid
@@ -422,11 +459,13 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         val fieldName = field.child("fieldName").getValue(String::class.java)
         if (fieldId != null && fieldName != null) fieldId to fieldName else null
     }.toMap()
+    val sessionId = child("sessionId").getValue(String::class.java) ?: key.orEmpty()
     val entries = child("entries").children.mapNotNull { entry ->
-        val fieldId = entry.child("fieldId").getValue(String::class.java) ?: entry.key ?: return@mapNotNull null
+        // Sessions saved before 8 November 2026 also repeat the IDs inside each answer.
+        val fieldId = entry.key ?: entry.child("fieldId").getValue(String::class.java) ?: return@mapNotNull null
         FieldEntry(
-            entryId = entry.child("entryId").getValue(String::class.java).orEmpty(),
-            sessionId = entry.child("sessionId").getValue(String::class.java).orEmpty(),
+            entryId = "$sessionId:$fieldId",
+            sessionId = sessionId,
             fieldId = fieldId,
             value = entry.child("value").getValue(String::class.java),
             timestamp = entry.child("timestamp").getValue(Long::class.java) ?: 0L,
@@ -437,7 +476,7 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         if (field.child("isValid").getValue(Boolean::class.java) == true) field.key else null
     }.toSet()
     return StoredOnboardingSession(
-        sessionId = child("sessionId").getValue(String::class.java) ?: key.orEmpty(),
+        sessionId = sessionId,
         agentId = child("agentId").getValue(String::class.java).orEmpty(),
         industry = child("industry").getValue(String::class.java).orEmpty(),
         context = child("context").getValue(String::class.java).orEmpty(),
@@ -450,6 +489,7 @@ internal fun DataSnapshot.toStoredOnboardingSession(): StoredOnboardingSession? 
         fieldNames = fieldNames,
         validatedFieldIds = validatedFieldIds,
         resumeFieldId = child("resumeFieldId").getValue(String::class.java),
-        trainingConsent = child("trainingConsent").getValue(Boolean::class.java) == true
+        trainingConsent = child("trainingConsent").getValue(Boolean::class.java) == true,
+        updatedAt = child("updatedAt").getValue(Long::class.java)
     )
 }

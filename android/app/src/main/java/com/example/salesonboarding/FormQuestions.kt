@@ -31,7 +31,19 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.TimeZone
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +63,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -89,10 +103,25 @@ internal fun QuestionBlock(
     state: LiveValidationState,
     imeAction: ImeAction,
     onValueChange: (String) -> Unit,
-    onCheck: () -> Unit
+    onCheck: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Puts the cursor in this question's box when the guidance panel jumps to it. */
+    focusRequester: FocusRequester? = null,
+    /** Replaces the keyboard's Next, for example to follow the guidance instead. */
+    onNext: (() -> Unit)? = null,
+    /** Fills and checks another question, used by the ID photo reader's "Use" buttons. */
+    onFillField: ((fieldId: String, value: String) -> Unit)? = null
 ) {
     val c = Sm.colors
     val value = state.values[field.fieldId].orEmpty()
+    // A phone number is tidied into one format when the agent leaves the box, then checked.
+    val checkAnswer: () -> Unit = if (field.fieldType == "phone") {
+        {
+            val tidy = PhoneNumberFormat.tidy(value)
+            if (tidy != value) onValueChange(tidy)
+            onCheck()
+        }
+    } else onCheck
     val required = field.isRequiredFor(state.values)
     val error = errorFor(field, state)
     val isValid = field.isAnsweredIn(state)
@@ -104,7 +133,7 @@ internal fun QuestionBlock(
         onCheck()
     }
 
-    Column {
+    Column(modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 buildAnnotatedString {
@@ -138,7 +167,9 @@ internal fun QuestionBlock(
                 isValid = isValid,
                 imeAction = imeAction,
                 onValueChange = onValueChange,
-                onCheck = onCheck
+                onCheck = checkAnswer,
+                focusRequester = focusRequester,
+                onNext = onNext
             )
         }
         if (error != null) {
@@ -156,7 +187,13 @@ internal fun QuestionBlock(
             }
         }
         if (field.fieldId == "identification_document") {
-            DocumentOcrScanner()
+            val formFieldIds = allFields.map { it.fieldId }.toSet()
+            DocumentOcrScanner(
+                onUse = onFillField?.let { fill ->
+                    { fieldId, found -> if (fieldId in formFieldIds) fill(fieldId, found) }
+                },
+                usableFieldIds = formFieldIds
+            )
         }
     }
 }
@@ -170,7 +207,9 @@ private fun TextInput(
     isValid: Boolean,
     imeAction: ImeAction,
     onValueChange: (String) -> Unit,
-    onCheck: () -> Unit
+    onCheck: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    onNext: (() -> Unit)? = null
 ) {
     val c = Sm.colors
     val focusManager = LocalFocusManager.current
@@ -206,6 +245,7 @@ private fun TextInput(
                 onValueChange = onValueChange,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
                     .onFocusChanged { focus ->
                         // Check the answer when the agent leaves the box, never while typing.
                         if (hadFocus && !focus.isFocused) onCheck()
@@ -228,12 +268,54 @@ private fun TextInput(
                     imeAction = imeAction
                 ),
                 keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
-                    onDone = { focusManager.clearFocus() }
+                    onNext = { onNext?.invoke() ?: focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = { onNext?.invoke() ?: focusManager.clearFocus() }
                 )
             )
         }
+        if (field.fieldType == "date") {
+            DatePickerButton(field.fieldName, value) { picked ->
+                onValueChange(picked)
+                onCheck()
+            }
+        }
         if (isValid) Tick()
+    }
+}
+
+/** A calendar button: the chosen day is written as YYYY-MM-DD, so nothing has to be typed. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerButton(fieldName: String, value: String, onPicked: (String) -> Unit) {
+    val c = Sm.colors
+    var open by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .size(44.dp)
+            .clickable(role = Role.Button) { open = true }
+            .semantics { contentDescription = "Choose $fieldName from a calendar" },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Filled.DateRange, contentDescription = null, tint = c.ink)
+    }
+    if (!open) return
+    val utcDay = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC"); isLenient = false } }
+    val thisYear = Calendar.getInstance().get(Calendar.YEAR)
+    val pickerState = rememberDatePickerState(
+        initialSelectedDateMillis = runCatching { utcDay.parse(value)?.time }.getOrNull(),
+        yearRange = 1900..thisYear
+    )
+    DatePickerDialog(
+        onDismissRequest = { open = false },
+        confirmButton = {
+            TextButton(onClick = {
+                pickerState.selectedDateMillis?.let { onPicked(utcDay.format(Date(it))) }
+                open = false
+            }) { Text("Use this date") }
+        },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } }
+    ) {
+        DatePicker(state = pickerState, showModeToggle = true)
     }
 }
 
@@ -408,12 +490,16 @@ internal fun clearIdPhotos(cacheDir: File) {
  * "Take document photo": on the identification document question, the agent photographs the
  * document from inside the app and the phone reads its printed text (Google ML Kit, on the
  * phone). The photo is written to the app's private cache, never to the phone's gallery, and is
- * deleted as soon as it has been read. The text is shown to compare with the card; it is never
- * put into an answer, uploaded or saved.
+ * deleted as soon as it has been read. The text is shown to compare with the card, with a "Use"
+ * button beside the name, ID number and date of birth it found: tapping one fills and checks
+ * that question ([onUse]). Nothing is put into an answer unless the agent taps "Use", and the
+ * read text itself is never uploaded or saved.
  */
 @Composable
 fun DocumentOcrScanner(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onUse: ((fieldId: String, value: String) -> Unit)? = null,
+    usableFieldIds: Set<String> = emptySet()
 ) {
     val c = Sm.colors
     val context = LocalContext.current
@@ -544,6 +630,36 @@ fun DocumentOcrScanner(
             ) {
                 Column(Modifier.padding(Space.m), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     Text("Text found. Check it against the card.", style = MaterialTheme.typography.titleSmall)
+                    val details = remember(extractedText) { IdCardText.read(extractedText) }
+                    val found = listOf(
+                        Triple("full_name", "Full name", details.fullName),
+                        Triple("identification_document_number", "ID number", details.idNumber),
+                        Triple("date_of_birth", "Date of birth", details.dateOfBirth)
+                    ).filter { (id, _, value) -> value != null && id in usableFieldIds && onUse != null }
+                    var used by remember(extractedText) { mutableStateOf(emptySet<String>()) }
+                    found.forEach { (id, label, value) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.bodySmall, color = c.muted)
+                                Text(value.orEmpty(), style = MaterialTheme.typography.titleSmall, color = c.ink)
+                            }
+                            if (id in used) {
+                                Text("Used", style = MaterialTheme.typography.titleSmall, color = c.mutedStrong)
+                            } else {
+                                SecondaryButton("Use", onClick = {
+                                    onUse?.invoke(id, value.orEmpty())
+                                    used = used + id
+                                }, modifier = Modifier.widthIn(max = 96.dp))
+                            }
+                        }
+                    }
+                    if (found.isNotEmpty()) {
+                        Text(
+                            "\"Use\" fills that question. Check it against the card.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.muted
+                        )
+                    }
                     SelectionContainer {
                         Text(extractedText, style = MaterialTheme.typography.bodyMedium)
                     }

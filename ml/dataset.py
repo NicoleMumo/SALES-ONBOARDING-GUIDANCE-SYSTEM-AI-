@@ -783,7 +783,7 @@ def split_exported_sessions(path, out, seed=2026):
                     for split in ("train", "validation", "test")})
 
 
-ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000
+ABANDONED_AFTER_MS = 48 * 60 * 60 * 1000  # as the app: unfinished and untouched for 48 hours
 
 APP_TRAINING_COLUMNS = [
     "session_id", "sales_agent_id", "industry", "context_value", "onboarding_field",
@@ -800,7 +800,7 @@ def rows_from_firebase(data, now_ms):
     [data] is a Firebase JSON export, of the whole database or of `trainingData` alone.
     Rows match the app's Training CSV: a step's time runs from the previous check (or the
     start), so `agent_response_time_minutes` is 0. Only sessions with a known outcome are
-    kept: completed, or unfinished with no step for 24 hours (abandoned).
+    kept: completed, or unfinished with no step for 48 hours (abandoned).
     """
     records = data.get("trainingData", data) if isinstance(data, dict) else {}
     rows = []

@@ -14,8 +14,9 @@ team follows the process.
    typed; the app gives the same reply whether or not that email has an account.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
-   mobile, broadband, TV, IoT or landline. That choice, plus the company's own
-   settings, decides the form (the "playbook").
+   mobile, broadband, TV, IoT or landline. The type chosen last time is already
+   selected. That choice, plus the company's own settings, decides the form (the
+   "playbook").
 3. **Consent.** The agent explains to the customer why the information is
    collected, how document photos are used, the customer's rights, and how
    answers are kept, then ticks that the customer agreed. If the company allows
@@ -31,19 +32,60 @@ team follows the process.
    any section at any time.
 5. **Answers are checked when the agent leaves the box**, picks an option, ticks
    a box, or changes section, never while typing. A wrong answer shows its
-   message under the box; a correct one shows a tick.
-6. **Suggestions and warnings.** The AI's suggestion for the next question is
-   marked "Suggested next" (with a link if it is in another section). If the
-   session looks likely to be abandoned, an amber or red banner says so and
-   suggests offering help. Both are advice; the agent decides.
+   message under the box; a correct one shows a tick. Typing aids: a date has a
+   calendar button that writes YYYY-MM-DD; a phone number typed as
+   0712 345 678, +254 712 345 678 or 254712345678 is tidied to 0712345678 before
+   it is checked.
+6. **Suggestions and warnings.** A guidance panel floats at the bottom of the
+   form and stays in sight while the agent scrolls. It shows, in order of
+   priority: an answer to fix, the AI's "Suggested next" question, or the next
+   required question. Tapping it opens that question, in any section, and puts
+   the cursor in it. When more than one answer needs fixing, the panel lists
+   them all in form order; tapping one opens it. If the session looks likely to
+   be abandoned, the panel also shows a gentle line ("Check in with the
+   customer", then "This customer may need help now"); tapping it shows the
+   advice. The warning builds up slowly so one slip does not alarm the agent:
+   nothing for the first four checked answers, always amber before red, and red
+   only after three high scores in a row. It drops as soon as things improve.
+   The panel can be dragged anywhere on the page or folded to one line, and it
+   never disappears: before any advice it points at the first required
+   question. A small guide character
+   in the panel shows how things are going: calm, pleased after an accepted
+   answer, concerned when something needs fixing or the risk is amber, worried
+   when it is red, and celebrating when every required answer is in. Tapping it
+   folds or opens the panel. The panel's ⋮ menu has two settings, both
+   remembered on the phone: **Auto-follow** (the keyboard's Next key checks the
+   answer and goes straight to where the panel points) and **Moving guide**
+   (turn it off for a still face that uses less battery; it is also still when
+   the phone's "Remove animations" is on). The first time the form opens on a
+   phone, the guide gives a five-step tour of the panel (replay it from ⋮).
+   Each time after that it greets the agent with a fun fact about onboarding
+   for a few seconds (tap to skip), then opens the first question it points at;
+   the panel stays open after the greeting.
+   **While the keyboard is open**, the panel becomes a slim bar just above the
+   keyboard (guide, risk dot, where to go next; tap to jump), the header shrinks
+   and the Next button steps aside, so the box being typed in stays visible.
+   Tapping the guide in the slim bar opens the full panel over the form. On
+   short phones the header is always compact and the panel starts folded.
+   **The Enter key** never leaves the form. Pressed in a box, it checks the
+   answer and moves to the next question in the section (or, with Auto-follow,
+   or at the last question, to where the panel points). Pressed when no box is
+   selected, it goes to where the panel points. All of it is advice; the agent
+   decides.
 7. **Review and submit.** The review page lists every answer by section, with an
-   Edit button per section and a list of anything still missing. Submit stays
+   Edit button per section and a list of anything still missing. Tapping a
+   missing or wrong answer opens its question. Submit stays
    off until every required answer is valid. The app shows "Onboarding
    complete" only after Firebase confirms the save.
 
 Answers are saved as a draft while the agent works (about 0.7 seconds after the
 last change). An unfinished session can be continued from **My sessions** on the
-agent's home screen, and opens on the section where the agent stopped. The phone's
+agent's home screen, or, for the latest one, with one tap on **Continue last
+session** there. It opens on the section where the agent stopped. The card has a
+**Cancel session** link: after a confirm, the session is marked abandoned, can
+no longer be changed, and the card goes. A session with no saved change for 48
+hours is marked abandoned the next time the agent opens the home screen, so old
+sessions stop coming back. **My sessions** has an Abandoned filter. The phone's
 Back button goes back one step wherever the screen has a back arrow.
 
 ## An admin's pages
@@ -66,7 +108,8 @@ Admins see five pages in a bottom navigation bar:
   - **Training CSV**: one row per checked answer, in the columns of the training
     data (`ml/dataset.py`), so real sessions can retrain the models. Agents are
     replaced by codes (`AGENT-` plus 12 characters). Only sessions with a known
-    outcome are included: completed, or unfinished with no check for 24 hours
+    outcome are included: completed, abandoned (cancelled by the agent or
+    marked so after 48 hours), or unfinished with no check for 48 hours
     (labelled abandoned). Run `python ml/dataset.py split <file>` to fill the
     `split` column by agent before training.
 
@@ -132,12 +175,16 @@ Each session is stored at `companies/{companyId}/onboardingSessions/{sessionId}`
 
 | Data | What it holds |
 | --- | --- |
-| Session details | company and agent IDs, agent email, industry, customer type, status (`in_progress` or `completed`), start and finish times, `answerChecks: "on_leave"` |
+| Session details | company and agent IDs, agent email, industry, customer type, status (`in_progress` or `completed`), start, consent and finish times, `answerChecks: "on_leave"`, `trainingConsent` |
 | `playbookSnapshot` | a copy of the questions and rules used, so later setting changes do not alter old sessions |
-| `entries/{fieldId}` | the answers: drafts while in progress, then only valid, non-empty answers when completed |
-| `validation/{fieldId}` | the latest check result per question |
+| `entries/{fieldId}` | the answers (`value`, `isValid`, `timestamp`): drafts while in progress, then only valid, non-empty answers when completed |
+| `validation/{fieldId}` | the latest check result per question (`isValid`, `updatedAt`, and `errorMessage` while it fails) |
+
+IDs are not repeated inside a record: the session ID and question ID are the keys
+in its path. Sessions saved before 8 November 2026 still hold those repeats and
+`lastSavedAt`/`consentBy`; the app reads both forms.
 | `events` | one `field_validation_passed` or `field_validation_failed` record per attempt: event type, question ID and time, never the answer |
-| `resumeFieldId`, `lastSavedAt` | where to continue an unfinished session |
+| `resumeFieldId`, `updatedAt` | where to continue an unfinished session, and when it was last saved |
 
 Time spent per question and revisits feed the in-app risk warning. They are
 worked out in memory and are not saved.
@@ -146,8 +193,10 @@ The ID photo reader (on the "Identification document" question) opens the camera
 from inside the app. The photo goes into the app's private cache, never the
 phone's gallery, and Google ML Kit reads its printed text on the phone. The photo
 is deleted as soon as it has been read. The text is shown for the agent to
-compare; it does not fill in answers, and neither the photo nor the text is
-uploaded or saved. It is a typing aid, not identity
+compare. Beside the full name, ID number and date of birth it found, a **Use**
+button fills and checks that question; nothing is filled unless the agent taps
+it. Neither the photo nor the rest of the text is uploaded or saved. It is a
+typing aid, not identity
 verification. The app has no KYC/AML service, selfie, liveness or face-match
 check, and records no identity decision; the agent follows the company's own
 manual checks.

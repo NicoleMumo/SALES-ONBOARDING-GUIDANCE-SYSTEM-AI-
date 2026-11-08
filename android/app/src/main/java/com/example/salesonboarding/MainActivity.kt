@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -111,6 +112,16 @@ class MainActivity : ComponentActivity() {
                     signedIn = true
                     loadFieldConfiguration(user.companyId)
                 }
+                /** Opens an unfinished session where it stopped (from My sessions or the home screen). */
+                fun resumeSession(session: StoredOnboardingSession) {
+                    resumedSession = session
+                    onboardingSessionId = session.sessionId
+                    selectedIndustry = session.industry
+                    selectedContext = session.context
+                    consentGiven = true
+                    showAgentSessions = false
+                    showAgentHome = false
+                }
                 fun signOut() {
                     FirebaseAuth.getInstance().signOut()
                     // Clear everything from the signed-in session, so the next person
@@ -184,18 +195,26 @@ class MainActivity : ComponentActivity() {
                             agentUid = agentId,
                             store = sessionHistoryStore,
                             onBack = { showAgentSessions = false },
-                            onResumeSession = { session ->
-                                resumedSession = session
-                                onboardingSessionId = session.sessionId
-                                selectedIndustry = session.industry
-                                selectedContext = session.context
-                                consentGiven = true
-                                showAgentSessions = false
-                                showAgentHome = false
-                            },
+                            onResumeSession = ::resumeSession,
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (showAgentHome && selectedIndustry == null) {
+                        // The latest unfinished session, offered on the home screen. Sessions
+                        // left untouched for 48 hours are marked abandoned instead (SessionExpiry).
+                        var unfinished by remember(agentId) { mutableStateOf<StoredOnboardingSession?>(null) }
+                        var sessionsLoaded by remember(agentId) { mutableIntStateOf(0) }
+                        val sessionWriter = remember(database, companyId) {
+                            companyId.takeIf(COMPANY_ID_PATTERN::matches)?.let { FirebaseFieldEntryStore(database, it) }
+                        }
+                        LaunchedEffect(agentId, sessionHistoryStore, sessionsLoaded) {
+                            sessionHistoryStore?.loadAgentSessions(agentId) { result ->
+                                val now = System.currentTimeMillis()
+                                val open = result.getOrNull().orEmpty().filter { it.status == "in_progress" }
+                                open.filter { SessionExpiry.isStale(it, now) }
+                                    .forEach { stale -> sessionWriter?.abandonSession(stale.sessionId) {} }
+                                unfinished = open.firstOrNull { !SessionExpiry.isStale(it, now) }
+                            }
+                        }
                         AgentHomeScreen(
                             onStartOnboarding = {
                                 showAgentSessions = false
@@ -204,6 +223,12 @@ class MainActivity : ComponentActivity() {
                             },
                             onViewSessions = { showAgentSessions = true },
                             onSignOut = ::signOut,
+                            unfinishedSession = unfinished,
+                            onContinueSession = ::resumeSession,
+                            onCancelSession = { session ->
+                                unfinished = null
+                                sessionWriter?.abandonSession(session.sessionId) { sessionsLoaded++ }
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (selectedIndustry == null) {

@@ -306,7 +306,7 @@ describe("Realtime Database access rules", function () {
       await assertSucceeds(
         set(
           ref(agent1(), path(ACME, "onboardingSessions/new")),
-          newSession(ACME, "agent-1", { consentAt: 1999, consentBy: "agent-1" }),
+          newSession(ACME, "agent-1", { consentAt: 1999 }),
         ),
       );
     });
@@ -335,6 +335,15 @@ describe("Realtime Database access rules", function () {
       const db = agent1();
       await assertFails(set(ref(db, path(ACME, "onboardingSessions/done/entries/full_name")), { value: "Changed" }));
       await assertFails(set(ref(db, path(ACME, "onboardingSessions/done/status")), "in_progress"));
+    });
+
+    it("lets an agent cancel their own unfinished session, which then cannot change", async function () {
+      const db = agent1();
+      await assertFails(update(ref(agent2(), path(ACME, "onboardingSessions/s1")), { status: "abandoned" }));
+      await assertSucceeds(update(ref(db, path(ACME, "onboardingSessions/s1")), { status: "abandoned", abandonedAt: 3000 }));
+      await assertFails(set(ref(db, path(ACME, "onboardingSessions/s1/status")), "in_progress"));
+      await assertFails(set(ref(db, path(ACME, "onboardingSessions/s1/entries/full_name")), { value: "Late" }));
+      await assertFails(update(ref(db, path(ACME, "onboardingSessions/done")), { status: "abandoned" }));
     });
 
     it("never lets a session change owner or company", async function () {

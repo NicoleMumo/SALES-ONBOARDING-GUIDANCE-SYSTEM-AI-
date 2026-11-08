@@ -259,10 +259,10 @@ class FirebaseCopiesTests(unittest.TestCase):
         export = {"trainingData": {
             "TDONE": self.record("completed", 240_000),
             "TOLD": self.record("in_progress", 240_000),
-            "TNEW": self.record("in_progress", 2 * self.DAY),
+            "TNEW": self.record("in_progress", 2 * self.DAY),  # one day old: not abandoned yet
         }}
 
-        rows = dataset.rows_from_firebase(export, now_ms=2 * self.DAY)
+        rows = dataset.rows_from_firebase(export, now_ms=3 * self.DAY)
 
         self.assertEqual({"TDONE", "TOLD"}, {row["session_id"] for row in rows})
         done = [row for row in rows if row["session_id"] == "TDONE"]
