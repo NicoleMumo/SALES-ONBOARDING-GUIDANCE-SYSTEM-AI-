@@ -141,8 +141,7 @@ How these were tested: [AI, data and results](docs/03-ai-data-and-results.md).
 ## Known limits
 
 - Models were never tested on real agents or customers.
-- The Firebase rules pass 43 automatic tests, but you must still deploy them to your own Firebase project before real data.
-- Agent email verification is off for testing.
+- The Firebase rules pass 52 automatic tests, but you must still deploy them to your own Firebase project before real data.
 - Identity checks are manual: the app reads text from a document photo to help
   typing, but does no KYC, selfie or face-match check.
 - No data-retention plan yet.

@@ -9,9 +9,24 @@ team follows the process.
 
 ## An agent's session
 
-1. **Sign in.** The agent picks "Sales agent" and enters the company ID, email
-   and password. **Forgot password?** sends a Firebase reset link to the email
-   typed; the app gives the same reply whether or not that email has an account.
+1. **Sign in.** One sign-in for everyone: email and password, or **Continue
+   with Google**. There is no role to pick and no company ID to type. An account
+   the Firebase owner gave admin access opens the admin pages; any other account
+   is a sales agent, who joins every company that invited their email (found
+   by email alone). **Create account** is the same for agents and future admins.
+   **Forgot password?** sends a Firebase reset link to the email typed; the app
+   gives the same reply whether or not that email has an account. A new Google
+   account that no company invited is deleted again at once. The Google button
+   appears only when it is set up (see [01-set-up-and-run.md](01-set-up-and-run.md)).
+   **Choose the company.** An agent can work for several companies. With one
+   company, it opens straight away; with more, the agent picks the company this
+   client is for. **Check for new invitations** adds a company that invited them
+   since they signed in. Each time a company is
+   opened, its **message to agents** is shown first: what the company does and
+   what to watch for, written by its admin. Then its home screen, with its name
+   at the top, a **Message from ...** button to read it again, and a switch
+   button to change company. Sessions, questions and settings all come from the
+   company that is open.
 2. **Choose the customer.** The company's industry is fixed by the admin. The
    agent picks the customer type: banking individual or business; telecom
    mobile, broadband, TV, IoT or landline. The type chosen last time is already
@@ -32,46 +47,47 @@ team follows the process.
    any section at any time.
 5. **Answers are checked when the agent leaves the box**, picks an option, ticks
    a box, or changes section, never while typing. A wrong answer shows its
-   message under the box; a correct one shows a tick. Typing aids: a date has a
-   calendar button that writes YYYY-MM-DD; a phone number typed as
+   message under the box; a correct one shows a tick. Typing aids: a date is
+   never typed. Tapping its box (or pressing Enter on it) opens a calendar, and
+   tapping a day picks it, checks it and moves on. A date of birth opens 30
+   years back and only offers ages the check accepts. A phone number typed as
    0712 345 678, +254 712 345 678 or 254712345678 is tidied to 0712345678 before
-   it is checked.
+   it is checked. An address question has **Use my location** and **Find
+   address**: they ask OpenStreetMap's free address service (Nominatim) for the
+   address at the phone's position, or for up to five Kenyan addresses matching
+   what was typed. The agent checks a suggestion with the customer and taps
+   **Use** to fill the question. Nothing is sent while typing, only on a tap,
+   and at most one request a second, as Nominatim's rules ask.
 6. **Suggestions and warnings.** A guidance panel floats at the bottom of the
-   form and stays in sight while the agent scrolls. It shows, in order of
-   priority: an answer to fix, the AI's "Suggested next" question, or the next
-   required question. Tapping it opens that question, in any section, and puts
-   the cursor in it. When more than one answer needs fixing, the panel lists
-   them all in form order; tapping one opens it. If the session looks likely to
-   be abandoned, the panel also shows a gentle line ("Check in with the
-   customer", then "This customer may need help now"); tapping it shows the
-   advice. The warning builds up slowly so one slip does not alarm the agent:
-   nothing for the first four checked answers, always amber before red, and red
-   only after three high scores in a row. It drops as soon as things improve.
-   The panel can be dragged anywhere on the page or folded to one line, and it
-   never disappears: before any advice it points at the first required
-   question. A small guide character
-   in the panel shows how things are going: calm, pleased after an accepted
-   answer, concerned when something needs fixing or the risk is amber, worried
-   when it is red, and celebrating when every required answer is in. Tapping it
-   folds or opens the panel. The panel's ⋮ menu has two settings, both
-   remembered on the phone: **Auto-follow** (the keyboard's Next key checks the
-   answer and goes straight to where the panel points) and **Moving guide**
-   (turn it off for a still face that uses less battery; it is also still when
-   the phone's "Remove animations" is on). The first time the form opens on a
-   phone, the guide gives a five-step tour of the panel (replay it from ⋮).
-   Each time after that it greets the agent with a fun fact about onboarding
-   for a few seconds (tap to skip), then opens the first question it points at;
-   the panel stays open after the greeting.
-   **While the keyboard is open**, the panel becomes a slim bar just above the
-   keyboard (guide, risk dot, where to go next; tap to jump), the header shrinks
-   and the Next button steps aside, so the box being typed in stays visible.
-   Tapping the guide in the slim bar opens the full panel over the form. On
-   short phones the header is always compact and the panel starts folded.
-   **The Enter key** never leaves the form. Pressed in a box, it checks the
-   answer and moves to the next question in the section (or, with Auto-follow,
-   or at the last question, to where the panel points). Pressed when no box is
-   selected, it goes to where the panel points. All of it is advice; the agent
-   decides.
+   form and stays in sight while the agent scrolls; it can be dragged anywhere.
+   It has only two sizes and moves smoothly between them. **Full** is always the
+   same height: the guide, a status pill ("On track", "Check in" or "Needs
+   help"; tap it for the advice), and one card with the next thing to do: an
+   answer to fix ("Fix 3 answers", with "All 3" listing every one), the AI's
+   "Suggested next" question, the next required question, or Review and submit.
+   **Compact** is one row, the same as the bar shown above the keyboard while
+   typing. Only the agent folds or opens it (the chevron, or tapping the guide),
+   and the choice is remembered; the bar above the keyboard has the same chevron
+   to open the full panel over the form. Tapping the guidance opens that
+   question in any section. If it points at the box being typed in, the tap
+   first checks that answer and then goes to the next step, as Enter does.
+   The risk warning builds up slowly so one slip does not alarm the agent:
+   nothing for the first four checked answers, a check-in before "Needs help",
+   and "Needs help" only after three high scores in a row. The guide's face
+   shows how things are going: calm, pleased after an accepted answer,
+   concerned when something needs fixing, worried when the client may need
+   help, and celebrating when every required answer is in. The panel's ⋮ menu
+   has **Auto-follow** (Enter goes straight to where the panel points) and
+   **Moving guide** (off for a still face that uses less battery; also still
+   when the phone's "Remove animations" is on). The first time the form opens
+   on a phone, the guide gives a five-step tour (replay it from ⋮). Each time
+   after that it greets the agent with a fun fact about onboarding, in a speech
+   bubble above the panel, then opens the first question it points at.
+   **The Enter key** never leaves the form. In a box, it checks the answer and
+   moves to the next question in the section (with Auto-follow, or at the last
+   question, to where the panel points). Arriving at a date question opens its
+   calendar. With no box selected, Enter goes to where the panel points. All of
+   it is advice; the agent decides.
 7. **Review and submit.** The review page lists every answer by section, with an
    Edit button per section and a list of anything still missing. Tapping a
    missing or wrong answer opens its question. Submit stays
@@ -101,11 +117,13 @@ Admins see five pages in a bottom navigation bar:
 - **Agents**: invite agents by email, see whether each has registered, and turn
   an agent off or on.
 - **Sessions**: search and filter all of the company's sessions. Tap one to open
-  its own page with every saved answer (read-only). Two buttons save the
-  sessions as CSV files, in a place the admin chooses:
-  - **Sessions CSV**: one row per session (agent, customer type, status, times,
+  its own page with every saved answer (read-only). **Download records** (folded
+  at the top) saves the sessions as a spreadsheet file (CSV), in a place the
+  admin chooses, with two choices that each say what the file is for:
+  - **Session summary, for your own reports**: one row per session (agent, customer type, status, times,
     answers checked, failed checks, steps out of order, followed the standard).
-  - **Training CSV**: one row per checked answer, in the columns of the training
+  - **Data to improve SalesMesh's suggestions** (only if the SalesMesh team
+    asks for it): one row per checked answer, in the columns of the training
     data (`ml/dataset.py`), so real sessions can retrain the models. Agents are
     replaced by codes (`AGENT-` plus 12 characters). Only sessions with a known
     outcome are included: completed, abandoned (cancelled by the agent or
@@ -116,11 +134,17 @@ Admins see five pages in a bottom navigation bar:
   Neither file holds answers or customer names; sessions do not save which
   answer was given to a check, only the question, pass or fail, and the time.
 - **Questions**: the standard questions of the company's industry, grouped
-  (Identity, Contact, Business, Money, Service), with a switch for which are
-  required. Add, edit or delete the company's own questions (name,
-  instructions, answer type, checks, choices). Seven questions
-  always stay required: full name, date of birth, ID type, ID number, politically
-  exposed person status, US person status, and acceptance of the terms.
+  (Identity, Contact, Business, Money, Service). Each one has three choices
+  side by side: **Required** (must be answered), **Optional** (asked, can be
+  skipped) or **Off** (left out of the form; shown struck through). A line at
+  the top counts them ("18 required · 6 optional · 3 off"), and **Preview the
+  form agents see** shows the form for each client type, section by section,
+  with required questions starred. Seven compliance questions show a lock and
+  "Always asked" and cannot be changed: full name, date of birth, ID type, ID
+  number, politically exposed person (PEP), US person (FATCA), and acceptance
+  of the terms. Changes apply to new sessions. Add, edit or delete the
+  company's own questions (name, instructions, answer type, checks, choices)
+  under **Yours**.
 - **Company**: copy the company ID to give to agents, and set the onboarding
   industry (agents cannot sign in until it is set). **Allow sessions to improve
   the system** (off by default) makes the consent screen ask each customer the
@@ -160,14 +184,16 @@ model was tried and rejected for this.
 ## Accounts and companies
 
 - A Firebase sign-in alone gives no access. Admins need the `admin` and
-  `companyId` claims set by the project owner; agents need an invitation and an
-  active membership of the company they type.
+  `companyId` claims set by the project owner; agents need an invitation to their
+  email and an active membership of the company they open.
 - Every failed step of a sign-in signs the person out again, so a half-finished
   sign-in never leaves a session open.
 - Signing out clears everything from the session in memory (company, agent,
   answers of a resumed session, loaded settings), so the next person starts clean.
-- Company data is stored under `companies/{companyId}/`; agent memberships under
-  `companyMemberships/{uid}`.
+- Company data is stored under `companies/{companyId}/`, including its agents
+  (`members/{uid}`). Each agent's list of companies is at `agentCompanies/{uid}`.
+  The old one-company `companyMemberships/{uid}` is only read, once, to move an
+  agent who joined before agents could work for several companies.
 
 ## What is saved
 
@@ -221,6 +247,8 @@ All app code is in one package, `android/app/src/main/java/com/example/salesonbo
 | --- | --- |
 | `MainActivity.kt` | App start and which screen is shown. |
 | `Auth.kt` | Sign-in and registration screens, and the Firebase account checks. |
+| `SocialSignIn.kt` | Continue with Google (shown only when set up). |
+| `AddressLookup.kt` | Use my location and Find address, through OpenStreetMap's Nominatim. |
 | `AgentScreens.kt` | Agent home, customer choice, and consent. |
 | `OnboardingForm.kt` | The agent's form: sections and step bar, review and finish pages. |
 | `FormQuestions.kt` | Each kind of question input, format hints, and the ID photo reader. |

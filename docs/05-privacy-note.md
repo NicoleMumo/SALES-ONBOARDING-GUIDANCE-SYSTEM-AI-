@@ -32,10 +32,21 @@ agents follow the process. Nothing is used for advertising.
 
 - **Firebase Realtime Database** (Google), in the Singapore region. One branch per
   company.
+- **OpenStreetMap's address service** (Nominatim, run by the OpenStreetMap
+  Foundation in the UK) receives the address text typed so far when the agent
+  taps **Find address**, or the phone's position when the agent taps **Use my
+  location**. Nothing else is sent, it is sent only on a tap, and the app keeps
+  no record of it beyond the address the agent chooses to use. Because this is
+  outside Kenya, the company should cover it in its own data-protection notice,
+  or agents can simply type the address.
+- **Google**, only for an agent or admin who signs in with it:
+  they confirm the account and give the app its email address. No customer
+  data goes to them.
 - **The agent's phone** keeps an offline copy of recent data so the app works
   without a connection.
-- **Phone backups:** Android backup is currently **on** for the app, so a phone's
-  backup may contain saved data. See "Decisions" below.
+- **Phone backups:** none. Android backup and moving data to a new phone are
+  switched off for the app (`allowBackup="false"` and
+  `res/xml/data_extraction_rules.xml`), so its offline copy never leaves the phone that way.
 
 ## Who can see it
 
@@ -59,7 +70,8 @@ agents follow the process. Nothing is used for advertising.
 - **Improving the system** is off unless the company's admin turns it on (Company
   page). Then the consent screen asks each customer an optional question: may
   anonymised steps of this session be used to improve the app? It starts unticked.
-  Only for customers who agree, the app saves a copy to `trainingData/`: industry,
+  Only for customers who agree, the app saves a copy to `trainingData/`: the company,
+  industry,
   customer type, number of questions, the agent as a code, and each check (question,
   passed or not, time). No answers, names, contact details or session ID. The
   database rules let agents only add these copies; nobody can read them in the app,
@@ -85,9 +97,7 @@ off stops their access, but keeps the sessions they created.
 | How long to keep sessions, and who deletes them | Keeping data forever is the riskiest default |
 | How a customer asks to see, correct or delete their data | Today it is a manual job in the console, and someone must own it |
 | Who the data controller is (the company or you) | It decides who is responsible and who may need to register |
-| Turn Android backup off? | The app can set `allowBackup` to false so phone backups do not copy customer data |
 | Who gets Firebase console access | They can read everything |
-| Turn on email verification for agents | It is off for testing |
 | Deploy the tested rules to your Firebase project | The rules file only protects data once published |
 | How long to keep the anonymised copies in `trainingData/` | They are not personal answers, but a retention period should still be set |
 | Where exported CSV files are kept, and who may hold them | An export leaves Firebase's access rules behind once saved to a phone or drive |

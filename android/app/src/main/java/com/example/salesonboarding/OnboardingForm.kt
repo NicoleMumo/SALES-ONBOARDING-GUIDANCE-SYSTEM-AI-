@@ -61,6 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 
 // region The form, connected to its controller
 
@@ -345,6 +348,7 @@ private const val TOUR_SEEN_KEY = "guide_tour_seen"
 private const val GREETING_MS = 6000L
 
 /** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
+private const val FOLLOW_WAIT_MS = 1_000L
 private const val AUTO_FOLLOW_DELAY_MS = 250L
 
 /** How long the guide smiles after an accepted answer. */
@@ -383,6 +387,7 @@ private fun SectionPage(
 ) {
     val section = sections[page]
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     val allFields = remember(sections) { sections.flatMap { it.fields } }
     val sectionOf = remember(sections) {
         sections.flatMap { s -> s.fields.map { it.fieldId to s.title } }.toMap()
@@ -393,21 +398,55 @@ private fun SectionPage(
     val pointer = guidancePointer(guidance, allFields, state)
     val fixes = answersToFix(allFields, state)
     val latestPointer by rememberUpdatedState(pointer)
+    val latestState by rememberUpdatedState(state)
     var followRequests by remember { mutableIntStateOf(0) }
+    // The question Enter was pressed in, so the follow does not send the cursor back to it.
+    var followFrom by remember { mutableStateOf<String?>(null) }
+    var followChecksBefore by remember { mutableIntStateOf(0) }
+    // A physical Enter is one press: its key-up must not count as a second Enter.
+    var enterStartedOutsideBox by remember { mutableStateOf(false) }
     // The question whose box has the cursor, if any: Enter elsewhere follows the guidance.
     var typingIn by remember { mutableStateOf<String?>(null) }
     // The agent can open the full panel while typing, from the slim bar's guide.
     var expandWhileTyping by remember { mutableStateOf(false) }
+    // Opened over the form for this bout of typing only.
+    LaunchedEffect(typingIn) { if (typingIn == null) expandWhileTyping = false }
 
     /**
      * Enter on question [index] of this section: the answer is checked by leaving the box,
      * then the cursor goes to the next question in order, or, with auto-follow on, at the end
      * of the section, or from no box, to where the guidance points. Enter never presses a button.
      */
-    fun enterFrom(index: Int?) {
+    // A date question has no keyboard: arriving at it opens its calendar instead.
+    var openCalendarFor by remember { mutableStateOf<String?>(null) }
+    fun goTo(fieldId: String) {
+        onOpenField(fieldId)
+        if (allFields.firstOrNull { it.fieldId == fieldId }?.fieldType == "date") openCalendarFor = fieldId
+    }
+    /** Leaves question [from] (which checks it), then goes where the updated guidance points. */
+    fun followFromQuestion(from: String?) {
+        // Counted before leaving the box, because leaving it is what records the check.
+        followChecksBefore = state.interactionHistory.size
         focusManager.clearFocus()
+        followFrom = from
+        followRequests++
+    }
+    fun enterFrom(index: Int?) {
+        val from = index?.let { section.fields.getOrNull(it)?.fieldId }
         val next = index?.let { section.fields.getOrNull(it + 1) }
-        if (autoFollow || next == null) followRequests++ else onOpenField(next.fieldId)
+        if (autoFollow || next == null) followFromQuestion(from)
+        else {
+            followChecksBefore = state.interactionHistory.size
+            focusManager.clearFocus()
+            goTo(next.fieldId)
+        }
+    }
+    /**
+     * A tap on the guidance. If it points at the box being typed in, the answer has not been
+     * checked yet, so the tap checks it and moves on, as Enter does; otherwise it opens the question.
+     */
+    fun openFromGuidance(fieldId: String) {
+        if (fieldId == typingIn) followFromQuestion(fieldId) else goTo(fieldId)
     }
     // The guide smiles for a moment after each accepted answer.
     val checks = state.interactionHistory.filter { it.validationPassed != null }
@@ -429,11 +468,19 @@ private fun SectionPage(
         if (jumpFocus) runCatching { focusers.getValue(target).requestFocus() } // choices have no text box
         onJumpDone()
     }
-    // After Enter checks the answer, go where the updated guidance points.
+    // After Enter checks the answer, go where the updated guidance points. It first waits (up
+    // to a second) for that check to be recorded, so it never follows the guidance from before.
     LaunchedEffect(followRequests) {
         if (followRequests == 0) return@LaunchedEffect
+        val from = followFrom
+        val checksBefore = followChecksBefore
+        if (from != null) {
+            withTimeoutOrNull(FOLLOW_WAIT_MS) {
+                snapshotFlow { latestState.interactionHistory.size }.first { it > checksBefore }
+            }
+        }
         delay(AUTO_FOLLOW_DELAY_MS)
-        latestPointer?.fieldId?.let(onOpenField)
+        followTarget(from, latestPointer, allFields, latestState)?.let(::goTo)
     }
 
     AppScreen(
@@ -442,11 +489,23 @@ private fun SectionPage(
         onBack = if (page > 0) ({ onGoTo(page - 1) }) else onLeave,
         actions = { if (!isOnline) StatusPill("Offline", Tone.Caution) },
         // Enter with no box selected follows the guidance; it never presses a button or leaves.
+        // A press that starts in a box is that box's Next; only its own key-down counts.
         modifier = modifier.onPreviewKeyEvent { event ->
             val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
-            if (!enter || typingIn != null) return@onPreviewKeyEvent false
-            if (event.type == KeyEventType.KeyUp) enterFrom(null)
-            true
+            if (!enter) return@onPreviewKeyEvent false
+            when (event.type) {
+                KeyEventType.KeyDown -> {
+                    enterStartedOutsideBox = typingIn == null
+                    enterStartedOutsideBox
+                }
+                KeyEventType.KeyUp -> {
+                    val outside = enterStartedOutsideBox
+                    enterStartedOutsideBox = false
+                    if (outside) enterFrom(null)
+                    outside
+                }
+                else -> false
+            }
         },
         bottomBar = {
             draftSaveStatus?.let { DraftStatusLine(it) }
@@ -464,9 +523,14 @@ private fun SectionPage(
                 fixes = fixes,
                 guideMoving = guideMoving,
                 fieldName = { id -> allFields.firstOrNull { it.fieldId == id }?.fieldName ?: id },
-                onOpenField = onOpenField,
+                onOpenField = ::openFromGuidance,
                 onReview = { onGoTo(sections.size) },
-                onExpand = { expandWhileTyping = !expandWhileTyping }
+                expanded = expandWhileTyping,
+                onExpand = {
+                    expandWhileTyping = !expandWhileTyping
+                    // Opened on purpose, so the panel shows in full, not folded.
+                    if (expandWhileTyping) GuidancePanelSettings.unfold(context)
+                }
             )
         },
         overlayWhileTyping = expandWhileTyping,
@@ -489,8 +553,9 @@ private fun SectionPage(
                 onReplayTour = onReplayTour,
                 offset = dockOffset,
                 onOffsetChange = onDockOffsetChange,
-                onOpenField = onOpenField,
-                onReview = { onGoTo(sections.size) }
+                onOpenField = ::openFromGuidance,
+                onReview = { onGoTo(sections.size) },
+                onCollapse = if (expandWhileTyping) ({ expandWhileTyping = false }) else null
             )
         }
     ) {
@@ -517,6 +582,8 @@ private fun SectionPage(
                         },
                     focusRequester = focusers.getValue(field.fieldId),
                     onNext = { enterFrom(index) },
+                    openCalendar = openCalendarFor == field.fieldId,
+                    onCalendarOpened = { openCalendarFor = null },
                     onFillField = { id, found ->
                         onValueChange(id, found)
                         onCheckField(id)

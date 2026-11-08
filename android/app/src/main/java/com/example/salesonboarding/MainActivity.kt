@@ -30,9 +30,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             SalesOnboardingTheme {
                 var signedIn by remember { mutableStateOf(false) }
-                var showAdminRegistration by remember { mutableStateOf(false) }
-                var showAgentRegistration by remember { mutableStateOf(false) }
-                var loginRole by remember { mutableStateOf(UserRole.ADMIN) }
+                var showRegistration by remember { mutableStateOf(false) }
                 var selectedRole by remember { mutableStateOf<UserRole?>(null) }
                 var agentId by remember { mutableStateOf("") }
                 var companyId by remember { mutableStateOf("") }
@@ -42,6 +40,15 @@ class MainActivity : ComponentActivity() {
                 // The customer of this run of the form agreed to that, on the consent screen.
                 var trainingAgreed by remember { mutableStateOf(false) }
                 var showAgentHome by remember { mutableStateOf(false) }
+                // A sales agent's companies, the one open now, and its message (AgentCompanies.kt).
+                var agentCompanies by remember { mutableStateOf<List<CompanyMembership>>(emptyList()) }
+                var openedCompany by remember { mutableStateOf<OpenedCompany?>(null) }
+                var showCompanyPicker by remember { mutableStateOf(false) }
+                var showCompanyBrief by remember { mutableStateOf(false) }
+                var openingCompanyId by remember { mutableStateOf<String?>(null) }
+                var companyError by remember { mutableStateOf<String?>(null) }
+                var isCheckingInvitations by remember { mutableStateOf(false) }
+                var companyInfo by remember { mutableStateOf<String?>(null) }
                 var showAgentSessions by remember { mutableStateOf(false) }
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var selectedContext by remember { mutableStateOf<String?>(null) }
@@ -96,21 +103,72 @@ class MainActivity : ComponentActivity() {
                         isLoadingFieldConfiguration = false
                     }
                 }
+                /** Opens one of the agent's companies: its settings, questions, sessions and message. */
+                fun openCompany(membership: CompanyMembership) {
+                    openingCompanyId = membership.companyId
+                    companyError = null
+                    openAgentCompany(membershipStore, membership) { result ->
+                        openingCompanyId = null
+                        result.onSuccess { opened ->
+                            openedCompany = opened
+                            companyId = opened.companyId
+                            companyIndustry = opened.industry
+                            companySharesForTraining = opened.sharesForTraining
+                            selectedIndustry = null
+                            selectedContext = null
+                            showAgentSessions = false
+                            showCompanyPicker = false
+                            showCompanyBrief = true
+                            loadFieldConfiguration(opened.companyId)
+                        }.onFailure {
+                            companyError = it.message
+                            showCompanyPicker = true
+                        }
+                    }
+                }
                 fun startSignedInSession(user: SignedInUser) {
                     agentId = user.userId
                     companyId = user.companyId
                     selectedRole = user.role
-                    if (user.role == UserRole.SALES_AGENT) {
-                        companyIndustry = user.companyIndustry
-                        companySharesForTraining = user.sharesForTraining
-                        selectedIndustry = null
-                        showAgentHome = true
-                    } else {
-                        showAgentHome = false
-                    }
                     showAgentSessions = false
                     signedIn = true
-                    loadFieldConfiguration(user.companyId)
+                    if (user.role == UserRole.SALES_AGENT) {
+                        agentCompanies = user.companies
+                        selectedIndustry = null
+                        showAgentHome = true
+                        // An agent of one company goes straight in; with more, they choose.
+                        val only = user.companies.singleOrNull()
+                        if (only != null) openCompany(only) else showCompanyPicker = true
+                    } else {
+                        showAgentHome = false
+                        loadFieldConfiguration(user.companyId)
+                    }
+                }
+                /** Joins any company that invited this agent's email since they signed in. */
+                fun checkInvitations() {
+                    val email = FirebaseAuth.getInstance().currentUser?.email.orEmpty()
+                    isCheckingInvitations = true
+                    companyError = null
+                    companyInfo = null
+                    membershipStore.loadInvitedCompanies(email) { invited ->
+                        val known = agentCompanies.map { it.companyId }.toSet()
+                        val toJoin = invited.getOrDefault(emptyList()).filter { it !in known }
+                        fun finish() {
+                            membershipStore.loadAgentCompanies(agentId, email) { reloaded ->
+                                isCheckingInvitations = false
+                                val active = reloaded.getOrDefault(agentCompanies).filter { it.isActive }
+                                val added = active.count { it.companyId !in known }
+                                agentCompanies = active
+                                companyInfo = if (added == 0) "No new invitations for $email." else
+                                    "Added $added ${if (added == 1) "company" else "companies"}."
+                            }
+                        }
+                        fun joinNext(index: Int) {
+                            if (index == toJoin.size) finish()
+                            else membershipStore.enrollAgent(toJoin[index], agentId, email) { joinNext(index + 1) }
+                        }
+                        joinNext(0)
+                    }
                 }
                 /** Opens an unfinished session where it stopped (from My sessions or the home screen). */
                 fun resumeSession(session: StoredOnboardingSession) {
@@ -132,6 +190,13 @@ class MainActivity : ComponentActivity() {
                     companyId = ""
                     companyIndustry = null
                     companySharesForTraining = false
+                    agentCompanies = emptyList()
+                    openedCompany = null
+                    showCompanyPicker = false
+                    showCompanyBrief = false
+                    openingCompanyId = null
+                    companyError = null
+                    companyInfo = null
                     trainingAgreed = false
                     showAgentHome = false
                     showAgentSessions = false
@@ -146,32 +211,16 @@ class MainActivity : ComponentActivity() {
                     fieldConfigurationRequestId++
                 }
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (!signedIn && showAdminRegistration) {
-                        AdminRegistrationScreen(
-                            onBackToSignIn = { showAdminRegistration = false },
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                    } else if (!signedIn && showAgentRegistration) {
-                        AgentRegistrationScreen(
-                            onBackToSignIn = { showAgentRegistration = false },
+                    if (!signedIn && showRegistration) {
+                        RegistrationScreen(
+                            onBackToSignIn = { showRegistration = false },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else if (!signedIn) {
                         SignInScreen(
                             membershipStore = membershipStore,
                             onSignedIn = ::startSignedInSession,
-                            onRegisterAdmin = {
-                                loginRole = UserRole.ADMIN
-                                showAgentRegistration = false
-                                showAdminRegistration = true
-                            },
-                            onRegisterAgent = {
-                                loginRole = UserRole.SALES_AGENT
-                                showAdminRegistration = false
-                                showAgentRegistration = true
-                            },
-                            initialRole = loginRole,
-                            onRoleSelected = { loginRole = it },
+                            onRegister = { showRegistration = true },
                             // Full screen: the photo runs under the status bar and the
                             // sheet pads the system bars itself.
                             modifier = Modifier
@@ -182,6 +231,31 @@ class MainActivity : ComponentActivity() {
                             companyId = companyId,
                             onConfigurationChanged = { fieldRuleConfiguration = it },
                             onCompanyIndustryChanged = { companyIndustry = it },
+                            onSignOut = ::signOut,
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (showCompanyPicker || openedCompany == null) {
+                        CompanyPickerScreen(
+                            companies = agentCompanies,
+                            openingCompanyId = openingCompanyId,
+                            errorMessage = companyError,
+                            isChecking = isCheckingInvitations,
+                            infoMessage = companyInfo,
+                            onPick = ::openCompany,
+                            onCheckInvitations = ::checkInvitations,
+                            onSignOut = ::signOut,
+                            // Back to the company already open, if there is one.
+                            onBack = openedCompany?.let { { showCompanyPicker = false; companyError = null } },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (showCompanyBrief) {
+                        CompanyBriefScreen(
+                            company = openedCompany!!,
+                            onStart = {
+                                showCompanyBrief = false
+                                showAgentHome = true
+                            },
+                            onSwitchCompany = { showCompanyPicker = true },
                             onSignOut = ::signOut,
                             modifier = Modifier.padding(innerPadding)
                         )
@@ -216,6 +290,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         AgentHomeScreen(
+                            companyName = openedCompany?.name,
+                            onSwitchCompany = {
+                                companyError = null
+                                showCompanyPicker = true
+                            },
+                            onShowCompanyMessage = { showCompanyBrief = true },
                             onStartOnboarding = {
                                 showAgentSessions = false
                                 showAgentHome = false

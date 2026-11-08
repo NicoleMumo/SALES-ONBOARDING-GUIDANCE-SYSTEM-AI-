@@ -102,3 +102,60 @@ object IdCardText {
             words.none { it.uppercase(Locale.ROOT) in notNameWords }
     }
 }
+
+/**
+ * Dates for the calendar picker, which counts days as UTC midnight in milliseconds. Answers
+ * stay in YYYY-MM-DD, the format the date check expects.
+ */
+object CalendarDates {
+    private const val DAY_MILLIS = 24L * 60 * 60 * 1000
+    private val UTC: java.util.TimeZone = java.util.TimeZone.getTimeZone("UTC")
+    private val ISO_SHAPE = Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+
+    /** What the calendar may offer: [startMillis] is the month it opens on when nothing is picked. */
+    data class Limits(val earliestMillis: Long?, val latestMillis: Long?, val startMillis: Long, val years: IntRange) {
+        fun allows(millis: Long): Boolean =
+            (earliestMillis == null || millis >= earliestMillis) && (latestMillis == null || millis <= latestMillis)
+    }
+
+    private fun isoFormat() = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+        timeZone = UTC
+        isLenient = false
+    }
+
+    fun toIso(millis: Long): String = isoFormat().format(java.util.Date(millis))
+
+    fun fromIso(value: String): Long? {
+        val trimmed = value.trim()
+        if (!ISO_SHAPE.matches(trimmed)) return null
+        return runCatching { isoFormat().parse(trimmed)?.time }.getOrNull()
+    }
+
+    /** "12 March 1990", or null when the answer is not a full date. */
+    fun readable(value: String): String? = fromIso(value)?.let {
+        java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale.UK).apply { timeZone = UTC }.format(java.util.Date(it))
+    }
+
+    /**
+     * A date of birth may only be picked if the age check would accept it, and the calendar
+     * opens 30 years back. Any other date question allows every date and opens on today.
+     */
+    fun limitsFor(field: FormField, today: java.util.Calendar): Limits {
+        val todayMillis = java.util.Calendar.getInstance(UTC).apply {
+            clear()
+            set(today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH))
+        }.timeInMillis
+        val rule = field.validationRules.filterIsInstance<DateFormatAndMinimumAge>().firstOrNull()
+            ?: return Limits(null, null, todayMillis, 1900..today.get(java.util.Calendar.YEAR) + 30)
+        val latest = yearsBefore(todayMillis, rule.minimumAge)
+        val earliest = yearsBefore(todayMillis, rule.maximumAge + 1) + DAY_MILLIS
+        val start = yearsBefore(todayMillis, 30).coerceIn(earliest, latest)
+        return Limits(earliest, latest, start, yearOf(earliest)..yearOf(latest))
+    }
+
+    private fun yearsBefore(millis: Long, years: Int): Long =
+        java.util.Calendar.getInstance(UTC).apply { timeInMillis = millis; add(java.util.Calendar.YEAR, -years) }.timeInMillis
+
+    private fun yearOf(millis: Long): Int =
+        java.util.Calendar.getInstance(UTC).apply { timeInMillis = millis }.get(java.util.Calendar.YEAR)
+}

@@ -32,6 +32,27 @@ customer information is used.
 
 Never put Firebase service-account keys in the app or in this repository.
 
+### Optional: Google sign-in (free)
+
+The **Continue with Google** button appears on the sign-in screen only once it
+is set up. It is free on Firebase's no-cost Spark plan. To stay free, do
+**not** upgrade to "Firebase Authentication with Identity Platform", and do
+**not** turn on phone (SMS) sign-in, which is billed per message. Sign in with
+Apple is not included: it needs the paid Apple Developer Program (US$99 a
+year). Facebook was left out to keep Meta's code out of the app.
+
+1. Firebase console > Authentication > Sign-in method > **Google** > Enable.
+2. Project settings > your Android app > **Add fingerprint**: add the SHA-1 of
+   the debug key (`.\gradlew.bat :app:signingReport` from `android/`) and of the
+   release key (`keytool -list -v -keystore %USERPROFILE%\.salesmesh-signing\salesmesh-release.jks -alias salesmesh`).
+3. Download `google-services.json` again (it now holds Google's client ID),
+   replace `android/app/google-services.json`, and rebuild.
+
+**Who can get in.** A Google account works exactly like a password
+account: an agent's email must match an active invitation (checked by the
+database rules), and an admin needs the custom claims below. A new account
+whose email was not invited is deleted again straight away.
+
 ## 2. Create the first admin
 
 Signing up in the app does not make anyone an admin. A trusted Firebase project
@@ -44,7 +65,7 @@ await getAuth().setCustomUserClaims(userUid, {
 });
 ```
 
-1. The admin registers in the app (Administrator > Register) and verifies
+1. The admin creates an account in the app (**Create account**) and verifies
    their email.
 2. The project owner sets the claims above. Company IDs are 3 to 64 letters,
    digits, `_` or `-`, and should never change.
@@ -54,16 +75,28 @@ await getAuth().setCustomUserClaims(userUid, {
 
 ## 3. Invite an agent
 
-1. The admin opens **Agents** and adds the agent's name and work email.
-2. The admin gives the agent the company ID.
-3. The agent creates an account with that email and company ID, then signs in.
-   On first sign-in the app checks the invitation and makes them a member.
+1. The admin opens **Agents** and adds the agent's name and work email. The
+   invitation is also filed under that email (`invitationsByEmail/`), which only
+   that person can read, so the agent never needs the company ID.
+2. The agent taps **Create account** with that email, confirms it from the
+   link, and signs in (or taps **Continue with Google** with that Gmail). On
+   sign-in the app joins every company that invited the email.
+3. On the **Company** page, the admin can write the company name and a message
+   agents see each time they open the company.
 
-Agent email verification is turned off while the app is being tested
-(`REQUIRE_AGENT_EMAIL_VERIFICATION` in `Auth.kt`). Turn it on, and require
-`auth.token.email_verified` in the database rules for agent writes, before real
-customer data is used. Until then, someone could register with an invited email
-they do not own.
+An agent can work for several companies: each company invites the same email.
+A company that invites them later is added at their next sign-in, or straight
+away with **Check for new invitations** on the company list. Switching an agent
+off in one company does not affect the others. Invitations made before this
+existed are filed by email the first time the admin opens the app.
+
+Agents must verify their email (`REQUIRE_AGENT_EMAIL_VERIFICATION` in
+`Auth.kt`, and `auth.token.email_verified` in the database rules for joining a
+company, saving sessions and sharing training steps). A new password account
+gets a verification link; an unverified agent who signs in is sent a new link
+and signed out until they open it. Google accounts are already verified. This stops anyone registering with an invited email they do not
+own. Agents who registered before this was on are asked to verify at their next
+sign-in.
 
 The current sign-in screen shows **Register** only when Administrator is
 selected. The agent registration screen is still in the app, but there is no
@@ -160,7 +193,10 @@ an admin and agents. The 43 tests check that:
 - Signed-out visitors can do nothing.
 - An admin can change only their own company's settings, questions and
   invitations, and the industry can only be banking or telecom.
-- A deactivated agent loses access to settings and sessions.
+- A deactivated agent loses access to that company's settings and sessions; an
+  agent who also works for another company keeps access there.
+- Only a company's admin can set its name and message to agents (at most 1,500
+  characters); only its active agents can read them.
 - A completed session cannot be changed, and a session cannot change owner or
   company.
 - Only a company's admin can turn on sharing anonymised steps. Then only its

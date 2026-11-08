@@ -1,0 +1,61 @@
+{
+  "dataset": "onboarding_dataset_v3.csv",
+  "note": "Noise added to test sessions only; every method trained on clean data. Simulated data.",
+  "noise": "share of sessions where one question moves to a random point and neighbours swap with probability p/2",
+  "shipped_model_all_steps": {
+    "0%": {
+      "steps": 16533,
+      "model": 95.2,
+      "rule": 86.5,
+      "lookup": 93.0
+    },
+    "10%": {
+      "steps": 16533,
+      "model": 93.4,
+      "rule": 85.0,
+      "lookup": 91.5
+    },
+    "20%": {
+      "steps": 16528,
+      "model": 90.5,
+      "rule": 82.0,
+      "lookup": 89.0
+    },
+    "30%": {
+      "steps": 16535,
+      "model": 86.2,
+      "rule": 78.5,
+      "lookup": 84.8
+    }
+  },
+  "held_out_questions_steps": {
+    "0%": {
+      "steps": 2927,
+      "model_never_saw_them_top1": 98.8,
+      "model_never_saw_them_top3": 100.0,
+      "rule": 98.9,
+      "chance": 16.4
+    },
+    "10%": {
+      "steps": 2916,
+      "model_never_saw_them_top1": 95.7,
+      "model_never_saw_them_top3": 98.8,
+      "rule": 96.4,
+      "chance": 16.5
+    },
+    "20%": {
+      "steps": 2896,
+      "model_never_saw_them_top1": 93.0,
+      "model_never_saw_them_top3": 98.2,
+      "rule": 94.1,
+      "chance": 16.8
+    },
+    "30%": {
+      "steps": 2881,
+      "model_never_saw_them_top1": 88.6,
+      "model_never_saw_them_top3": 96.7,
+      "rule": 90.1,
+      "chance": 17.1
+    }
+  }
+}

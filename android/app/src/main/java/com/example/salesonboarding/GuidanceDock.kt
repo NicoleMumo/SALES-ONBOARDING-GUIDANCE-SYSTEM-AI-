@@ -1,15 +1,19 @@
 package com.example.salesonboarding
 
+import android.content.Context
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -17,11 +21,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -95,17 +99,47 @@ internal fun guidancePointer(
     ?: fields.firstOrNull { it.isRequiredFor(state.values) && !it.isAnsweredIn(state) }
         ?.let { GuidancePointer(GuidanceStep.NEXT_REQUIRED, it.fieldId) }
 
+/**
+ * Where Enter in question [from] should send the cursor: where the guidance points, unless
+ * that is the question just left. Then a wrong answer is opened again to be fixed, and a
+ * good one moves on to the next unanswered question in form order (the guidance may not have
+ * caught up yet). Null when nothing is left to answer after it.
+ */
+internal fun followTarget(
+    from: String?,
+    pointer: GuidancePointer?,
+    fields: List<FormField>,
+    state: LiveValidationState
+): String? {
+    val target = pointer?.fieldId
+    if (from == null || target != from) return target
+    val left = fields.firstOrNull { it.fieldId == from } ?: return target
+    if (errorFor(left, state) != null) return from
+    val after = fields.indexOf(left)
+    return fields.drop(after + 1).firstOrNull { !it.isAnsweredIn(state) }?.fieldId
+}
+
 /** Every answer that needs fixing, in the form's order. */
 internal fun answersToFix(fields: List<FormField>, state: LiveValidationState): List<String> {
     val wrong = ValidationErrorDisplayMapper.forState(state).map { it.fieldId }.toSet()
     return fields.map { it.fieldId }.filter { it in wrong }
 }
 
+/** How the onboarding is going, in a word or two, for the status pill in the panel's header. */
+internal fun riskPill(level: CompletionRiskLevel?): String = when (level) {
+    null, CompletionRiskLevel.LOW -> "On track"
+    CompletionRiskLevel.MEDIUM -> "Check in"
+    CompletionRiskLevel.HIGH -> "Needs help"
+}
+
 /**
  * The guidance panel. It floats over the form, so the suggestion and the risk warning stay
  * in sight while the agent scrolls. Tapping the suggestion opens that question; the panel
- * can be dragged anywhere on the page and folded to one line. "Auto-follow" makes the
- * keyboard's Next key go to the suggested question instead of the box below.
+ * can be dragged anywhere on the page. It has only two sizes, and moves smoothly between them:
+ * full, which is always the same height whatever it shows, and compact, one row, the same
+ * as the bar shown above the keyboard. Only the agent folds it, and the choice is remembered.
+ * Things that would change its height open as pop-ups instead: the risk advice, the list of
+ * answers to fix, and the greeting (a speech bubble above the panel).
  */
 @Composable
 internal fun BoxScope.GuidanceDock(
@@ -127,13 +161,17 @@ internal fun BoxScope.GuidanceDock(
     offset: Offset,
     onOffsetChange: (Offset) -> Unit,
     onOpenField: (String) -> Unit,
-    onReview: () -> Unit
+    onReview: () -> Unit,
+    /** While typing, folding goes back to the bar above the keyboard instead. */
+    onCollapse: (() -> Unit)? = null
 ) {
     val c = Sm.colors
-    // On a short phone the panel starts folded to one line, to leave room for the form.
-    val short = isShortScreen()
-    var folded by rememberSaveable { mutableStateOf(short) }
-    var showRiskDetail by remember { mutableStateOf(false) }
+    val preferences = LocalContext.current.getSharedPreferences(GUIDE_PREFERENCES, Context.MODE_PRIVATE)
+    var folded by rememberSaveable { mutableStateOf(preferences.getBoolean(FOLDED_KEY, false)) }
+    fun setFolded(value: Boolean) {
+        folded = value
+        preferences.edit().putBoolean(FOLDED_KEY, value).apply()
+    }
     var dockSize by remember { mutableStateOf(IntSize.Zero) }
 
     BoxWithConstraints(Modifier.matchParentSize()) {
@@ -147,7 +185,7 @@ internal fun BoxScope.GuidanceDock(
         }
         val currentOffset = rememberUpdatedState(offset)
 
-        Surface(
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
@@ -161,67 +199,103 @@ internal fun BoxScope.GuidanceDock(
                         onOffsetChange(keepInside.value(currentOffset.value + drag))
                     }
                 },
-            shape = RoundedCornerShape(20.dp),
-            color = c.ink,
-            shadowElevation = 8.dp
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            AnimatedVisibility(
+                visible = greeting != null && !folded,
+                enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 4 },
+                exit = fadeOut(tween(200))
             ) {
-                DockHeader(
-                    mood = mood,
-                    autoFollow = autoFollow,
-                    onAutoFollowChange = onAutoFollowChange,
-                    guideMoving = guideMoving,
-                    onGuideMovingChange = onGuideMovingChange,
-                    onReplayTour = onReplayTour,
-                    folded = folded,
-                    onFold = { folded = !folded }
-                )
-                AnimatedVisibility(visible = greeting != null && !folded, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-                    greeting?.let { GreetingBubble(it, onGreetingDismiss) }
-                }
-                if (!folded && risk != null) {
-                    RiskLine(risk, expanded = showRiskDetail, onToggle = { showRiskDetail = !showRiskDetail })
-                }
-                when {
-                    fixes.size > 1 && !folded -> FixList(fixes, fieldName, sectionName, onOpenField)
-                    pointer != null -> PointerLine(pointer, fieldName, sectionName, onOpenField, onReview)
+                greeting?.let { GreetingBubble(it, onGreetingDismiss) }
+            }
+            Surface(shape = RoundedCornerShape(20.dp), color = c.ink, shadowElevation = 8.dp) {
+                AnimatedContent(
+                    targetState = folded,
+                    transitionSpec = {
+                        (fadeIn(tween(220, delayMillis = 80)) togetherWith fadeOut(tween(100)))
+                            .using(SizeTransform(clip = true) { _, _ -> tween(260, easing = FastOutSlowInEasing) })
+                    },
+                    label = "guidance size"
+                ) { isFolded ->
+                    if (isFolded) {
+                        CompactGuidance(
+                            pointer = pointer,
+                            risk = risk,
+                            mood = mood,
+                            fixes = fixes,
+                            guideMoving = guideMoving,
+                            fieldName = fieldName,
+                            onOpenField = onOpenField,
+                            onReview = onReview,
+                            onGuideTap = { setFolded(false) },
+                            guideDescription = "Show the full guidance",
+                            trailing = { FoldButton(folded = true) { setFolded(false) } }
+                        )
+                    } else {
+                        Column(
+                            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            DockHeader(
+                                mood = mood,
+                                risk = risk,
+                                autoFollow = autoFollow,
+                                onAutoFollowChange = onAutoFollowChange,
+                                guideMoving = guideMoving,
+                                onGuideMovingChange = onGuideMovingChange,
+                                onReplayTour = onReplayTour,
+                                onFold = { onCollapse?.invoke() ?: setFolded(true) }
+                            )
+                            MainCard(pointer, fixes, fieldName, sectionName, onOpenField, onReview)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+private const val GUIDE_PREFERENCES = "salesmesh_form"
+private const val FOLDED_KEY = "guide_folded"
+
 @Composable
 private fun DockHeader(
     mood: GuideMood,
+    risk: CompletionRiskGuidance?,
     autoFollow: Boolean,
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
     onReplayTour: () -> Unit,
-    folded: Boolean,
     onFold: () -> Unit
 ) {
     val c = Sm.colors
     var menuOpen by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        // The guide shows how the onboarding is going; tapping it folds or opens the panel.
+    Row(
+        Modifier.height(44.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // The guide shows how the onboarding is going; tapping it folds the panel.
         GuideMascot(
             mood,
             Modifier
-                .size(44.dp)
-                .clickable(role = Role.Button, onClick = onFold),
+                .size(40.dp)
+                .clickable(role = Role.Button, onClick = onFold)
+                .semantics { contentDescription = "Fold the guidance to one line" },
             animated = guideMoving
         )
-        Text(
-            if (autoFollow) "Guidance · auto-follow" else "Guidance",
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = c.cream.copy(alpha = 0.75f)
-        )
-        Box(Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Guidance",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = c.cream
+            )
+            if (autoFollow) {
+                Text("Auto-follow on", style = MaterialTheme.typography.labelSmall, color = c.cream.copy(alpha = 0.6f))
+            }
+        }
+        StatusPill(risk)
         Box {
             Box(
                 Modifier
@@ -249,24 +323,151 @@ private fun DockHeader(
                 )
             }
         }
-        Box(
+        FoldButton(folded = false, onClick = onFold)
+    }
+}
+
+@Composable
+private fun FoldButton(folded: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(36.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = if (folded) "Show the full guidance" else "Fold the guidance to one line" },
+        contentAlignment = Alignment.Center
+    ) {
+        SmIcon(if (folded) R.drawable.ic_sm_chevron_up else R.drawable.ic_sm_chevron_down, Sm.colors.cream)
+    }
+}
+
+/** "On track", "Check in" or "Needs help"; tapping it shows the advice in a pop-up. */
+@Composable
+private fun StatusPill(risk: CompletionRiskGuidance?) {
+    val c = Sm.colors
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
             Modifier
-                .size(36.dp)
-                .clickable(role = Role.Button, onClick = onFold)
-                .semantics { contentDescription = if (folded) "Show the full guidance" else "Fold the guidance to one line" },
-            contentAlignment = Alignment.Center
+                .height(28.dp)
+                .background(c.cream.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                .clickable(enabled = risk != null, role = Role.Button) { open = true }
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            SmIcon(if (folded) R.drawable.ic_sm_chevron_up else R.drawable.ic_sm_chevron_down, c.cream)
+            RiskDot(risk?.level)
+            Text(riskPill(risk?.level), style = MaterialTheme.typography.labelMedium, color = c.cream)
+        }
+        if (risk != null) {
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                Column(
+                    Modifier
+                        .widthIn(max = 280.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(riskTitle(risk.level), style = MaterialTheme.typography.titleSmall)
+                    Text(risk.message, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
         }
     }
 }
 
 /**
- * The guidance while the keyboard is open: one slim bar just above it. It takes its own room
- * instead of floating over the page, so the box being typed in is never hidden behind it.
+ * The one thing to do next, always the same height: an answer to fix (with "All 3" listing
+ * every answer to fix in a pop-up), the suggested question, the next required question, or
+ * Review and submit. Its words fade from one step to the next.
  */
 @Composable
-internal fun GuidanceStrip(
+private fun MainCard(
+    pointer: GuidancePointer?,
+    fixes: List<String>,
+    fieldName: (String) -> String,
+    sectionName: (String) -> String?,
+    onOpenField: (String) -> Unit,
+    onReview: () -> Unit
+) {
+    val c = Sm.colors
+    val fix = pointer?.step == GuidanceStep.FIX
+    val fieldId = pointer?.fieldId
+    var listOpen by remember { mutableStateOf(false) }
+    Surface(
+        onClick = { if (fieldId != null) onOpenField(fieldId) else onReview() },
+        enabled = pointer != null,
+        shape = RoundedCornerShape(14.dp),
+        color = if (fix) c.cherry else c.lime,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp)
+    ) {
+        Row(Modifier.padding(start = 14.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(targetState = pointer, animationSpec = tween(220), modifier = Modifier.weight(1f), label = "next step") { shown ->
+                val onCard = if (shown?.step == GuidanceStep.FIX) c.white else c.ink
+                val label = when (shown?.step) {
+                    GuidanceStep.FIX -> if (fixes.size > 1) "Fix ${fixes.size} answers" else "Fix this answer"
+                    GuidanceStep.SUGGESTED -> "Suggested next"
+                    GuidanceStep.NEXT_REQUIRED -> "Next required"
+                    GuidanceStep.DONE -> "All required answers are in"
+                    null -> "Getting ready"
+                }
+                val section = shown?.fieldId?.let(sectionName)
+                Column(verticalArrangement = Arrangement.Center) {
+                    Text(
+                        if (section != null) "$label · $section" else label,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                        color = onCard,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        shown?.fieldId?.let(fieldName) ?: if (shown?.step == GuidanceStep.DONE) "Review and submit" else "",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = onCard,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (fix && fixes.size > 1) {
+                Box {
+                    Box(
+                        Modifier
+                            .height(32.dp)
+                            .background(c.white.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
+                            .clickable(role = Role.Button) { listOpen = true }
+                            .padding(horizontal = 10.dp)
+                            .semantics { contentDescription = "See all ${fixes.size} answers to fix" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("All ${fixes.size}", style = MaterialTheme.typography.labelMedium, color = c.white)
+                    }
+                    DropdownMenu(expanded = listOpen, onDismissRequest = { listOpen = false }) {
+                        fixes.forEach { id ->
+                            DropdownMenuItem(
+                                text = { Text(listOfNotNull(fieldName(id), sectionName(id)).joinToString(" · ")) },
+                                onClick = {
+                                    listOpen = false
+                                    onOpenField(id)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                SmIcon(R.drawable.ic_sm_arrow, if (fix) c.white else c.ink, size = 20.dp)
+            }
+        }
+    }
+}
+
+/**
+ * The guidance in one row: the guide, a risk dot, what to do and where. Used both when the
+ * agent folds the panel and, above the keyboard, while typing, so the two look the same.
+ */
+@Composable
+private fun CompactGuidance(
     pointer: GuidancePointer?,
     risk: CompletionRiskGuidance?,
     mood: GuideMood,
@@ -275,8 +476,9 @@ internal fun GuidanceStrip(
     fieldName: (String) -> String,
     onOpenField: (String) -> Unit,
     onReview: () -> Unit,
-    /** Tapping the guide opens the full panel over the page, even while typing. */
-    onExpand: () -> Unit
+    onGuideTap: () -> Unit,
+    guideDescription: String,
+    trailing: @Composable () -> Unit = {}
 ) {
     val c = Sm.colors
     val fix = pointer?.step == GuidanceStep.FIX
@@ -285,17 +487,16 @@ internal fun GuidanceStrip(
         GuidanceStep.SUGGESTED -> "Next"
         GuidanceStep.NEXT_REQUIRED -> "Next required"
         GuidanceStep.DONE -> "All in"
-        null -> risk?.level?.let(::riskTitle).orEmpty()
+        null -> riskPill(risk?.level)
     }
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .background(c.ink, RoundedCornerShape(14.dp))
+            .height(56.dp)
             .clickable(enabled = pointer != null, role = Role.Button) {
                 pointer?.fieldId?.let(onOpenField) ?: onReview()
             }
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(start = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -303,8 +504,8 @@ internal fun GuidanceStrip(
             mood,
             Modifier
                 .size(38.dp)
-                .clickable(role = Role.Button, onClick = onExpand)
-                .semantics { contentDescription = "Open the full guidance" },
+                .clickable(role = Role.Button, onClick = onGuideTap)
+                .semantics { contentDescription = guideDescription },
             animated = guideMoving
         )
         if (risk != null) RiskDot(risk.level)
@@ -322,157 +523,90 @@ internal fun GuidanceStrip(
             modifier = Modifier.weight(1f)
         )
         if (pointer != null) SmIcon(R.drawable.ic_sm_arrow, c.cream, size = 18.dp)
+        trailing()
     }
 }
 
-/** Every answer to fix, each one tap away, so none is missed. */
+/**
+ * The guidance while the keyboard is open: the same one-row bar as the folded panel, just
+ * above the keyboard. It takes its own room instead of floating over the page, so the box
+ * being typed in is never hidden behind it.
+ */
 @Composable
-private fun FixList(
+internal fun GuidanceStrip(
+    pointer: GuidancePointer?,
+    risk: CompletionRiskGuidance?,
+    mood: GuideMood,
     fixes: List<String>,
+    guideMoving: Boolean,
     fieldName: (String) -> String,
-    sectionName: (String) -> String?,
-    onOpenField: (String) -> Unit
+    onOpenField: (String) -> Unit,
+    onReview: () -> Unit,
+    /** Whether the full panel is open over the page while typing. */
+    expanded: Boolean = false,
+    /** Opens (or closes) the full panel over the page, even while typing. */
+    onExpand: () -> Unit
 ) {
-    val c = Sm.colors
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            "Fix ${fixes.size} answers",
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = c.cream
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(Sm.colors.ink, RoundedCornerShape(20.dp))
+    ) {
+        CompactGuidance(
+            pointer = pointer,
+            risk = risk,
+            mood = mood,
+            fixes = fixes,
+            guideMoving = guideMoving,
+            fieldName = fieldName,
+            onOpenField = onOpenField,
+            onReview = onReview,
+            onGuideTap = onExpand,
+            guideDescription = if (expanded) "Close the full guidance" else "Open the full guidance",
+            // A clear button to open the full panel, as well as the guide itself.
+            trailing = { FoldButton(folded = !expanded, onClick = onExpand) }
         )
-        Column(
-            Modifier
-                .heightIn(max = 168.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            fixes.forEach { id ->
-                Surface(
-                    onClick = { onOpenField(id) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = c.cherry,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                ) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            listOfNotNull(fieldName(id), sectionName(id)).joinToString(" · "),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = c.white,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SmIcon(R.drawable.ic_sm_arrow, c.white, size = 18.dp)
-                    }
-                }
-            }
-        }
     }
 }
 
-/** The guide's hello when the form opens, with a fun fact. Tap to dismiss. */
+/** The panel's folded or full setting, kept on the phone. */
+internal object GuidancePanelSettings {
+    fun unfold(context: Context) {
+        context.getSharedPreferences(GUIDE_PREFERENCES, Context.MODE_PRIVATE).edit().putBoolean(FOLDED_KEY, false).apply()
+    }
+}
+
+/** The guide's hello when the form opens, with a fun fact: a speech bubble above the panel. */
 @Composable
 private fun GreetingBubble(greeting: GuideGreeting, onDismiss: () -> Unit) {
     val c = Sm.colors
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(c.cream.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-            .clickable(role = Role.Button, onClick = onDismiss)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(greeting.hello, style = MaterialTheme.typography.titleSmall, color = c.cream)
-        Text("Fun fact", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = c.lime)
-        Text(greeting.fact, style = MaterialTheme.typography.bodySmall, color = c.cream.copy(alpha = 0.85f))
-        Text("Tap to start", style = MaterialTheme.typography.labelSmall, color = c.cream.copy(alpha = 0.6f))
-    }
-}
-
-@Composable
-private fun RiskDot(level: CompletionRiskLevel) {
-    val c = Sm.colors
-    Box(
-        Modifier
-            .size(10.dp)
-            .background(if (level == CompletionRiskLevel.HIGH) c.cherry else c.lime, CircleShape)
-    )
-}
-
-@Composable
-private fun RiskLine(risk: CompletionRiskGuidance, expanded: Boolean, onToggle: () -> Unit) {
-    val c = Sm.colors
-    val high = risk.level == CompletionRiskLevel.HIGH
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onToggle)
-            .padding(vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RiskDot(risk.level)
-            Text(
-                riskTitle(risk.level),
-                style = MaterialTheme.typography.titleSmall,
-                color = c.cream,
-                modifier = Modifier.weight(1f)
-            )
-            SmIcon(if (expanded) R.drawable.ic_sm_chevron_up else R.drawable.ic_sm_chevron_down, c.cream.copy(alpha = 0.75f), size = 18.dp)
-        }
-        if (expanded) {
-            Text(risk.message, style = MaterialTheme.typography.bodySmall, color = c.cream.copy(alpha = 0.85f))
-        }
-    }
-}
-
-@Composable
-private fun PointerLine(
-    pointer: GuidancePointer,
-    fieldName: (String) -> String,
-    sectionName: (String) -> String?,
-    onOpenField: (String) -> Unit,
-    onReview: () -> Unit
-) {
-    val c = Sm.colors
-    val fieldId = pointer.fieldId
-    val label = when (pointer.step) {
-        GuidanceStep.FIX -> "Fix this answer"
-        GuidanceStep.SUGGESTED -> "Suggested next"
-        GuidanceStep.NEXT_REQUIRED -> "Next required"
-        GuidanceStep.DONE -> "All required answers are in"
-    }
-    val section = fieldId?.let(sectionName)
     Surface(
-        onClick = { if (fieldId != null) onOpenField(fieldId) else onReview() },
-        shape = RoundedCornerShape(14.dp),
-        color = if (pointer.step == GuidanceStep.FIX) c.cherry else c.lime,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
+        onClick = onDismiss,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = 20.dp, bottomStart = 6.dp),
+        color = c.ink,
+        shadowElevation = 6.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (section != null) "$label · $section" else label,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                    color = if (pointer.step == GuidanceStep.FIX) c.white else c.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    fieldId?.let(fieldName) ?: "Review and submit",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (pointer.step == GuidanceStep.FIX) c.white else c.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Box(Modifier.width(8.dp))
-            SmIcon(R.drawable.ic_sm_arrow, if (pointer.step == GuidanceStep.FIX) c.white else c.ink, size = 20.dp)
+            Text(greeting.hello, style = MaterialTheme.typography.titleSmall, color = c.cream)
+            Text("Fun fact", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = c.lime)
+            Text(greeting.fact, style = MaterialTheme.typography.bodySmall, color = c.cream.copy(alpha = 0.85f))
+            Text("Tap to start", style = MaterialTheme.typography.labelSmall, color = c.cream.copy(alpha = 0.6f))
         }
     }
+}
+
+/** Lime when all is well, teal when a gentle check-in is due, cherry when the client may need help now. */
+@Composable
+private fun RiskDot(level: CompletionRiskLevel?) {
+    val c = Sm.colors
+    val colour = when (level) {
+        CompletionRiskLevel.HIGH -> c.cherry
+        CompletionRiskLevel.MEDIUM -> c.teal
+        else -> c.lime
+    }
+    Box(Modifier.size(10.dp).background(colour, CircleShape))
 }

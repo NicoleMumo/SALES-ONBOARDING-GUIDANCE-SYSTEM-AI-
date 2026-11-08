@@ -44,9 +44,11 @@ Code is in `android/app/src/main/java/com/example/salesonboarding/`.
 
 ```
 companies/{companyId}/
-    settings, agentInvitations, fieldRuleOverrides, fieldDefinitions
+    settings/  industry, sharing switch, name and message shown to agents
+    agentInvitations, members/{agentUid}, fieldRuleOverrides, fieldDefinitions
     onboardingSessions/{sessionId}/  answers, checks, consent time, frozen question list
-companyMemberships/{agentUid}        which company each agent belongs to
+agentCompanies/{agentUid}/{companyId}  the companies each agent works for (one or more)
+invitationsByEmail/{email, dots as commas}/{companyId}  invitations, readable only by that email
 ```
 
 Not saved: the ID photo and the text read from it.

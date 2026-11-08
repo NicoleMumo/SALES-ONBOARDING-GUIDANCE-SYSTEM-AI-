@@ -1,4 +1,5 @@
 {
+  "model_version": 2,
   "field_vocab": [
     "assets",
     "beneficial_owner_information",
@@ -33,6 +34,7 @@
     "terms_and_conditions_acceptance",
     "us_person_status"
   ],
+  "num_classes": 32,
   "field_to_id": {
     "assets": 1,
     "beneficial_owner_information": 2,
@@ -67,7 +69,6 @@
     "terms_and_conditions_acceptance": 31,
     "us_person_status": 32
   },
-  "num_classes": 32,
   "max_len": 29,
   "industry_to_id": {
     "banking": 0,
@@ -253,5 +254,14 @@
     "terms_and_conditions_acceptance": "the customer's agreement to the terms and conditions",
     "us_person_status": "whether the customer is a US person for tax reporting"
   },
-  "candidate_scoring": "shared_field_description_encoder"
+  "candidate_features": [
+    "form_position",
+    "gap_from_last_answered",
+    "first_open",
+    "plain_rule_choice",
+    "required"
+  ],
+  "max_form_position": 39,
+  "max_gap": 12,
+  "candidate_scoring": "description_and_form_position"
 }

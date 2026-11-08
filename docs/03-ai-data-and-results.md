@@ -41,15 +41,23 @@ session ended (status, scenario, next field) are never model inputs.
 ## Next-question suggestion
 
 **What it sees:** the order of questions answered so far (up to 29), the
-industry, the customer type, whether the last answer passed its check, and a
-short description of each question it may choose from. It never sees the
-customer's answers. Because it compares descriptions, it can also score a
-company's own questions that it was not trained on.
+industry, the customer type, whether the last answer passed its check, and for
+each question it may choose from: a short description and where that question
+sits in the form (its position, its distance from the last question answered,
+whether it is the first open one, whether it is the plain rule's choice, and
+whether it is required). It never sees the customer's answers. Because every
+question has a place in the form, including a company's own, it can suggest
+questions it was not trained on (see "New questions" below).
 
 **How the app uses it:** while a required question is still unanswered, the app
 asks the model to choose among the questions not yet answered correctly (at most
-128) and tags its pick "Suggested next". If the model file is missing or cannot
-be loaded, no tag is shown and the section order is the guide.
+128) and shows its pick as "Suggested next". If the model file is missing or
+cannot be loaded, no suggestion is shown and the section order is the guide.
+
+**Model:** a Transformer with two blocks, four attention heads and 64-number
+vectors, in `ml/next_question_v2.py`, trained on the laptop's processor in a few
+minutes. The phone runs it with TensorFlow Lite (`onboarding_model.tflite`,
+442 KB).
 
 **Results** (unseen agents, the 16,533 steps where the app asks for a
 suggestion, choosing only among the questions the app allows):
@@ -59,60 +67,131 @@ suggestion, choosing only among the questions the app allows):
 | The app's rule without AI: first unfinished required question | 86.5% |
 | Lookup on customer type and current question | 86.5% |
 | Lookup on customer type, previous and current question, last check | 93.0% |
-| **Transformer model** | **95.0%** |
+| **Transformer model** | **95.2%** |
 | Best possible (the right question was one of the allowed choices) | 97.9% |
 
-- On the same steps the model was right and the app's rule wrong 1,449 times,
-  and the reverse 41 times. Against the best lookup: 355 and 30. Both gaps are
-  far larger than chance (McNemar z = 36.5 and 16.6).
-- Histories never seen in training: 94.2%. Sessions longer than 20 steps: 91.5%
-  (130 steps). On all 32 questions without the app's limits: first choice 95.0%,
-  in the top three 98.7%.
+- On the same steps the model was right and the app's rule wrong 1,463 times,
+  and the reverse 31 times. Against the best lookup: 366 and 17. Both gaps are
+  far larger than chance (McNemar z = 37.0 and 17.8).
+- Histories never seen in training: 94.6% (1,718 steps). Steps after the 20th
+  answer: 96.9% (65 steps). The right question was in its top three 97.9% of
+  the time, which is every step where it was one of the allowed choices.
 - The TensorFlow Lite file gives the same answers as the trained model (largest
-  difference under 0.000001, no different first choice), and it loads and
-  answers in the app on an Android emulator.
-- Two full training runs gave 95.0% and 95.2%: read it as "about 95%".
+  difference 0.0000001, no different first choice in 50 checks).
 
-**Where the gain comes from.** `ml/offscript_breakdown.py` rebuilds the same 16,533
-steps, scores the shipped TensorFlow Lite file the way the app calls it (it reproduces
-the 95.0%, 86.5% and 93.0% above), and splits the steps by session. A session "left the
-standard order" if at least one question was out of place. That label uses the whole
-session, so it is for analysis only; no method sees it. Results are saved in
-`ml/models/offscript_report.json`.
+**Where the gain comes from.** A session "left the standard order" if at least
+one question was out of place. That label uses the whole session, so it is for
+analysis only; no method sees it.
 
 | Sessions | Steps (sessions) | App's rule | Best lookup | Transformer |
 | --- | --- | --- | --- | --- |
 | Kept the standard order | 8,790 (643) | 92.7% | 97.6% | 97.7% |
-| Left the standard order | 7,743 (539) | 79.5% | 87.8% | 92.0% |
-| Banking | 8,612 (601) | 83.2% | 92.8% | 95.0% |
-| Telecom | 7,921 (581) | 90.1% | 93.3% | 95.0% |
+| Left the standard order | 7,743 (539) | 79.5% | 87.8% | 92.2% |
+| Banking | 8,612 (601) | 83.2% | 92.8% | 95.1% |
+| Telecom | 7,921 (581) | 90.1% | 93.3% | 95.3% |
 
-- When agents kept to the standard order, the model was no better than the lookup
-  (5 steps against 1, McNemar z = 1.6).
-- Almost all of its advantage over the lookup is in sessions that left the standard
-  order: 350 of the 355 steps where it beat the lookup are there (z = 16.5). Against
-  the app's rule the gain is wider spread: 1,004 of 1,449 wins (69%) are there.
+- When agents kept to the standard order, the model was barely better than the
+  lookup (9 steps against 0, McNemar z = 3.0).
+- Almost all of its advantage over the lookup is in sessions that left the
+  standard order: 357 of the 366 steps where it beat the lookup are there
+  (z = 17.6). Against the app's rule the gain is wider spread: 1,018 of 1,463
+  wins (70%) are there.
 - So the model works as a safety net for agents who go off-script, not as a
   replacement for the standard order. The departures were written into the
   simulator, so this still needs checking with real agents.
 
-**Pass mark.** It was written after the first results were seen, so it describes
-what was reached rather than a prediction: in at least two full runs, beat the
-app's rule by at least 5 points, beat the lookup on the same steps by more than
-chance, and export a TensorFlow Lite file that matches. Both runs met it.
+**New questions.** A company can add its own questions, which the model was
+never trained on. This was tested by holding four standard questions out of
+training completely, as if a company had added them later (email address,
+profession, US person, payment method; one from each admin question group,
+chosen before any result). They were removed from the candidates, the targets,
+every answered history (as the app does with a question it does not know) and
+the description word list, and the model was trained from scratch. The pass
+mark, fixed before running: pick the held-out question first at least 50% of the
+time when it is the right next one, and have it in the top 3 at least 80% of the
+time.
+
+| Steps where a held-out question was next (2,927) | First choice | In top 3 |
+|---|---|---|
+| **Model that never saw them** | **98.8%** | **100%** |
+| Random choice among the open questions | 16% | |
+
+Each held-out question: email 98.3%, profession 100%, US person 100%, payment
+method 97.5%. On the other steps that model scored 93.5%, and it picked a
+held-out question wrongly on 2.5% of them. The held-out questions came from the
+simulator, which places them in the form's usual order. A company question is
+placed at the end of the form, and the model will suggest it there until real
+sessions show agents asking it elsewhere.
+
+```powershell
+python ml/next_question_v2.py holdout ml/data/onboarding_dataset_v3.csv   # the held-out test
+python ml/next_question_v2.py train   ml/data/onboarding_dataset_v3.csv   # train, compare, export to ml/models/
+```
+
+**With messier agents (noise).** The simulated sessions are tidy, which is why
+the scores above are so high. `ml/noise_check.py` adds noise to the test
+sessions only (every method trained on clean data): in a share of sessions the
+agent breaks the order again, one question moving to a random point and
+neighbouring questions swapping. In the new-questions part, the held-out
+questions are the ones moved.
+
+| Noise | Model | Plain rule | Best lookup | New questions: model first / top 3 | New questions: plain rule |
+|---|---|---|---|---|---|
+| 0% | 95.2% | 86.5% | 93.0% | 98.8% / 100% | 98.9% |
+| 10% | 93.4% | 85.0% | 91.5% | 95.7% / 98.8% | 96.4% |
+| 20% | 90.5% | 82.0% | 89.0% | 93.0% / 98.2% | 94.1% |
+| 30% | 86.2% | 78.5% | 84.8% | 88.6% / 96.7% | 90.1% |
+
+All methods fall by about the same amount (a random jump cannot be predicted),
+and the model keeps its lead over the rule (7 to 8 points) and the lookup (about
+1.5 points) at every level. On new questions moved to random places it is about
+a point behind the plain rule but far above chance (17%). The perfect scores on
+clean data come from the tidy simulator, not from a perfect model.
+
+**Edge cases.** `ml/edge_case_check.py` runs 21 situations, each with the
+sensible answer written down first: the start of every form, a failed answer
+(it asks for it again, even after three failures), one question left, histories
+longer than the model reads, company questions early, late and mid-way, odd or
+copied descriptions, 120 open questions, and the same input twice. 20 pass. The
+miss: when the last question is answered first, a situation the simulator never
+produced, the model is unsure (top choice 34%). So the app ignores any
+suggestion below 50% and points to the next required question in the form's
+order instead. On the 16,533 test steps the model was never that unsure.
+
+**Try it yourself.** `ml/try_next_question.py` calls the phone's model file:
+
+```powershell
+# Rank the open questions after the ones answered so far
+python ml/try_next_question.py ask --industry banking --context individual --answered full_name,email_address
+# Add questions a company made up (the model never saw them)
+python ml/try_next_question.py ask --industry banking --context individual --answered full_name --company-question "Loyalty number: the client's loyalty card number"
+# Follow a real test session step by step, next to the app's plain rule
+python ml/try_next_question.py walk ml/data/onboarding_dataset_v3.csv --session SESSION-4CD01894
+```
+
+In that session the agent starts with the ID document. The model follows the
+agent's flow and is right on 13 of 15 steps; the plain rule keeps asking for the
+next question in the form's order and is right on 7. In the 219 test sessions of
+10 to 20 answers that left the form's order, the model was right 2,810 times and
+the rule 2,244 times. Where the agent keeps to the order, the two agree almost
+everywhere. With two made-up company questions (loyalty number, branch) at the
+end of a banking form, the model suggests the terms while they are open (99.6%),
+then the loyalty number (90%), then the branch.
+
+**Pass mark.** The model had to pass the new-questions test above, stay within
+half a point of the best earlier result on the app's suggestion steps, and
+export a TensorFlow Lite file that matches the trained model. It met all three.
+One training run.
 
 **Limits.** One simulator, written for this project, whose standard order is the
 app's order, which is partly why the app's own rule already scores 86.5%. Only
-the standard forms were tested: not company questions, rule changes, or edits
-that make an earlier answer wrong.
+the standard forms were tested: not rule changes or edits that make an earlier
+answer wrong.
 
-**Retraining.** Open `ml/onboarding_transformer.ipynb` in Google Colab (or a
-Python 3.11+ environment with TensorFlow), upload the whole CSV and wait for the
-upload to finish (the notebook stops if the file is cut off), then run all cells.
-It saves `onboarding_model.tflite`, `preprocessing_meta.json` and
-`onboarding_model_flexible.keras` to `ml/models/`. The first two are a matching
-pair: always replace both. Loading the `.keras` file in Python needs the layers
-in `ml/next_field_model.py`.
+**Retraining.** `python ml/next_question_v2.py train <csv>` (a few minutes on a
+laptop processor) writes `onboarding_model.tflite`, `preprocessing_meta.json`
+and `next_question_v2_report.json` to `ml/models/`. The first two are a matching
+pair: always replace both.
 
 ## Risk warning
 
@@ -254,7 +333,6 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 | --- | --- |
 | `onboarding_model.tflite` and `preprocessing_meta.json` | The app (next-question suggestion); a matching pair |
 | `risk_model.json` | The app (risk warning) |
-| `onboarding_model_flexible.keras` | Python, to reload the trained model |
 | `risk_model_report.json` | The evidence for the risk results above |
 | `risk_ceiling_report.json` | The evidence for the F1 ceiling above |
 | `risk_v4_check.json` | The evidence for the v4 check above |
@@ -274,6 +352,31 @@ It runs 50 warm-ups and 500 timed suggestions and writes the device, Android
 version, median and 95th-percentile time to Logcat under
 `NextFieldInferenceBenchmark`. No physical-phone result has been recorded yet;
 emulator timing does not count.
+
+## The warning as the app shows it
+
+The numbers above score every step against the amber and red thresholds. The
+app does not show those raw levels: it paces them (`RiskWarningPacer` in
+`Insights.kt`): nothing for the first 4 checked answers, "Check in" before
+"Needs help", "Needs help" only after 3 high scores in a row.
+`ml/risk_policy_replay.py` replays every test session (unseen agents) answer by
+answer through the shipped model and the same pacer:
+
+| Shown to the agent | Abandoned sessions warned | Median warning, answers before the end | Completed sessions warned (false alarms) | Warned sessions that were abandoned |
+|---|---|---|---|---|
+| "Needs help" | 19-27% | 7-11.5 | 8-9% | 34-46% |
+| "Check in" or more | 38-42% | 6-8 | 16-17% | 29-43% |
+| Raw amber, no pacing | 66-75% | 8-10 | 48-53% | 19-29% |
+
+Ranges over the three datasets (seeds 2026, 7, 99), whose test sessions were
+14.5%, 22.3% and 20.2% abandoned. A "Needs help" warning is followed by
+abandonment about 2.1 to 2.3 times as often as chance, and usually comes
+several answers early. Pacing trades reach for calm: without it, half of the
+sessions that finished fine would have shown a warning.
+
+```powershell
+python ml/risk_policy_replay.py ml/data/onboarding_dataset_v3.csv
+```
 
 ## Not yet shown
 

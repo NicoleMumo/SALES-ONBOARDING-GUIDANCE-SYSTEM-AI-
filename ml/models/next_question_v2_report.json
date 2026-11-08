@@ -1,0 +1,99 @@
+{
+  "dataset": "onboarding_dataset_v3.csv",
+  "epochs": 7,
+  "all_steps": {
+    "steps": 16533,
+    "v2": 95.2,
+    "v1": 95.0,
+    "rule": 86.5,
+    "lookup": 93.0,
+    "v2_top3": 97.9,
+    "v2_vs_v1": {
+      "only_v2_right": 44,
+      "only_other_right": 20,
+      "z": 3.0
+    },
+    "v2_vs_lookup": {
+      "only_v2_right": 370,
+      "only_other_right": 17,
+      "z": 17.9
+    }
+  },
+  "standard_order_sessions": {
+    "steps": 8790,
+    "v2": 97.7,
+    "v1": 97.7,
+    "rule": 92.7,
+    "lookup": 97.6,
+    "v2_top3": 97.8,
+    "v2_vs_v1": {
+      "only_v2_right": 5,
+      "only_other_right": 0,
+      "z": 2.2
+    },
+    "v2_vs_lookup": {
+      "only_v2_right": 9,
+      "only_other_right": 0,
+      "z": 3.0
+    }
+  },
+  "off_script_sessions": {
+    "steps": 7743,
+    "v2": 92.2,
+    "v1": 92.0,
+    "rule": 79.5,
+    "lookup": 87.8,
+    "v2_top3": 97.9,
+    "v2_vs_v1": {
+      "only_v2_right": 39,
+      "only_other_right": 20,
+      "z": 2.5
+    },
+    "v2_vs_lookup": {
+      "only_v2_right": 361,
+      "only_other_right": 17,
+      "z": 17.7
+    }
+  },
+  "banking": {
+    "steps": 8612,
+    "v2": 95.1,
+    "v1": 95.0,
+    "rule": 83.2,
+    "lookup": 92.7,
+    "v2_top3": 97.4,
+    "v2_vs_v1": {
+      "only_v2_right": 19,
+      "only_other_right": 14,
+      "z": 0.9
+    },
+    "v2_vs_lookup": {
+      "only_v2_right": 213,
+      "only_other_right": 13,
+      "z": 13.3
+    }
+  },
+  "telecom": {
+    "steps": 7921,
+    "v2": 95.3,
+    "v1": 95.0,
+    "rule": 90.1,
+    "lookup": 93.3,
+    "v2_top3": 98.3,
+    "v2_vs_v1": {
+      "only_v2_right": 25,
+      "only_other_right": 6,
+      "z": 3.4
+    },
+    "v2_vs_lookup": {
+      "only_v2_right": 157,
+      "only_other_right": 4,
+      "z": 12.1
+    }
+  },
+  "tflite": {
+    "bytes": 442004,
+    "largest_probability_difference": 1.1920928955078125e-07,
+    "top1_mismatches_in_50": 0
+  }
+}

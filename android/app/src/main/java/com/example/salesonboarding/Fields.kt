@@ -184,9 +184,14 @@ object KnownFields {
             "home_address", Type.TEXT,
             "Enter the customer's home address, including the area or street where available."
         ),
+        // Nothing is uploaded, so this is the agent's confirmation that they saw the original;
+        // the document photo reader sits under it to fill the name, ID number and date of birth.
         field(
-            "identification_document", Type.FILE,
-            "Record the identification document provided by the customer."
+            "identification_document", Type.BOOLEAN,
+            "Confirm you have seen the customer's original ID document, not a photocopy. " +
+                "You can take a photo of it below to fill in the name, ID number and date of birth.",
+            listOf(MustBeTrue),
+            name = "Original ID document seen"
         ),
         field(
             "identification_document_number", Type.TEXT,
@@ -233,7 +238,13 @@ object KnownFields {
             "physical_address", Type.TEXT,
             "Enter the customer's current residential or business address."
         ),
-        yesNo("politically_exposed_person_status", "Record the answer given by the customer."),
+        yesNo(
+            "politically_exposed_person_status",
+            "Ask whether the customer holds, or recently held, an important public office, such as a " +
+                "minister, MP, judge or senior military officer, or is a close relative or associate of " +
+                "such a person. Banks must check this to prevent money laundering.",
+            name = "Politically exposed person (PEP)"
+        ),
         field("profession", Type.TEXT, "Enter the customer's job, trade, or occupation."),
         choice(
             Id.SERVICE_TYPE, "Choose the telecom service the customer is signing up for.",
@@ -254,8 +265,10 @@ object KnownFields {
             "Confirm the customer reviewed and accepted the terms presented."
         ),
         yesNo(
-            "us_person_status", "Record the answer given by the customer.",
-            name = "US person status"
+            "us_person_status",
+            "Ask whether the customer is a US citizen, a US resident or green-card holder, or was born " +
+                "in the US. Choose Yes if any applies. Banks must ask this for US tax reporting (FATCA).",
+            name = "US person (FATCA)"
         )
     ).also(::validateCatalog)
 
@@ -309,8 +322,13 @@ data class FieldRuleOverride(
 class FieldRuleConfiguration(
     private val overrides: Map<String, FieldRuleOverride> = emptyMap(),
     val customFields: List<FormField> = emptyList(),
-    private val lockedFieldIds: Set<String> = DEFAULT_LOCKED_FIELD_IDS
+    private val lockedFieldIds: Set<String> = DEFAULT_LOCKED_FIELD_IDS,
+    /** Standard questions the admin switched off: they are left out of the form. */
+    private val hiddenFieldIds: Set<String> = emptySet()
 ) {
+    /** Whether the admin took this question out of the form. Compliance questions never are. */
+    fun isHidden(fieldId: String): Boolean = fieldId in hiddenFieldIds && fieldId !in lockedFieldIds
+
     /**
      * The field with this configuration's overrides applied (unchanged if it has none).
      * Locked fields can gain rules but never lose them, so an admin cannot make a
@@ -334,7 +352,8 @@ class FieldRuleConfiguration(
     fun withoutCustomField(fieldId: String): FieldRuleConfiguration = FieldRuleConfiguration(
         overrides = overrides,
         customFields = customFields.filterNot { it.fieldId == fieldId },
-        lockedFieldIds = lockedFieldIds
+        lockedFieldIds = lockedFieldIds,
+        hiddenFieldIds = hiddenFieldIds
     )
 
     /** Adds or replaces a custom field. Its id must be a safe database key. */
@@ -345,7 +364,8 @@ class FieldRuleConfiguration(
         return FieldRuleConfiguration(
             overrides = overrides,
             customFields = customFields.filterNot { it.fieldId == field.fieldId } + field,
-            lockedFieldIds = lockedFieldIds
+            lockedFieldIds = lockedFieldIds,
+            hiddenFieldIds = hiddenFieldIds
         )
     }
 
@@ -514,7 +534,8 @@ object OnboardingPlaybooks {
             }
         }
         val catalogue = KnownFields.all.associateBy(FormField::fieldId)
-        val industryFields = fieldIds.map { fieldId ->
+        // Questions the admin switched off are left out; the rest keep their order.
+        val industryFields = fieldIds.filterNot(configuration::isHidden).map { fieldId ->
             val field = catalogue[fieldId] ?: if (fieldId == "business_name") {
                 FormField(
                     fieldId = "business_name",

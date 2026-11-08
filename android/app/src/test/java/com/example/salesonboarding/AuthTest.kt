@@ -43,3 +43,18 @@ class PasswordResetTest {
         assertEquals(PasswordReset.FAILED_MESSAGE, PasswordReset.failureMessage(IllegalStateException("offline")))
     }
 }
+
+class InvitationIndexTest {
+    @Test
+    fun anInvitationIsFiledUnderTheEmailTheRulesCanWorkOut() {
+        // The rules compute auth.token.email.toLowerCase().replace('.', ','): the same key.
+        assertEquals("mary.jane@acme.co.ke".replace('.', ','), InvitationIndex.key(" Mary.Jane@Acme.co.ke "))
+    }
+
+    @Test
+    fun anAddressTheDatabaseCannotUseAsAKeyIsNotFiled() {
+        assertNull(InvitationIndex.key(""))
+        assertNull(InvitationIndex.key("odd#name@acme.com"))
+        assertNull(InvitationIndex.key("a/b@acme.com"))
+    }
+}

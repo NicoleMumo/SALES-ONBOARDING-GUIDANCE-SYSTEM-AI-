@@ -1,0 +1,63 @@
+{
+  "dataset": "onboarding_dataset_v3.csv",
+  "model": "version 2 (candidate position features), trained without the held-out questions",
+  "held_out_questions": [
+    "email_address",
+    "profession",
+    "us_person_status",
+    "payment_method"
+  ],
+  "epochs": 10,
+  "steps_where_a_held_out_question_is_next": {
+    "steps": 2927,
+    "v2_without_these_questions_top1": 98.8,
+    "v2_without_these_questions_top3": 100.0,
+    "v1_shipped_top1": 98.5,
+    "app_rule_top1": 98.9,
+    "chance_top1": 16.4
+  },
+  "per_held_out_question": {
+    "email_address": {
+      "steps": 1239,
+      "v2_without_these_questions_top1": 98.3,
+      "v2_without_these_questions_top3": 100.0,
+      "v1_shipped_top1": 97.8,
+      "app_rule_top1": 98.7,
+      "chance_top1": 7.9
+    },
+    "profession": {
+      "steps": 555,
+      "v2_without_these_questions_top1": 100.0,
+      "v2_without_these_questions_top3": 100.0,
+      "v1_shipped_top1": 99.8,
+      "app_rule_top1": 100.0,
+      "chance_top1": 15.0
+    },
+    "us_person_status": {
+      "steps": 533,
+      "v2_without_these_questions_top1": 100.0,
+      "v2_without_these_questions_top3": 100.0,
+      "v1_shipped_top1": 100.0,
+      "app_rule_top1": 100.0,
+      "chance_top1": 29.1
+    },
+    "payment_method": {
+      "steps": 600,
+      "v2_without_these_questions_top1": 97.5,
+      "v2_without_these_questions_top3": 100.0,
+      "v1_shipped_top1": 97.5,
+      "app_rule_top1": 97.3,
+      "chance_top1": 23.8
+    }
+  },
+  "all_other_steps": {
+    "steps": 13528,
+    "v2_without_these_questions_top1": 93.5,
+    "v2_without_these_questions_top3": 97.9,
+    "v1_shipped_top1": 94.8,
+    "app_rule_top1": 84.3,
+    "chance_top1": 23.4
+  },
+  "other_steps_where_a_held_out_question_was_wrongly_picked_pct": 2.5,
+  "claim_supported": true
+}

@@ -1,5 +1,17 @@
 package com.example.salesonboarding
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
 import android.util.Patterns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,6 +98,8 @@ fun AdminDashboardScreen(
     var isSavingCompanyIndustry by remember(companyId, store) { mutableStateOf(false) }
     var sharesForTraining by remember(companyId, store) { mutableStateOf(false) }
     var isSavingSharesForTraining by remember(companyId, store) { mutableStateOf(false) }
+    var companyBrief by remember(companyId, store) { mutableStateOf(CompanyBrief()) }
+    var isSavingCompanyBrief by remember(companyId, store) { mutableStateOf(false) }
     var errorMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var agentStatusMessage by remember(companyId, store) { mutableStateOf<String?>(null) }
     var isLoadingAnalytics by remember(companyId, store) { mutableStateOf(false) }
@@ -134,6 +148,10 @@ fun AdminDashboardScreen(
         store.loadSharesForTraining(companyId) {
             if (!isCurrentAdminScope()) return@loadSharesForTraining
             handle(it) { sharesForTraining = it }
+        }
+        store.loadCompanyBrief(companyId) {
+            if (!isCurrentAdminScope()) return@loadCompanyBrief
+            handle(it) { companyBrief = it }
         }
         store.observeAgents {
             if (!isCurrentAdminScope()) return@observeAgents
@@ -290,6 +308,20 @@ fun AdminDashboardScreen(
                             }
                         }
                     },
+                    onShownChanged = { fieldId, shown ->
+                        store.saveFieldShown(fieldId, shown) {
+                            if (!isCurrentAdminScope()) return@saveFieldShown
+                            handle(it) {
+                                store.loadRuleConfiguration { loaded ->
+                                    if (!isCurrentAdminScope()) return@loadRuleConfiguration
+                                    handle(loaded) {
+                                        configuration = it
+                                        onConfigurationChanged(it)
+                                    }
+                                }
+                            }
+                        }
+                    },
                     onRequiredChanged = { fieldId, enabled ->
                         store.saveRequiredRule(fieldId, enabled) {
                             if (!isCurrentAdminScope()) return@saveRequiredRule
@@ -333,6 +365,16 @@ fun AdminDashboardScreen(
                             if (!isCurrentAdminScope()) return@saveSharesForTraining
                             isSavingSharesForTraining = false
                             handle(result) { sharesForTraining = enabled }
+                        }
+                    },
+                    brief = companyBrief,
+                    isSavingBrief = isSavingCompanyBrief,
+                    onSaveBrief = { brief ->
+                        isSavingCompanyBrief = true
+                        store.saveCompanyBrief(brief) { result ->
+                            if (!isCurrentAdminScope()) return@saveCompanyBrief
+                            isSavingCompanyBrief = false
+                            handle(result) { companyBrief = brief.copy(name = brief.name.trim(), message = brief.message.trim()) }
                         }
                     }
                 )
@@ -404,15 +446,29 @@ private fun AdminTextField(
 
 // region Session exports
 
-private enum class SessionExportKind(val filePrefix: String) {
-    SESSIONS("salesmesh-sessions"),
-    TRAINING("salesmesh-training")
+/** The two downloads, described for an administrator who has not seen a CSV file before. */
+private enum class SessionExportKind(val filePrefix: String, val title: String, val detail: String, val button: String) {
+    SESSIONS(
+        filePrefix = "salesmesh-session-summary",
+        title = "Session summary, for your own reports",
+        detail = "A spreadsheet with one row per session: the sales agent, client type, status, when it started " +
+            "and finished, how long it took, how many answers were corrected, and whether it followed the " +
+            "process. Opens in Excel or Google Sheets.",
+        button = "Download summary"
+    ),
+    TRAINING(
+        filePrefix = "salesmesh-model-data",
+        title = "Data to improve SalesMesh's suggestions",
+        detail = "Only needed if the SalesMesh team asks for it. One row per checked answer, with sales agents " +
+            "replaced by codes, used to retrain the app's next-question and risk models. Not useful for reports.",
+        button = "Download model data"
+    )
 }
 
 /**
- * Two buttons that save the company's sessions as a CSV file, in a place the administrator
- * chooses: one row per session for reporting, or one row per checked answer for retraining
- * the models (see [SessionCsvExport]).
+ * "Download records": saves the company's sessions as a spreadsheet file (CSV), in a place the
+ * administrator chooses. Folded by default so the session list stays at the top; each choice
+ * says in plain words what is in the file and who it is for (see [SessionCsvExport]).
  */
 @Composable
 private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Boolean) {
@@ -441,7 +497,7 @@ private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Bo
                 }
                 context.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
                     ?: throw IOException("The file could not be opened.")
-                "Saved $count sessions." to Tone.Positive
+                "Saved $count ${if (count == 1) "session" else "sessions"} to the file you chose." to Tone.Positive
             }.getOrElse { (it.message ?: "Could not save the file. Try again.") to Tone.Negative }
         }
     }
@@ -454,17 +510,50 @@ private fun SessionExportButtons(store: AdminDataStore, isCurrentScope: () -> Bo
         saveFile.launch("${kind.filePrefix}-$date.csv")
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            SecondaryButton("Sessions CSV", { export(SessionExportKind.SESSIONS) }, Modifier.weight(1f), enabled = !isExporting)
-            SecondaryButton("Training CSV", { export(SessionExportKind.TRAINING) }, Modifier.weight(1f), enabled = !isExporting)
+    var open by rememberSaveable { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Sm.colors.cream,
+        border = BorderStroke(1.dp, Sm.colors.line)
+    ) {
+        Column(Modifier.padding(Space.m), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 44.dp)
+                    .clickable(role = Role.Button) { open = !open }
+                    .semantics { stateDescription = if (open) "Open" else "Closed" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.s)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Download records", style = MaterialTheme.typography.titleMedium, color = Sm.colors.ink)
+                    Text(
+                        "Save these sessions as a spreadsheet file on this phone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Sm.colors.muted
+                    )
+                }
+                SmIcon(if (open) R.drawable.ic_sm_chevron_up else R.drawable.ic_sm_chevron_down, Sm.colors.ink)
+            }
+            if (open) {
+                SessionExportKind.entries.forEach { kind ->
+                    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                        Text(kind.title, style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink)
+                        Text(kind.detail, style = MaterialTheme.typography.bodySmall, color = Sm.colors.mutedStrong)
+                        SecondaryButton(kind.button, { export(kind) }, enabled = !isExporting)
+                    }
+                }
+                Text(
+                    "Neither file holds clients' answers or names. You choose where it is saved; keep it somewhere only " +
+                        "the company can open.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Sm.colors.muted
+                )
+            }
+            message?.let { (text, tone) -> Banner(text, tone) }
         }
-        Text(
-            "No answers or client names are exported. The training file replaces sales agents with codes.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Sm.colors.muted
-        )
-        message?.let { (text, tone) -> Banner(text, tone) }
     }
 }
 
@@ -669,6 +758,131 @@ private fun ProgressBar(share: Float) {
 private typealias QuestionSaver =
     (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit
 
+/** How one standard question appears in the form. */
+private enum class QuestionState(val label: String) {
+    REQUIRED("Required"), OPTIONAL("Optional"), OFF("Off"), ALWAYS("Always asked")
+}
+
+/**
+ * One question with its three choices side by side, the chosen one filled in. A question that
+ * is off is struck through; a compliance question shows a lock and "Always asked" instead.
+ */
+@Composable
+private fun QuestionStateRow(name: String, state: QuestionState, onChoose: (QuestionState) -> Unit) {
+    val c = Sm.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            Text(
+                name,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    textDecoration = if (state == QuestionState.OFF) TextDecoration.LineThrough else null
+                ),
+                color = if (state == QuestionState.OFF) c.muted else c.ink,
+                modifier = Modifier.weight(1f)
+            )
+            if (state == QuestionState.ALWAYS) {
+                SmIcon(R.drawable.ic_sm_lock, c.muted, size = 16.dp, description = "Compliance question")
+                Text("Always asked", style = MaterialTheme.typography.labelMedium, color = c.mutedStrong)
+            }
+        }
+        if (state != QuestionState.ALWAYS) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, c.line, RoundedCornerShape(12.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                listOf(QuestionState.REQUIRED, QuestionState.OPTIONAL, QuestionState.OFF).forEach { option ->
+                    val chosen = option == state
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .heightIn(min = 40.dp)
+                            .background(
+                                when {
+                                    !chosen -> Color.Transparent
+                                    option == QuestionState.OFF -> c.cherryTrack
+                                    option == QuestionState.REQUIRED -> c.ink
+                                    else -> c.limeSoft
+                                },
+                                RoundedCornerShape(9.dp)
+                            )
+                            .clickable(role = Role.RadioButton) { if (!chosen) onChoose(option) }
+                            .semantics {
+                                contentDescription = "$name: ${option.label}"
+                                stateDescription = if (chosen) "Selected" else "Not selected"
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            option.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = when {
+                                chosen && option == QuestionState.REQUIRED -> c.cream
+                                chosen -> c.ink
+                                else -> c.muted
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The form an agent would see for each client type, with the company's settings applied. */
+@Composable
+private fun FormPreviewSheet(industry: String, configuration: FieldRuleConfiguration, onDismiss: () -> Unit) {
+    val c = Sm.colors
+    val contexts = IndustrySelectionValidator.contextsFor(industry)
+    var context by remember { mutableStateOf(contexts.firstOrNull()) }
+    SmSheet("Form preview", onDismiss = onDismiss) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(Space.s)
+        ) {
+            contexts.forEach { option ->
+                SmChip(clientTypeLabel(option), selected = option == context, onClick = { context = option })
+            }
+        }
+        val sections = remember(industry, context, configuration) {
+            context?.let { OnboardingPlaybooks.forIndustry(industry, configuration, it).sections() }.orEmpty()
+        }
+        Text(
+            "${sections.sumOf { it.fields.size }} questions in ${sections.size} sections. * required",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.muted
+        )
+        sections.forEach { section ->
+            Text(section.title.uppercase(Locale.ROOT), style = smCapsStyle(), color = c.muted)
+            section.fields.forEach { field ->
+                Text(
+                    buildAnnotatedString {
+                        append(field.fieldName)
+                        if (field.isRequired || field.validationRules.any { it is Required }) {
+                            withStyle(SpanStyle(color = c.cherry)) { append(" *") }
+                        }
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.ink
+                )
+            }
+        }
+    }
+}
+
+private fun clientTypeLabel(context: String): String = when (context) {
+    "tv" -> "TV"
+    "iot" -> "IoT"
+    else -> context.replaceFirstChar { it.titlecase(Locale.ROOT) }
+}
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun QuestionsPage(
@@ -680,8 +894,10 @@ private fun QuestionsPage(
     onAddField: QuestionSaver,
     onUpdateField: QuestionSaver,
     onDeleteField: (String, (Result<Unit>) -> Unit) -> Unit,
-    onRequiredChanged: (String, Boolean) -> Unit
+    onRequiredChanged: (String, Boolean) -> Unit,
+    onShownChanged: (String, Boolean) -> Unit
 ) {
+    var showPreview by remember { mutableStateOf(false) }
     var showCustom by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<FormField?>(null) }
     var showAdd by remember { mutableStateOf(false) }
@@ -692,7 +908,14 @@ private fun QuestionsPage(
     // Only the questions this company's industry actually asks.
     val industryIds = industry?.let(OnboardingPlaybooks::fieldIdsFor)
     val ofIndustry = KnownFields.all.filter { industryIds == null || it.fieldId in industryIds }
-    val requiredCount = ofIndustry.count { field -> configuration.rulesFor(field).any { it is Required } }
+    fun stateOf(field: FormField): QuestionState = when {
+        field.fieldId in locked -> QuestionState.ALWAYS
+        configuration.isHidden(field.fieldId) -> QuestionState.OFF
+        configuration.rulesFor(field).any { it is Required } -> QuestionState.REQUIRED
+        else -> QuestionState.OPTIONAL
+    }
+    val states = ofIndustry.groupingBy { stateOf(it) }.eachCount()
+    val requiredCount = (states[QuestionState.REQUIRED] ?: 0) + (states[QuestionState.ALWAYS] ?: 0)
     val groups = ofIndustry
         .filter { query.isBlank() || query in it.fieldName.lowercase(Locale.ROOT) }
         .groupBy { QuestionGroups.of(it.fieldId) }
@@ -709,18 +932,29 @@ private fun QuestionsPage(
             SmChip("Yours ${configuration.customFields.size}", selected = showCustom, onClick = { showCustom = true })
         }
         if (!showCustom) {
+            // What agents will be asked, at a glance, and a preview of the form itself.
             Text(
-                "$requiredCount of ${ofIndustry.size} required",
+                "$requiredCount required · ${states[QuestionState.OPTIONAL] ?: 0} optional · ${states[QuestionState.OFF] ?: 0} off",
+                style = MaterialTheme.typography.titleSmall,
+                color = Sm.colors.ink
+            )
+            Text(
+                "Required: must be answered. Optional: asked, can be skipped. Off: not in the form. " +
+                    "Questions with a lock are needed for compliance and are always asked.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
+            if (industry != null) {
+                SecondaryButton("Preview the form agents see", onClick = { showPreview = true }, iconRes = R.drawable.ic_sm_questions)
+            }
             AdminTextField(search, { search = it }, placeholder = "Search questions", searchIcon = true)
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                // Questions switched off stay off; only the ones asked change.
                 TextButton(onClick = {
-                    ofIndustry.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, true) }
+                    ofIndustry.filter { stateOf(it) == QuestionState.OPTIONAL }.forEach { onRequiredChanged(it.fieldId, true) }
                 }) { Text("Make all required") }
                 TextButton(onClick = {
-                    ofIndustry.filter { it.fieldId !in locked }.forEach { onRequiredChanged(it.fieldId, false) }
+                    ofIndustry.filter { stateOf(it) == QuestionState.REQUIRED }.forEach { onRequiredChanged(it.fieldId, false) }
                 }) { Text("Make all optional") }
             }
             if (groups.isEmpty()) {
@@ -731,37 +965,35 @@ private fun QuestionsPage(
                 SectionCard {
                     fields.forEachIndexed { index, field ->
                         if (index > 0) HorizontalDivider(color = Sm.colors.divider)
-                        val required = configuration.rulesFor(field).any { it is Required }
-                        val isLocked = field.fieldId in locked
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Space.s)
-                        ) {
-                            Text(field.fieldName, style = MaterialTheme.typography.bodyMedium, color = Sm.colors.ink, modifier = Modifier.weight(1f))
-                            if (isLocked) SmIcon(R.drawable.ic_sm_lock, Sm.colors.muted, size = 18.dp, description = "Locked")
-                            SmSwitch(
-                                checked = required,
-                                onCheckedChange = { onRequiredChanged(field.fieldId, it) },
-                                enabled = !isLocked,
-                                modifier = Modifier.semantics {
-                                    contentDescription = "${field.fieldName} is " + if (required) "required" else "optional"
+                        QuestionStateRow(
+                            name = field.fieldName,
+                            state = stateOf(field),
+                            onChoose = { chosen ->
+                                val current = stateOf(field)
+                                when (chosen) {
+                                    QuestionState.OFF -> onShownChanged(field.fieldId, false)
+                                    QuestionState.REQUIRED, QuestionState.OPTIONAL -> {
+                                        if (current == QuestionState.OFF) onShownChanged(field.fieldId, true)
+                                        onRequiredChanged(field.fieldId, chosen == QuestionState.REQUIRED)
+                                    }
+                                    QuestionState.ALWAYS -> Unit
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
                 }
             }
             Text(
-                "Locked questions always stay required.",
+                "Locked questions are needed for compliance: they are always asked and always required.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Sm.colors.muted
             )
+            if (showPreview && industry != null) {
+                FormPreviewSheet(industry, configuration, onDismiss = { showPreview = false })
+            }
         } else {
             PrimaryButton("Add a question", onClick = { showAdd = true }, iconRes = R.drawable.ic_sm_plus)
-            SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI model was not trained on them.") {
+            SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI suggests them by their place in the form, though it was never trained on them.") {
                 if (configuration.customFields.isEmpty()) {
                     EmptyState("None yet", "Questions you add appear here.", iconRes = R.drawable.ic_sm_questions)
                 }
@@ -959,9 +1191,14 @@ private fun CompanyPage(
     onSaveIndustry: (String) -> Unit,
     sharesForTraining: Boolean,
     isSavingSharesForTraining: Boolean,
-    onSharesForTrainingChanged: (Boolean) -> Unit
+    onSharesForTrainingChanged: (Boolean) -> Unit,
+    brief: CompanyBrief,
+    isSavingBrief: Boolean,
+    onSaveBrief: (CompanyBrief) -> Unit
 ) {
     var selectedIndustry by remember(industry) { mutableStateOf(industry) }
+    var briefName by remember(brief) { mutableStateOf(brief.name) }
+    var briefMessage by remember(brief) { mutableStateOf(brief.message) }
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     AdminPage(
@@ -1037,6 +1274,33 @@ private fun CompanyPage(
                 onClick = { selectedIndustry?.let(onSaveIndustry) },
                 enabled = selectedIndustry != null && selectedIndustry != industry,
                 isLoading = isSaving
+            )
+        }
+        SectionCard(
+            title = "Message to your agents",
+            subtitle = "Agents see this each time they open your company, before they start: who you are, " +
+                "what they are onboarding clients for, and anything to watch for. An agent may work for several companies."
+        ) {
+            AdminTextField(
+                value = briefName,
+                onValueChange = { briefName = it.take(CompanyBriefLimits.NAME) },
+                label = "Company name agents see",
+                placeholder = companyId,
+                supportingText = "${briefName.length} / ${CompanyBriefLimits.NAME}"
+            )
+            AdminTextField(
+                value = briefMessage,
+                onValueChange = { briefMessage = it.take(CompanyBriefLimits.MESSAGE) },
+                label = "Message",
+                placeholder = "For example: We open savings accounts for walk-in clients. Check the national ID first.",
+                singleLine = false,
+                supportingText = "${briefMessage.length} / ${CompanyBriefLimits.MESSAGE}"
+            )
+            PrimaryButton(
+                text = if (isSavingBrief) "Saving…" else "Save message",
+                onClick = { onSaveBrief(CompanyBrief(briefName, briefMessage)) },
+                enabled = !isSavingBrief && (briefName.trim() != brief.name || briefMessage.trim() != brief.message),
+                isLoading = isSavingBrief
             )
         }
         SectionCard(

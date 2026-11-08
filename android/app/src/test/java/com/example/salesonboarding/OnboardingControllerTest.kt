@@ -663,6 +663,29 @@ class OnboardingFormControllerRiskTest {
 @OptIn(ExperimentalCoroutinesApi::class)
 class NextFieldPredictorTest {
     @Test
+    fun anUnsureSuggestionIsNotShownAndTheFormsOrderGuides() = runTest {
+        // As when the last question is answered first: the model spreads its belief thinly.
+        val predictor = NextFieldPredictor { _, _, _, _ -> FieldPrediction("mobile_phone_number", 0.34f) }
+        val controller = OnboardingFormController(
+            sessionId = "session",
+            fields = listOf(
+                KnownFields.get("full_name"),
+                KnownFields.get("email_address"),
+                KnownFields.get("mobile_phone_number")
+            ),
+            scope = backgroundScope,
+            entryStore = InMemoryFieldEntryStore(),
+            predictor = predictor
+        )
+
+        controller.answer("email_address", "agent@example.com")
+        runCurrent()
+
+        assertEquals(null, controller.guidanceFlow.value.prediction)
+        assertEquals("full_name", controller.guidanceFlow.value.nextFieldId)
+    }
+
+    @Test
     fun validAnswersAreSentToThePredictorAndRecommendationIsPublished() = runTest {
         var receivedHistory: List<String>? = null
         var receivedValidation: String? = null

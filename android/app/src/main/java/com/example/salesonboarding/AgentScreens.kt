@@ -61,7 +61,12 @@ fun AgentHomeScreen(
     unfinishedSession: StoredOnboardingSession? = null,
     onContinueSession: (StoredOnboardingSession) -> Unit = {},
     /** Marks that session abandoned, after the agent confirms. */
-    onCancelSession: (StoredOnboardingSession) -> Unit = {}
+    onCancelSession: (StoredOnboardingSession) -> Unit = {},
+    /** The company open now; the agent may work for several. */
+    companyName: String? = null,
+    onSwitchCompany: (() -> Unit)? = null,
+    /** Shows the company's message to its agents again. */
+    onShowCompanyMessage: (() -> Unit)? = null
 ) {
     val c = Sm.colors
     var confirmCancel by remember { mutableStateOf<StoredOnboardingSession?>(null) }
@@ -69,10 +74,14 @@ fun AgentHomeScreen(
         .getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
         .getBoolean("guide_moving", true)
     AppScreen(
-        title = "SalesMesh",
+        title = companyName ?: "SalesMesh",
+        subtitle = if (companyName != null) "SalesMesh" else null,
         leading = { AppMark() },
         modifier = modifier,
-        actions = { HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut) }
+        actions = {
+            onSwitchCompany?.let { HeaderButton(R.drawable.ic_sm_company, "Switch company", it) }
+            HeaderButton(R.drawable.ic_sm_sign_out, "Sign out", onSignOut)
+        }
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -125,6 +134,13 @@ fun AgentHomeScreen(
                     PrimaryButton("Start onboarding", onClick = onStartOnboarding)
                 }
             }
+        }
+        if (companyName != null && onShowCompanyMessage != null) {
+            SecondaryButton(
+                text = "Message from $companyName",
+                onClick = onShowCompanyMessage,
+                iconRes = R.drawable.ic_sm_info
+            )
         }
         unfinishedSession?.let { session ->
             val type = CUSTOMER_TYPES[session.context]?.title ?: session.context.replaceFirstChar { it.titlecase(Locale.ROOT) }
@@ -385,6 +401,7 @@ private val CONSENT_POINTS = listOf(
 private val FULL_CONSENT_TERMS = listOf(
     "Purpose of Collection" to "Information is collected to set up the customer account and follow your company's onboarding process.",
     "Document photos" to "If the agent takes a document photo, its text is read on this device to help with data entry. The agent may use the name, ID number or date of birth it found as answers, after checking them. The photo is deleted after reading, and neither the photo nor the rest of the text is uploaded or saved.",
+    "Address search" to "If the agent taps Find address or Use my location, the address typed so far, or the phone's location, is sent to OpenStreetMap's address service to suggest the full address. Nothing else is sent, and the agent can type the address instead.",
     "Customer rights" to "The customer may request review of their submitted details through authorized company channels.",
     "Access and retention" to "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
 )
