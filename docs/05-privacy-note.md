@@ -32,6 +32,16 @@ agents follow the process. Nothing is used for advertising.
 
 - **Firebase Realtime Database** (Google), in the Singapore region. One branch per
   company.
+- **OpenStreetMap's address service** (Nominatim, run by the OpenStreetMap
+  Foundation in the UK) receives the address text typed so far when the agent
+  taps **Find address**, or the phone's position when the agent taps **Use my
+  location**. Nothing else is sent, it is sent only on a tap, and the app keeps
+  no record of it beyond the address the agent chooses to use. Because this is
+  outside Kenya, the company should cover it in its own data-protection notice,
+  or agents can simply type the address.
+- **Google or Facebook**, only for an agent or admin who signs in with them:
+  they confirm the account and give the app its email address. No customer
+  data goes to them.
 - **The agent's phone** keeps an offline copy of recent data so the app works
   without a connection.
 - **Phone backups:** Android backup is currently **on** for the app, so a phone's

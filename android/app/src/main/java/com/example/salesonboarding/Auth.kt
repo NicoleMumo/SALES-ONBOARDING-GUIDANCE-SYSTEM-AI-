@@ -94,8 +94,10 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import java.util.Locale
 
@@ -163,6 +165,14 @@ fun UnifiedLoginScreen(
     onResetPassword: (email: String, onResult: (String?) -> Unit) -> Unit = { _, onResult ->
         onResult(PasswordReset.FAILED_MESSAGE)
     },
+    /** Google and Facebook, when set up in this build; none hides the "or" part. */
+    socialProviders: List<SocialProvider> = emptyList(),
+    onSocialLogin: (
+        provider: SocialProvider,
+        companyId: String,
+        role: UserRole,
+        onResult: (Result<UserRole>) -> Unit
+    ) -> Unit = { _, _, _, onResult -> onResult(Result.failure(SignInCancelledException())) },
     modifier: Modifier = Modifier
 ) {
     var state by remember { mutableStateOf(LoginFormState(role = initialRole)) }
@@ -184,6 +194,27 @@ fun UnifiedLoginScreen(
                 state = state.copy(
                     isSubmitting = false,
                     errorMessage = failure.message ?: "Sign-in failed. Try again."
+                )
+            }
+        }
+    }
+
+    // No email or password: the provider gives the email. A returning agent may leave the
+    // company ID empty; a first sign-in needs it to find the invitation.
+    fun socialSubmit(provider: SocialProvider) {
+        val companyId = state.companyId.trim()
+        val error = if (isAgent && companyId.isNotEmpty()) LoginFormValidator.validateCompanyId(companyId) else null
+        if (error != null) {
+            state = state.copy(errorMessage = error, infoMessage = null)
+            return
+        }
+        state = state.copy(isSubmitting = true, errorMessage = null, infoMessage = null)
+        onSocialLogin(provider, companyId, state.role) { result ->
+            result.onFailure { failure ->
+                state = state.copy(
+                    isSubmitting = false,
+                    errorMessage = if (failure is SignInCancelledException) null
+                    else failure.message ?: "Sign-in failed. Try again."
                 )
             }
         }
@@ -284,6 +315,22 @@ fun UnifiedLoginScreen(
             }
         }
         SignInButton(state.isSubmitting, colors, fonts, onClick = ::submit)
+        if (socialProviders.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.weight(1f).height(1.dp).background(colors.fieldBorder))
+                Text("or", color = colors.fieldLabel, style = TextStyle(fontFamily = fonts.text, fontSize = 14.sp))
+                Box(Modifier.weight(1f).height(1.dp).background(colors.fieldBorder))
+            }
+            socialProviders.forEach { provider ->
+                SocialButton(provider, enabled, colors, fonts) { socialSubmit(provider) }
+            }
+            Text(
+                if (isAgent) "Only an email your administrator invited can sign in. The first time, enter the company ID above."
+                else "Only an account the Firebase owner gave administrator access can sign in.",
+                color = colors.fieldLabel,
+                style = TextStyle(fontFamily = fonts.text, fontSize = 13.sp, lineHeight = 18.sp)
+            )
+        }
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
@@ -616,6 +663,34 @@ private fun SignInButton(
     }
 }
 
+/** "Continue with Google" or "Continue with Facebook": an outlined button under Sign in. */
+@Composable
+private fun SocialButton(
+    provider: SocialProvider,
+    enabled: Boolean,
+    colors: SignInColors,
+    fonts: SignInFonts,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(shape)
+            .border(1.5.dp, colors.fieldBorder, shape)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "Continue with ${provider.label}",
+            color = colors.ink,
+            style = TextStyle(fontFamily = fonts.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        )
+    }
+}
+
 /**
  * The photo and the cream sheet are light in both modes, so the status and navigation
  * bar icons stay dark while this screen is shown, and go back to normal after.
@@ -828,7 +903,15 @@ fun SignInScreen(
     onRoleSelected: (UserRole) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val social = rememberSocialSignIn(membershipStore)
     UnifiedLoginScreen(
+        socialProviders = social.providers,
+        onSocialLogin = { provider, companyId, role, onResult ->
+            social.start(provider, companyId, role) { result ->
+                result.onSuccess(onSignedIn)
+                onResult(result.map(SignedInUser::role))
+            }
+        },
         onLogin = { companyId, email, password, role, onResult ->
             signIn(membershipStore, companyId, email, password, role) { result ->
                 result.onSuccess(onSignedIn)
@@ -914,6 +997,76 @@ private fun signIn(
         }
 }
 
+/**
+ * Signs in with a Google or Facebook account, then applies the same checks as [signIn].
+ * A new agent account is kept only if its email was invited to the company: otherwise it is
+ * deleted again, so an uninvited person never keeps an account. A new admin account is kept
+ * (signed out), because the Firebase owner needs it to give admin access.
+ */
+internal fun signInWithProvider(
+    membershipStore: AdminDataStore,
+    credential: AuthCredential,
+    providerName: String,
+    requestedCompanyId: String,
+    requestedRole: UserRole,
+    onResult: (Result<SignedInUser>) -> Unit
+) {
+    val auth = FirebaseAuth.getInstance()
+    auth.signInWithCredential(credential)
+        .addOnSuccessListener { authResult ->
+            val user = authResult.user
+            if (user == null) {
+                signOutAndFail(onResult, IllegalStateException("The signed-in account is unavailable."))
+                return@addOnSuccessListener
+            }
+            val isNew = authResult.additionalUserInfo?.isNewUser == true
+            val email = user.email?.trim()?.lowercase(Locale.ROOT)
+
+            fun removeAndFail(message: String) {
+                user.delete().addOnCompleteListener {
+                    auth.signOut()
+                    onResult(Result.failure(IllegalStateException(message)))
+                }
+            }
+
+            fun continueSignIn() {
+                user.getIdToken(true)
+                    .addOnSuccessListener { token ->
+                        checkAccess(membershipStore, user, token.claims, requestedCompanyId, email.orEmpty(), requestedRole, onResult)
+                    }
+                    .addOnFailureListener { error -> signOutAndFail(onResult, loginFailureForDisplay(error)) }
+            }
+
+            when {
+                email.isNullOrBlank() -> if (isNew) {
+                    removeAndFail("Your $providerName account did not share an email address, so it cannot be matched to an invitation.")
+                } else {
+                    signOutAndFail(onResult, IllegalStateException("Your $providerName account did not share an email address."))
+                }
+                isNew && requestedRole == UserRole.ADMIN -> signOutAndFail(
+                    onResult,
+                    IllegalStateException("Signed in with $providerName as $email. Ask the Firebase owner to give this account administrator access, then sign in again.")
+                )
+                isNew -> if (requestedCompanyId.isBlank()) {
+                    removeAndFail("First time here? Enter the company ID from your invitation, then continue with $providerName.")
+                } else {
+                    membershipStore.enrollAgent(requestedCompanyId, user.uid, email) { enrolment ->
+                        enrolment.onSuccess { continueSignIn() }.onFailure {
+                            removeAndFail("$email is not invited to company $requestedCompanyId. Ask your administrator to invite this email, or check the company ID.")
+                        }
+                    }
+                }
+                else -> continueSignIn()
+            }
+        }
+        .addOnFailureListener { error ->
+            val failure = if (error is FirebaseAuthUserCollisionException) {
+                IllegalStateException("This email already signs in another way, such as with a password. Use that way to sign in.")
+            } else loginFailureForDisplay(error)
+            onResult(Result.failure(failure))
+        }
+}
+
 private fun checkAccess(
     membershipStore: AdminDataStore,
     user: FirebaseUser,
@@ -975,7 +1128,8 @@ private fun signInAgent(
                         )
                     }
                 }
-                membership.isActive && membership.companyId == requestedCompanyId ->
+                // Google and Facebook sign-in may leave the company ID empty for a returning agent.
+                membership.isActive && (requestedCompanyId.isBlank() || membership.companyId == requestedCompanyId) ->
                     loadAgentCompany(membershipStore, user.uid, membership.companyId, onResult)
                 else -> signOutAndFail(
                     onResult,

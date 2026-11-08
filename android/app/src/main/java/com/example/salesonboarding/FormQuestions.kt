@@ -186,6 +186,12 @@ internal fun QuestionBlock(
                 Text(it, style = MaterialTheme.typography.bodySmall, color = c.muted, modifier = Modifier.padding(top = 6.dp))
             }
         }
+        if (field.isStreetAddress()) {
+            AddressFinder(query = value, onUse = { picked ->
+                onValueChange(picked)
+                onCheck()
+            })
+        }
         if (field.fieldId == "identification_document") {
             val formFieldIds = allFields.map { it.fieldId }.toSet()
             DocumentOcrScanner(
