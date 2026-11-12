@@ -188,6 +188,49 @@ app's order, which is partly why the app's own rule already scores 86.5%. Only
 the standard forms were tested: not rule changes or edits that make an earlier
 answer wrong.
 
+**Overfitting.** `ml/real_log_check.py` scores the shipped model on the training,
+validation and test agents in the same way (the app's suggestion steps): 93.8%,
+92.4% and 95.2%. Training is not higher than test, so the model has not
+memorised its training data.
+
+**Real question orders.** The same script uses a real, public event log of
+digital onboarding at a Brazilian fintech (13,388 cases;
+[Mcamilo/Onboarding-Fintech-Event-Log](https://github.com/Mcamilo/Onboarding-Fintech-Event-Log),
+from Silva et al., 2023, doi:10.3390/fintech2010009). Ten of its steps are
+questions of the app's banking form. Replaying the order of those ten for 6,675
+real cases:
+
+| Method | Right next question |
+| --- | --- |
+| Transformer (never saw real data) | 81.0% (top 3: 99.9%) |
+| The app's plain rule | 79.8% |
+| Lookup learned from the other half of the real cases | 96.3% |
+| Chance | 31.3% |
+
+The model beats the rule (6,605 against 5,892 steps, z = 6.4) but is far behind
+a lookup learned from real cases. The real form has its own order (date of birth
+first; 60.1% of cases use one order), and the model learned the app's order. So
+a company should retrain it on its own sessions before relying on it.
+
+The same comparison checks the simulator (ten shared questions, banking
+individual sessions):
+
+| Pattern | Real log | Simulator |
+| --- | --- | --- |
+| Different question orders | 8 | 36 |
+| Cases using the most common order | 60.1% | 75.4% |
+| Cases with an answer entered again | 22.5% | 53.3% |
+| Median time between questions | 16 s | 72 s |
+| Cases reaching the terms question | 99.8% | 88.9% |
+
+The real clients filled in an app alone, without an agent, so these are not
+like for like. They do show that the simulator's correction, timing and
+abandonment settings are unverified.
+
+```powershell
+python ml/real_log_check.py --event-log path/to/do_eventlog.csv
+```
+
 **Retraining.** `python ml/next_question_v2.py train <csv>` (a few minutes on a
 laptop processor) writes `onboarding_model.tflite`, `preprocessing_meta.json`
 and `next_question_v2_report.json` to `ml/models/`. The first two are a matching
@@ -336,6 +379,7 @@ exact and easy to explain. The detector and its results are kept in `legacy/`.
 | `risk_model_report.json` | The evidence for the risk results above |
 | `risk_ceiling_report.json` | The evidence for the F1 ceiling above |
 | `risk_v4_check.json` | The evidence for the v4 check above |
+| `risk_thresholds_by_type.json` | The evidence for the business-client weakness below |
 
 The build copies the three app files into `android/app/src/main/assets/`.
 
@@ -376,6 +420,32 @@ sessions that finished fine would have shown a warning.
 
 ```powershell
 python ml/risk_policy_replay.py ml/data/onboarding_dataset_v3.csv
+```
+
+**Known weakness: business clients.** The model gives business sessions a large
+weight, because they are abandoned more often in the simulated data. With the
+one shipped threshold, 89% to 94% of *completed* business test sessions were
+shown "Needs help" (other sessions: under 1%); a business session with every
+answer right, at one minute an answer, shows it by the 6th answer.
+`ml/risk_thresholds_by_type.py` tried separate thresholds, against a rule fixed
+before any result: fewer false "Needs help" for business sessions, at most 5
+points fewer abandoned sessions warned, and at most 0.02 lower F1 at amber.
+
+| Test sessions (seeds 2026 / 7 / 99) | One threshold (shipped) | Own thresholds for both groups | Own thresholds for business only |
+|---|---|---|---|
+| Completed business sessions shown "Needs help" | 92.6 / 94.4 / 88.5% | 11.6 / 8.3 / 5.1% | 11.6 / 8.3 / 5.1% |
+| Other completed sessions shown "Needs help" | 0.4 / 0.7 / 0.4% | 4.0 / 3.5 / 3.6% | 0.4 / 0.7 / 0.4% |
+| Abandoned sessions shown "Check in" or more | 41.6 / 42.2 / 37.8% | 51.4 / 55.0 / 44.2% | 34.1 / 35.9 / 28.3% |
+| F1 at amber, all steps | 0.31 / 0.40 / 0.35 | 0.24 / 0.31 / 0.28 | 0.25 / 0.29 / 0.25 |
+
+Both variants failed the rule on F1 (the second was added after the first
+failed), so the shipped thresholds were kept. Warning nearly every business
+session scores well on this data only because business sessions are abandoned
+more often; it is not useful to an agent. Real sessions are needed to set this
+properly.
+
+```powershell
+python ml/risk_thresholds_by_type.py     # writes ml/models/risk_thresholds_by_type.json
 ```
 
 ## Not yet shown
