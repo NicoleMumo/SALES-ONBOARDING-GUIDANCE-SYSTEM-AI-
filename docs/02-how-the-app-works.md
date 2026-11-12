@@ -40,8 +40,10 @@ team follows the process.
    nothing else.
 4. **Fill in the form, section by section.** Banking sections: Customer,
    Identity, Financial, Declarations, Account. Telecom sections: Customer,
-   Identity, Service, Activation. Questions a company added come last, under
-   "Company questions". All questions of a section are shown together; required
+   Identity, Service, Activation. A question a company added comes right after
+   the standard question the administrator chose, in that question's section;
+   with no place chosen (or if that question is off or not asked of this client
+   type) it comes last, under "Company questions". All questions of a section are shown together; required
    ones are marked `*`, the rest say "Optional". The step bar at the top shows
    which sections are done, started or need a fix, and the agent can move to
    any section at any time.
@@ -143,8 +145,9 @@ Admins see five pages in a bottom navigation bar:
   "Always asked" and cannot be changed: full name, date of birth, ID type, ID
   number, politically exposed person (PEP), US person (FATCA), and acceptance
   of the terms. Changes apply to new sessions. Add, edit or delete the
-  company's own questions (name, instructions, answer type, checks, choices)
-  under **Yours**.
+  company's own questions (name, instructions, answer type, checks, choices,
+  and **Where it goes**: after which standard question, or at the end) under
+  **Yours**. The place is saved as `placeAfter` in `fieldDefinitions/`.
 - **Company**: copy the company ID to give to agents, and set the onboarding
   industry (agents cannot sign in until it is set). **Allow sessions to improve
   the system** (off by default) makes the consent screen ask each customer the
