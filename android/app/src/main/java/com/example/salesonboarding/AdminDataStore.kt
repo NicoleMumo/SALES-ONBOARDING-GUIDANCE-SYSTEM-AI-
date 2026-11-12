@@ -196,6 +196,7 @@ interface AdminDataStore {
     fun saveFieldShown(fieldId: String, shown: Boolean, onResult: (Result<Unit>) -> Unit) {
         onResult(Result.failure(UnsupportedOperationException("This setting cannot be changed here.")))
     }
+    /** Adds one of the company's own questions, asked right after [placeAfter] (null: at the end). */
     fun addCustomField(
         fieldId: String,
         name: String,
@@ -203,9 +204,10 @@ interface AdminDataStore {
         fieldType: String,
         rules: Set<AdminRule>,
         choices: Set<String>,
+        placeAfter: String?,
         onResult: (Result<Unit>) -> Unit
     )
-    /** Replaces the name, instructions, type, checks and choices of one of the company's own questions. */
+    /** Replaces the name, instructions, type, checks, choices and place of one of the company's own questions. */
     fun updateCustomField(
         fieldId: String,
         name: String,
@@ -213,6 +215,7 @@ interface AdminDataStore {
         fieldType: String,
         rules: Set<AdminRule>,
         choices: Set<String>,
+        placeAfter: String?,
         onResult: (Result<Unit>) -> Unit
     )
     /** Removes one of the company's own questions from new sessions; saved sessions keep their copy. */
@@ -689,10 +692,12 @@ class FirebaseAdminDataStore(
         fieldType: String,
         rules: Set<AdminRule>,
         choices: Set<String>,
+        placeAfter: String?,
         onResult: (Result<Unit>) -> Unit
     ) {
         if (!isConfigured(onResult)) return
         if (!isValidFieldId(fieldId, onResult)) return
+        if (placeAfter != null && !isValidFieldId(placeAfter, onResult)) return
         val ruleNames = rules.map(AdminRule::name)
         fields.child(fieldId).runTransaction(
             object : Transaction.Handler {
@@ -706,7 +711,8 @@ class FirebaseAdminDataStore(
                         "description" to description,
                         "fieldType" to fieldType,
                         "rules" to ruleNames,
-                        "choices" to choices.toList()
+                        "choices" to choices.toList(),
+                        "placeAfter" to placeAfter
                     )
                     return Transaction.success(currentData)
                 }
@@ -735,10 +741,12 @@ class FirebaseAdminDataStore(
         fieldType: String,
         rules: Set<AdminRule>,
         choices: Set<String>,
+        placeAfter: String?,
         onResult: (Result<Unit>) -> Unit
     ) {
         if (!isConfigured(onResult)) return
         if (!isValidFieldId(fieldId, onResult)) return
+        if (placeAfter != null && !isValidFieldId(placeAfter, onResult)) return
         fields.child(fieldId).setValue(
             mapOf(
                 "fieldId" to fieldId,
@@ -746,7 +754,9 @@ class FirebaseAdminDataStore(
                 "description" to description,
                 "fieldType" to fieldType,
                 "rules" to rules.map(AdminRule::name),
-                "choices" to choices.toList()
+                "choices" to choices.toList(),
+                // Null removes the place, so the question goes back to the end.
+                "placeAfter" to placeAfter
             )
         )
             .addOnSuccessListener { onResult(Result.success(Unit)) }
@@ -881,7 +891,9 @@ class FirebaseAdminDataStore(
             },
             validationRules = rules.toValidationRules() +
                 if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
-            description = child("description").getValue(String::class.java).orEmpty()
+            description = child("description").getValue(String::class.java).orEmpty(),
+            // An unreadable place is ignored, so the question is still asked, at the end.
+            placeAfter = child("placeAfter").getValue(String::class.java)?.takeIf(FormField::isValidId)
         )
     }
 }
