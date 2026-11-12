@@ -69,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -588,7 +589,15 @@ fun ScreenHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (onBack != null) {
-                HeaderButton(R.drawable.ic_sm_back, "Back", onBack)
+                // Never takes keyboard focus: when a box loses focus, a keyboard's Enter would
+                // otherwise land here and leave the screen. A tap, the phone's Back button and
+                // TalkBack still work.
+                HeaderButton(
+                    R.drawable.ic_sm_back,
+                    "Back",
+                    onBack,
+                    modifier = Modifier.focusProperties { canFocus = false }
+                )
                 Spacer(Modifier.width(14.dp))
             }
             if (leading != null) {

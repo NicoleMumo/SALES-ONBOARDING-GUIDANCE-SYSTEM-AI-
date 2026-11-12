@@ -130,4 +130,39 @@ class EnterFollowTest {
         assertEquals("full_name", followTarget("email_address", next, fields, state))
         assertEquals("full_name", followTarget(null, next, fields, state))
     }
+
+    // Auto-follow off: Enter goes to the next question in order, the date of birth here.
+
+    @Test
+    fun withoutAutoFollowAWrongAnswerStaysAndTheCalendarDoesNotOpen() {
+        val session = LiveValidationSession("s", fields)
+        session.updateField("email_address", "not an email")
+        session.checkField("email_address")
+        val fix = GuidancePointer(GuidanceStep.FIX, "email_address")
+
+        assertEquals(
+            "email_address",
+            enterTarget("email_address", "date_of_birth", fix, fields, session.stateFlow.value)
+        )
+    }
+
+    @Test
+    fun withoutAutoFollowAGoodAnswerMovesToTheNextQuestionInOrder() {
+        val session = LiveValidationSession("s", fields)
+        session.updateField("email_address", "mary@example.com")
+        session.checkField("email_address")
+        val elsewhere = GuidancePointer(GuidanceStep.NEXT_REQUIRED, "full_name")
+
+        assertEquals(
+            "date_of_birth",
+            enterTarget("email_address", "date_of_birth", elsewhere, fields, session.stateFlow.value)
+        )
+    }
+
+    @Test
+    fun withAutoFollowEnterFollowsTheGuidanceAsBefore() {
+        val state = LiveValidationSession("s", fields).stateFlow.value
+        val next = GuidancePointer(GuidanceStep.NEXT_REQUIRED, "full_name")
+        assertEquals("full_name", enterTarget("email_address", null, next, fields, state))
+    }
 }
