@@ -103,8 +103,8 @@ private val INTRO_STEPS = listOf(
         "Amber or red means the client may stop. That is a good moment to offer help."
     ),
     IntroStep(
-        GuideMood.CELEBRATING, "Make me yours",
-        "Open ⋮ for Auto-follow, where Enter takes you to my suggestion, and Moving guide, which you can turn off to save battery. You can replay this tour from ⋮ too."
+        GuideMood.CELEBRATING, "Your settings",
+        "Open ⋮ for Auto-follow (Enter takes you to my suggestion), Guide moves, and Fun fact when a form opens. You can replay this tour from ⋮ too."
     )
 )
 
