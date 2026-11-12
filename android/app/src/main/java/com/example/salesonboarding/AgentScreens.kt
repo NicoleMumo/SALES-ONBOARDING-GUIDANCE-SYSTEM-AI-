@@ -72,7 +72,7 @@ fun AgentHomeScreen(
     var confirmCancel by remember { mutableStateOf<StoredOnboardingSession?>(null) }
     val guideMoving = LocalContext.current
         .getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
-        .getBoolean("guide_moving", true)
+        .getBoolean(GUIDE_MOVING_KEY, true)
     AppScreen(
         title = companyName ?: "SalesMesh",
         subtitle = if (companyName != null) "SalesMesh" else null,

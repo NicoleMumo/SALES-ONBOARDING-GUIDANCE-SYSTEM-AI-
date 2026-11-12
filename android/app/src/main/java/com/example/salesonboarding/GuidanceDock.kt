@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -171,7 +172,9 @@ internal fun BoxScope.GuidanceDock(
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
-    /** Shown once when the form opens; tapping it dismisses it. */
+    funFacts: Boolean,
+    onFunFactsChange: (Boolean) -> Unit,
+    /** Shown once when the form opens; it stays until tapped. */
     greeting: GuideGreeting?,
     onGreetingDismiss: () -> Unit,
     onReplayTour: () -> Unit,
@@ -223,7 +226,7 @@ internal fun BoxScope.GuidanceDock(
                 enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 4 },
                 exit = fadeOut(tween(200))
             ) {
-                greeting?.let { GreetingBubble(it, onGreetingDismiss) }
+                greeting?.let { GreetingBubble(it, onGreetingDismiss, onTurnOff = { onFunFactsChange(false) }) }
             }
             Surface(shape = RoundedCornerShape(20.dp), color = c.ink, shadowElevation = 8.dp) {
                 AnimatedContent(
@@ -260,6 +263,8 @@ internal fun BoxScope.GuidanceDock(
                                 onAutoFollowChange = onAutoFollowChange,
                                 guideMoving = guideMoving,
                                 onGuideMovingChange = onGuideMovingChange,
+                                funFacts = funFacts,
+                                onFunFactsChange = onFunFactsChange,
                                 onReplayTour = onReplayTour,
                                 onFold = { onCollapse?.invoke() ?: setFolded(true) }
                             )
@@ -283,6 +288,8 @@ private fun DockHeader(
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
+    funFacts: Boolean,
+    onFunFactsChange: (Boolean) -> Unit,
     onReplayTour: () -> Unit,
     onFold: () -> Unit
 ) {
@@ -330,9 +337,14 @@ private fun DockHeader(
                     onClick = { onAutoFollowChange(!autoFollow); menuOpen = false }
                 )
                 DropdownMenuItem(
-                    text = { Text("Moving guide (off saves battery)") },
+                    text = { Text("Guide moves (eyes always blink)") },
                     leadingIcon = { if (guideMoving) Icon(Icons.Filled.Check, contentDescription = "On") },
                     onClick = { onGuideMovingChange(!guideMoving); menuOpen = false }
+                )
+                DropdownMenuItem(
+                    text = { Text("Fun fact when a form opens") },
+                    leadingIcon = { if (funFacts) Icon(Icons.Filled.Check, contentDescription = "On") },
+                    onClick = { onFunFactsChange(!funFacts); menuOpen = false }
                 )
                 DropdownMenuItem(
                     text = { Text("Replay the guide's tour") },
@@ -593,9 +605,12 @@ internal object GuidancePanelSettings {
     }
 }
 
-/** The guide's hello when the form opens, with a fun fact: a speech bubble above the panel. */
+/**
+ * The guide's hello when the form opens, with a fun fact: a speech bubble above the panel.
+ * It stays until tapped, so the agent has time to read it; fun facts can be turned off here.
+ */
 @Composable
-private fun GreetingBubble(greeting: GuideGreeting, onDismiss: () -> Unit) {
+private fun GreetingBubble(greeting: GuideGreeting, onDismiss: () -> Unit, onTurnOff: () -> Unit) {
     val c = Sm.colors
     Surface(
         onClick = onDismiss,
@@ -611,7 +626,17 @@ private fun GreetingBubble(greeting: GuideGreeting, onDismiss: () -> Unit) {
             Text(greeting.hello, style = MaterialTheme.typography.titleSmall, color = c.cream)
             Text("Fun fact", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = c.lime)
             Text(greeting.fact, style = MaterialTheme.typography.bodySmall, color = c.cream.copy(alpha = 0.85f))
-            Text("Tap to start", style = MaterialTheme.typography.labelSmall, color = c.cream.copy(alpha = 0.6f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Tap to start",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.cream.copy(alpha = 0.6f),
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onTurnOff) {
+                    Text("Turn off fun facts", style = MaterialTheme.typography.labelSmall, color = c.lime)
+                }
+            }
         }
     }
 }

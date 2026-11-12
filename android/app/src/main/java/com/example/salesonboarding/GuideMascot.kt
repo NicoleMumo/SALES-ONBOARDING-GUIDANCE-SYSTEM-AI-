@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,9 +56,10 @@ internal fun guideMood(guidance: NextFieldGuidance, justPassed: Boolean): GuideM
 
 /**
  * The SalesMesh guide: a round robot head drawn in code, so it has no background, scales to
- * any size and moves. It floats gently, blinks, and changes its eyes with [mood]. With
- * [animated] off, or the phone's "Remove animations" on, it is a still face that still shows
- * the mood, and nothing is redrawn between changes. A new mood needs only a new entry in
+ * any size and moves. It floats, tilts, blinks, glances about, pulses its antenna light and
+ * changes its eyes with [mood]. With [animated] off the body keeps still but the eyes still
+ * blink and glance. With the phone's "Remove animations" on, it is a still face that still
+ * shows the mood, and nothing is redrawn between changes. A new mood needs only a new entry in
  * [GuideMood] and the eye shapes below.
  */
 @Composable
@@ -67,21 +69,32 @@ fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier, animated: Boolea
     val systemAnimationsOff = remember(resolver) {
         Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
+    // [animated] stops only the body (float, tilt, antenna); the eyes stay alive. The phone's
+    // "Remove animations" stops everything.
     val moving = animated && !systemAnimationsOff
     var blink = 1f
     var float = 0f
-    if (moving) {
+    var sway = 0f
+    var pulse = 0f
+    var glance = 0f
+    if (!systemAnimationsOff) {
         val life = rememberInfiniteTransition(label = "guide")
+        // A single blink, then a quick double blink, so it does not look mechanical.
         blink = life.animateFloat(
             initialValue = 1f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
                 keyframes {
-                    durationMillis = 4200
+                    durationMillis = 6400
                     1f at 0
-                    1f at 3900
-                    0.1f at 4000
-                    1f at 4150
+                    1f at 2600
+                    0.1f at 2680
+                    1f at 2800
+                    1f at 5900
+                    0.1f at 5980
+                    1f at 6080
+                    0.1f at 6180
+                    1f at 6300
                 }
             ),
             label = "blink"
@@ -89,9 +102,47 @@ fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier, animated: Boolea
         float = life.animateFloat(
             initialValue = -1f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "float"
         ).value
+        // A slower side-to-side tilt, out of step with the float.
+        sway = life.animateFloat(
+            initialValue = -1f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "sway"
+        ).value
+        pulse = life.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "antenna"
+        ).value
+        // Now and then the eyes glance to one side and back.
+        glance = life.animateFloat(
+            initialValue = 0f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(
+                keyframes {
+                    durationMillis = 7000
+                    0f at 0
+                    0f at 1500
+                    1f at 1700
+                    1f at 2600
+                    0f at 2800
+                    0f at 4300
+                    -1f at 4500
+                    -1f at 5300
+                    0f at 5500
+                }
+            ),
+            label = "glance"
+        ).value
+        if (!moving) {
+            float = 0f
+            sway = 0f
+            pulse = 0f
+        }
     }
     val smile by animateFloatAsState(
         if (mood == GuideMood.HAPPY || mood == GuideMood.CELEBRATING) 1f else 0f,
@@ -107,12 +158,14 @@ fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier, animated: Boolea
         label = "lid"
     )
     val eyeColour by animateColorAsState(if (mood == GuideMood.WORRIED) c.cherry else c.lime, label = "eye")
-    val bounce = if (mood == GuideMood.CELEBRATING) 3f else 1f
+    val bounce = if (mood == GuideMood.CELEBRATING) 1.8f else 1f
 
     Canvas(modifier.semantics { contentDescription = mood.description }) {
         val w = size.width
         val h = size.height
-        translate(top = float * h * 0.025f * bounce) {
+        // Enough lift to see at panel size (about 3 dp at 40 dp), but not too much when large.
+        val lift = minOf(h * 0.07f, 6.dp.toPx())
+        translate(top = float * lift * bounce) { rotate(degrees = sway * 6f, pivot = Offset(w / 2, h * 0.55f)) {
             // Ear pods, shell and the antenna light.
             listOf(0.02f, 0.86f).forEach { x ->
                 drawRoundRect(c.teal, Offset(w * x, h * 0.40f), Size(w * 0.12f, h * 0.26f), CornerRadius(w * 0.05f))
@@ -122,12 +175,15 @@ fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier, animated: Boolea
                 c.line, Offset(w * 0.08f, h * 0.14f), Size(w * 0.84f, h * 0.78f), CornerRadius(w * 0.36f),
                 style = Stroke(w * 0.025f)
             )
-            drawCircle(c.lime, radius = w * 0.055f, center = Offset(w * 0.5f, h * 0.12f))
+            // The antenna light glows and pulses.
+            val antenna = Offset(w * 0.5f, h * 0.12f)
+            drawCircle(c.lime.copy(alpha = 0.35f * pulse), radius = w * (0.08f + 0.04f * pulse), center = antenna)
+            drawCircle(c.lime, radius = w * (0.05f + 0.012f * pulse), center = antenna)
             // The visor.
             drawRoundRect(c.ink, Offset(w * 0.16f, h * 0.25f), Size(w * 0.68f, h * 0.57f), CornerRadius(w * 0.27f))
 
             for (side in listOf(-1, 1)) {
-                val cx = w * (0.5f + side * 0.15f)
+                val cx = w * (0.5f + side * 0.15f + glance * 0.035f)
                 val cy = h * 0.54f
                 val eyeWidth = w * 0.16f
                 val eyeHeight = h * 0.18f * blink
@@ -173,7 +229,7 @@ fun GuideMascot(mood: GuideMood, modifier: Modifier = Modifier, animated: Boolea
                     drawCircle(c.lime.copy(alpha = sparkle), radius = w * 0.035f, center = Offset(w * x, h * y))
                 }
             }
-        }
+        } }
     }
 }
 
