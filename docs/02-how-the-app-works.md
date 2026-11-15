@@ -78,12 +78,17 @@ team follows the process.
    concerned when something needs fixing, worried when the client may need
    help, and celebrating when every required answer is in. The panel's ⋮ menu
    has **Auto-follow** (Enter goes straight to where the panel points) and
-   **Moving guide** (off for a still face that uses less battery; also still
-   when the phone's "Remove animations" is on). The first time the form opens
-   on a phone, the guide gives a five-step tour (replay it from ⋮). Each time
-   after that it greets the agent with a fun fact about onboarding, in a speech
-   bubble above the panel, then opens the first question it points at.
-   **The Enter key** never leaves the form. In a box, it checks the answer and
+   **Guide moves** (on by default: the guide floats, tilts and pulses its
+   antenna; off keeps the body still, but the eyes still blink and glance; all
+   of it stops when the phone's "Remove animations" is on), and **Fun fact when
+   a form opens**. The first time the form opens on a phone, the guide gives a
+   five-step tour (replay it from ⋮). After that, at most once a day, unless
+   fun facts are off, it greets the agent with a fun fact about onboarding, in
+   a speech bubble above the panel. The bubble stays until it is tapped, and has its own
+   **Turn off fun facts** button; then the guide opens the first question it
+   points at.
+   **The Enter key** never leaves the form. The header's back arrow never takes
+   keyboard focus, so an Enter cannot land on it after a box is left. In a box, it checks the answer and
    moves to the next question in the section (with Auto-follow, or at the last
    question, to where the panel points). Arriving at a date question opens its
    calendar. With no box selected, Enter goes to where the panel points. All of
