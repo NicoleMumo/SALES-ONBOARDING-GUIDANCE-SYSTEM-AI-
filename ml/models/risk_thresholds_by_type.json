@@ -1,0 +1,256 @@
+{
+  "note": "Simulated data. Model weights unchanged; thresholds from validation agents of seed 2026.",
+  "validation_steps": {
+    "business": 2825,
+    "other": 13621
+  },
+  "one_threshold": {
+    "medium": 0.6054,
+    "high": 0.7132
+  },
+  "variants": {
+    "by_client_type": {
+      "business": {
+        "medium": 0.8015,
+        "high": 0.8235
+      },
+      "other": {
+        "medium": 0.5213,
+        "high": 0.5893
+      }
+    },
+    "business_only": {
+      "business": {
+        "medium": 0.8015,
+        "high": 0.8235
+      },
+      "other": {
+        "medium": 0.6054,
+        "high": 0.7132
+      }
+    }
+  },
+  "test": {
+    "2026": {
+      "one_threshold": {
+        "f1_at_amber": 0.3067,
+        "abandoned_warned_check_in_or_more_pct": 41.6,
+        "completed_sessions": {
+          "business": {
+            "completed": 95,
+            "completed_needs_help": 88,
+            "completed_check_in": 95,
+            "needs_help_false_alarm_pct": 92.6,
+            "check_in_false_alarm_pct": 100.0
+          },
+          "other": {
+            "completed": 923,
+            "completed_needs_help": 4,
+            "completed_check_in": 79,
+            "needs_help_false_alarm_pct": 0.4,
+            "check_in_false_alarm_pct": 8.6
+          }
+        }
+      },
+      "by_client_type": {
+        "f1_at_amber": 0.242,
+        "abandoned_warned_check_in_or_more_pct": 51.4,
+        "completed_sessions": {
+          "business": {
+            "completed": 95,
+            "completed_needs_help": 11,
+            "completed_check_in": 41,
+            "needs_help_false_alarm_pct": 11.6,
+            "check_in_false_alarm_pct": 43.2
+          },
+          "other": {
+            "completed": 923,
+            "completed_needs_help": 37,
+            "completed_check_in": 225,
+            "needs_help_false_alarm_pct": 4.0,
+            "check_in_false_alarm_pct": 24.4
+          }
+        }
+      },
+      "business_only": {
+        "f1_at_amber": 0.2484,
+        "abandoned_warned_check_in_or_more_pct": 34.1,
+        "completed_sessions": {
+          "business": {
+            "completed": 95,
+            "completed_needs_help": 11,
+            "completed_check_in": 41,
+            "needs_help_false_alarm_pct": 11.6,
+            "check_in_false_alarm_pct": 43.2
+          },
+          "other": {
+            "completed": 923,
+            "completed_needs_help": 4,
+            "completed_check_in": 79,
+            "needs_help_false_alarm_pct": 0.4,
+            "check_in_false_alarm_pct": 8.6
+          }
+        }
+      }
+    },
+    "7": {
+      "one_threshold": {
+        "f1_at_amber": 0.3979,
+        "abandoned_warned_check_in_or_more_pct": 42.2,
+        "completed_sessions": {
+          "business": {
+            "completed": 72,
+            "completed_needs_help": 68,
+            "completed_check_in": 72,
+            "needs_help_false_alarm_pct": 94.4,
+            "check_in_false_alarm_pct": 100.0
+          },
+          "other": {
+            "completed": 802,
+            "completed_needs_help": 6,
+            "completed_check_in": 68,
+            "needs_help_false_alarm_pct": 0.7,
+            "check_in_false_alarm_pct": 8.5
+          }
+        }
+      },
+      "by_client_type": {
+        "f1_at_amber": 0.3125,
+        "abandoned_warned_check_in_or_more_pct": 55.0,
+        "completed_sessions": {
+          "business": {
+            "completed": 72,
+            "completed_needs_help": 6,
+            "completed_check_in": 31,
+            "needs_help_false_alarm_pct": 8.3,
+            "check_in_false_alarm_pct": 43.1
+          },
+          "other": {
+            "completed": 802,
+            "completed_needs_help": 28,
+            "completed_check_in": 217,
+            "needs_help_false_alarm_pct": 3.5,
+            "check_in_false_alarm_pct": 27.1
+          }
+        }
+      },
+      "business_only": {
+        "f1_at_amber": 0.2885,
+        "abandoned_warned_check_in_or_more_pct": 35.9,
+        "completed_sessions": {
+          "business": {
+            "completed": 72,
+            "completed_needs_help": 6,
+            "completed_check_in": 31,
+            "needs_help_false_alarm_pct": 8.3,
+            "check_in_false_alarm_pct": 43.1
+          },
+          "other": {
+            "completed": 802,
+            "completed_needs_help": 6,
+            "completed_check_in": 68,
+            "needs_help_false_alarm_pct": 0.7,
+            "check_in_false_alarm_pct": 8.5
+          }
+        }
+      }
+    },
+    "99": {
+      "one_threshold": {
+        "f1_at_amber": 0.352,
+        "abandoned_warned_check_in_or_more_pct": 37.8,
+        "completed_sessions": {
+          "business": {
+            "completed": 78,
+            "completed_needs_help": 69,
+            "completed_check_in": 78,
+            "needs_help_false_alarm_pct": 88.5,
+            "check_in_false_alarm_pct": 100.0
+          },
+          "other": {
+            "completed": 841,
+            "completed_needs_help": 3,
+            "completed_check_in": 79,
+            "needs_help_false_alarm_pct": 0.4,
+            "check_in_false_alarm_pct": 9.4
+          }
+        }
+      },
+      "by_client_type": {
+        "f1_at_amber": 0.2833,
+        "abandoned_warned_check_in_or_more_pct": 44.2,
+        "completed_sessions": {
+          "business": {
+            "completed": 78,
+            "completed_needs_help": 4,
+            "completed_check_in": 26,
+            "needs_help_false_alarm_pct": 5.1,
+            "check_in_false_alarm_pct": 33.3
+          },
+          "other": {
+            "completed": 841,
+            "completed_needs_help": 30,
+            "completed_check_in": 216,
+            "needs_help_false_alarm_pct": 3.6,
+            "check_in_false_alarm_pct": 25.7
+          }
+        }
+      },
+      "business_only": {
+        "f1_at_amber": 0.2469,
+        "abandoned_warned_check_in_or_more_pct": 28.3,
+        "completed_sessions": {
+          "business": {
+            "completed": 78,
+            "completed_needs_help": 4,
+            "completed_check_in": 26,
+            "needs_help_false_alarm_pct": 5.1,
+            "check_in_false_alarm_pct": 33.3
+          },
+          "other": {
+            "completed": 841,
+            "completed_needs_help": 3,
+            "completed_check_in": 79,
+            "needs_help_false_alarm_pct": 0.4,
+            "check_in_false_alarm_pct": 9.4
+          }
+        }
+      }
+    }
+  },
+  "clean_business_session": {
+    "one_threshold": [
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "Check in",
+      "Needs help",
+      "Check in",
+      "Check in",
+      "Check in",
+      "On track",
+      "On track",
+      "On track"
+    ],
+    "business_only": [
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track",
+      "On track"
+    ]
+  },
+  "decision_rule_passes": {
+    "by_client_type": false,
+    "business_only": false
+  },
+  "chosen": null
+}

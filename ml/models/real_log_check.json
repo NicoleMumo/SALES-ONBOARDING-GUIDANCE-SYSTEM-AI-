@@ -1,0 +1,95 @@
+{
+  "fit_gap": {
+    "train": {
+      "steps": 78475,
+      "model": 93.8
+    },
+    "validation": {
+      "steps": 16205,
+      "model": 92.4
+    },
+    "test": {
+      "steps": 16533,
+      "model": 95.2
+    }
+  },
+  "real_log": {
+    "source": "github.com/Mcamilo/Onboarding-Fintech-Event-Log (doi:10.3390/fintech2010009)",
+    "cases": 13388,
+    "fraud_cases": 745,
+    "steps_matched_to_app_questions": {
+      "EmailInsertion": "email_address",
+      "MobilePhoneNumberInsertion": "mobile_phone_number",
+      "BirthDateInsertion": "date_of_birth",
+      "HomeAddressInsertion": "home_address",
+      "ProfessionInsertion": "profession",
+      "IncomeInsertion": "income",
+      "AssetsInsertion": "assets",
+      "USPersonInsertion": "us_person_status",
+      "PoliticalExpositionInsertion": "politically_exposed_person_status",
+      "TermsAcceptanceInsertion": "terms_and_conditions_acceptance"
+    }
+  },
+  "patterns": {
+    "real": {
+      "cases_started": 13310,
+      "reached_terms_question": 99.8,
+      "answered_all_ten": 98.9,
+      "order_differs_from_app_form": 100.0,
+      "follows_app_form_exactly": 0.0,
+      "share_using_most_common_order": 60.1,
+      "most_common_order": [
+        "date_of_birth",
+        "email_address",
+        "mobile_phone_number",
+        "home_address",
+        "profession",
+        "income",
+        "assets",
+        "politically_exposed_person_status",
+        "us_person_status",
+        "terms_and_conditions_acceptance"
+      ],
+      "distinct_orders": 8,
+      "cases_with_an_answer_entered_again": 22.5,
+      "median_seconds_between_questions": 16.0
+    },
+    "simulated_banking_individual": {
+      "cases_started": 3221,
+      "reached_terms_question": 88.9,
+      "answered_all_ten": 88.9,
+      "order_differs_from_app_form": 24.6,
+      "follows_app_form_exactly": 75.4,
+      "share_using_most_common_order": 75.4,
+      "most_common_order": [
+        "email_address",
+        "mobile_phone_number",
+        "date_of_birth",
+        "home_address",
+        "profession",
+        "income",
+        "assets",
+        "us_person_status",
+        "politically_exposed_person_status",
+        "terms_and_conditions_acceptance"
+      ],
+      "distinct_orders": 36,
+      "cases_with_an_answer_entered_again": 53.3,
+      "median_seconds_between_questions": 72.0
+    }
+  },
+  "next_question_on_real_orders": {
+    "model": 81.0,
+    "app_rule": 79.8,
+    "real_lookup": 96.3,
+    "model_top3": 99.9,
+    "chance": 31.3,
+    "steps": 59554,
+    "cases_scored": 6675,
+    "model_vs_app_rule": {
+      "only_model_right": 6605,
+      "only_rule_right": 5892,
+      "z": 6.4
+    }
+  }
+}
