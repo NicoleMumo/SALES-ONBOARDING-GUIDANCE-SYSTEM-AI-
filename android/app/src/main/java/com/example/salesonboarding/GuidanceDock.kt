@@ -119,6 +119,23 @@ internal fun followTarget(
     return fields.drop(after + 1).firstOrNull { !it.isAnsweredIn(state) }?.fieldId
 }
 
+/**
+ * Where Enter in question [from] goes. With [nextInOrder] (auto-follow off), the next question
+ * in the section, unless the answer just left is wrong: then it stays on [from], so a date
+ * question's calendar never opens over an answer still to fix. Otherwise, see [followTarget].
+ */
+internal fun enterTarget(
+    from: String?,
+    nextInOrder: String?,
+    pointer: GuidancePointer?,
+    fields: List<FormField>,
+    state: LiveValidationState
+): String? {
+    if (nextInOrder == null) return followTarget(from, pointer, fields, state)
+    val left = fields.firstOrNull { it.fieldId == from }
+    return if (left != null && errorFor(left, state) != null) from else nextInOrder
+}
+
 /** Every answer that needs fixing, in the form's order. */
 internal fun answersToFix(fields: List<FormField>, state: LiveValidationState): List<String> {
     val wrong = ValidationErrorDisplayMapper.forState(state).map { it.fieldId }.toSet()

@@ -240,7 +240,7 @@ private fun TextInput(
     val focusManager = LocalFocusManager.current
     var hadFocus by remember(field.fieldId) { mutableStateOf(false) }
     var focused by remember(field.fieldId) { mutableStateOf(false) }
-    val multiline = field.fieldId.contains("address") || field.fieldId.contains("notes")
+    val multiline = field.takesSeveralLines()
     val shape = RoundedCornerShape(14.dp)
     val borderColor = when {
         hasError -> c.cherry
@@ -267,7 +267,12 @@ private fun TextInput(
             }
             BasicTextField(
                 value = value,
-                onValueChange = onValueChange,
+                // A box of several lines would add a new line on Enter; here Enter moves on, as in every box.
+                onValueChange = { typed ->
+                    val edit = LineBreaks.read(value, typed)
+                    onValueChange(edit.text)
+                    if (edit.enterPressed) onNext?.invoke() ?: focusManager.moveFocus(FocusDirection.Down)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
@@ -578,9 +583,9 @@ internal fun clearIdPhotos(cacheDir: File) {
  * "Take document photo": on the identification document question, the agent photographs the
  * document from inside the app and the phone reads its printed text (Google ML Kit, on the
  * phone). The photo is written to the app's private cache, never to the phone's gallery, and is
- * deleted as soon as it has been read. The text is shown to compare with the card, with a "Use"
- * button beside the name, ID number and date of birth it found: tapping one fills and checks
- * that question ([onUse]). Nothing is put into an answer unless the agent taps "Use", and the
+ * deleted as soon as it has been read. It shows only the name, ID number and date of birth it
+ * found, each with a "Use" button that fills and checks that question ([onUse]); everything
+ * else it read stays folded under "Show all text read", and Close clears it all. Nothing is put into an answer unless the agent taps "Use", and the
  * read text itself is never uploaded or saved.
  */
 @Composable
@@ -717,7 +722,6 @@ fun DocumentOcrScanner(
                 border = BorderStroke(1.dp, c.line)
             ) {
                 Column(Modifier.padding(Space.m), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    Text("Text found. Check it against the card.", style = MaterialTheme.typography.titleSmall)
                     val details = remember(extractedText) { IdCardText.read(extractedText) }
                     val found = listOf(
                         Triple("full_name", "Full name", details.fullName),
@@ -725,6 +729,18 @@ fun DocumentOcrScanner(
                         Triple("date_of_birth", "Date of birth", details.dateOfBirth)
                     ).filter { (id, _, value) -> value != null && id in usableFieldIds && onUse != null }
                     var used by remember(extractedText) { mutableStateOf(emptySet<String>()) }
+                    // Everything the camera read is long (the whole card and anything behind
+                    // it), so it stays folded unless the agent asks to see it.
+                    var showAll by remember(extractedText) { mutableStateOf(false) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (found.isEmpty()) "No name, ID number or date of birth found. Type them from the card."
+                            else "Found on the card. Check each against it.",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { extractedText = "" }) { Text("Close") }
+                    }
                     found.forEach { (id, label, value) ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -748,8 +764,14 @@ fun DocumentOcrScanner(
                             color = c.muted
                         )
                     }
-                    SelectionContainer {
-                        Text(extractedText, style = MaterialTheme.typography.bodyMedium)
+                    val lines = remember(extractedText) { extractedText.lines().count { it.isNotBlank() } }
+                    TextButton(onClick = { showAll = !showAll }) {
+                        Text(if (showAll) "Hide the text read" else "Show all text read ($lines lines)")
+                    }
+                    if (showAll) {
+                        SelectionContainer {
+                            Text(extractedText, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }
@@ -917,3 +939,19 @@ private fun Context.hasValidatedNetwork(): Boolean {
 }
 
 // endregion
+
+/** Street addresses and notes wrap over several lines. An email address does not, despite its ID. */
+internal fun FormField.takesSeveralLines(): Boolean = isStreetAddress() || fieldId.contains("notes")
+
+/** Keeps line breaks out of answers: one typed line break is the Enter key; pasted ones become commas. */
+internal object LineBreaks {
+    data class Edit(val text: String, val enterPressed: Boolean)
+
+    private const val BREAK = '\n'
+
+    fun read(before: String, after: String): Edit = when {
+        BREAK !in after -> Edit(after, false)
+        after.length == before.length + 1 && after.count { it == BREAK } == 1 -> Edit(after.replace(BREAK.toString(), ""), true)
+        else -> Edit(after.split(BREAK).joinToString(", ") { it.trim() }, false)
+    }
+}

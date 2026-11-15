@@ -72,4 +72,21 @@ class AddressLookupTest {
         assertTrue(KnownFields.get("physical_address").isStreetAddress())
         assertFalse(KnownFields.get("email_address").isStreetAddress())
     }
+
+    @Test
+    fun onlyRealAddressesTakeSeveralLines() {
+        assertTrue(KnownFields.get("home_address").takesSeveralLines())
+        assertFalse(KnownFields.get("email_address").takesSeveralLines())
+    }
+
+    @Test
+    fun enterInAnAddressMovesOnAndAddsNoLine() {
+        assertEquals(LineBreaks.Edit("12 Moi Avenue", true), LineBreaks.read("12 Moi Avenue", "12 Moi Avenue\n"))
+        assertEquals(LineBreaks.Edit("12 Moi Avenue", false), LineBreaks.read("12 Moi Avenu", "12 Moi Avenue"))
+    }
+
+    @Test
+    fun aPastedAddressKeepsItsPartsAsCommas() {
+        assertEquals(LineBreaks.Edit("12 Moi Avenue, Nairobi", false), LineBreaks.read("", "12 Moi Avenue\nNairobi"))
+    }
 }

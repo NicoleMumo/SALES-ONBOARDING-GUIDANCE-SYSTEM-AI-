@@ -403,8 +403,12 @@ private fun SectionPage(
     // The question Enter was pressed in, so the follow does not send the cursor back to it.
     var followFrom by remember { mutableStateOf<String?>(null) }
     var followChecksBefore by remember { mutableIntStateOf(0) }
+    // Without auto-follow: the next question in order, to go to once the answer has passed.
+    var followNext by remember { mutableStateOf<String?>(null) }
     // A physical Enter is one press: its key-up must not count as a second Enter.
     var enterStartedOutsideBox by remember { mutableStateOf(false) }
+    // The box an Enter press started in, so its key-up cannot press whatever has focus after.
+    var enterStartedIn by remember { mutableStateOf<String?>(null) }
     // The question whose box has the cursor, if any: Enter elsewhere follows the guidance.
     var typingIn by remember { mutableStateOf<String?>(null) }
     // The agent can open the full panel while typing, from the slim bar's guide.
@@ -434,12 +438,10 @@ private fun SectionPage(
     fun enterFrom(index: Int?) {
         val from = index?.let { section.fields.getOrNull(it)?.fieldId }
         val next = index?.let { section.fields.getOrNull(it + 1) }
-        if (autoFollow || next == null) followFromQuestion(from)
-        else {
-            followChecksBefore = state.interactionHistory.size
-            focusManager.clearFocus()
-            goTo(next.fieldId)
-        }
+        // Without auto-follow, Enter goes to the next question in order, but only once the
+        // answer just left has passed: a wrong one keeps the cursor (and opens no calendar).
+        followNext = if (autoFollow) null else next?.fieldId
+        followFromQuestion(from)
     }
     /**
      * A tap on the guidance. If it points at the box being typed in, the answer has not been
@@ -480,7 +482,9 @@ private fun SectionPage(
             }
         }
         delay(AUTO_FOLLOW_DELAY_MS)
-        followTarget(from, latestPointer, allFields, latestState)?.let(::goTo)
+        val inOrder = followNext
+        followNext = null
+        enterTarget(from, inOrder, latestPointer, allFields, latestState)?.let(::goTo)
     }
 
     AppScreen(
@@ -496,13 +500,18 @@ private fun SectionPage(
             when (event.type) {
                 KeyEventType.KeyDown -> {
                     enterStartedOutsideBox = typingIn == null
+                    enterStartedIn = typingIn
                     enterStartedOutsideBox
                 }
                 KeyEventType.KeyUp -> {
                     val outside = enterStartedOutsideBox
+                    // The press began in a box that has since moved on (for example to a date
+                    // question, which has no box): the rest of it belongs to nothing else.
+                    val strayFromBox = enterStartedIn != null && typingIn != enterStartedIn
                     enterStartedOutsideBox = false
+                    enterStartedIn = null
                     if (outside) enterFrom(null)
-                    outside
+                    outside || strayFromBox
                 }
                 else -> false
             }
