@@ -211,4 +211,77 @@ class OnboardingPlaybookTest {
 
         assertEquals("profession", playbook.fields.last().fieldId)
     }
+
+    private fun companyQuestion(id: String, after: String?) = FormField(
+        fieldId = id,
+        fieldName = id,
+        fieldType = "text",
+        isRequired = false,
+        validationRules = emptyList(),
+        description = "A company's own question.",
+        placeAfter = after
+    )
+
+    private fun bankingIndividual(vararg company: FormField) = OnboardingPlaybooks.forIndustry(
+        "banking",
+        FieldRuleConfiguration(customFields = company.toList()),
+        "individual"
+    )
+
+    @Test
+    fun aPlacedCompanyQuestionIsAskedRightAfterItsQuestionInThatSection() {
+        val playbook = bankingIndividual(companyQuestion("loyalty_number", after = "home_address"))
+        val ids = playbook.fields.map(FormField::fieldId)
+
+        assertEquals(ids.indexOf("home_address") + 1, ids.indexOf("loyalty_number"))
+        val section = playbook.sections().first { s -> s.fields.any { it.fieldId == "loyalty_number" } }
+        assertEquals("Customer", section.title)
+        assertEquals(false, playbook.sections().any { it.title == COMPANY_SECTION })
+    }
+
+    @Test
+    fun severalPlacedAfterOneQuestionKeepTheOrderTheyWereAdded() {
+        val playbook = bankingIndividual(
+            companyQuestion("first_extra", after = "email_address"),
+            companyQuestion("second_extra", after = "email_address")
+        )
+        val ids = playbook.fields.map(FormField::fieldId)
+        val email = ids.indexOf("email_address")
+
+        assertEquals(listOf("first_extra", "second_extra"), ids.subList(email + 1, email + 3))
+    }
+
+    @Test
+    fun aQuestionWithNoPlaceOrAPlaceNotInThisFormGoesAtTheEnd() {
+        val playbook = bankingIndividual(
+            companyQuestion("no_place", after = null),
+            // Asked only of business clients, so not in the individual form.
+            companyQuestion("after_business_only", after = "commercial_address")
+        )
+
+        assertEquals(listOf("no_place", "after_business_only"), playbook.fields.takeLast(2).map(FormField::fieldId))
+        assertEquals(COMPANY_SECTION, playbook.sections().last().title)
+    }
+
+    @Test
+    fun aQuestionPlacedAfterAQuestionThatIsOffGoesAtTheEnd() {
+        val playbook = OnboardingPlaybooks.forIndustry(
+            "banking",
+            FieldRuleConfiguration(
+                customFields = listOf(companyQuestion("extra", after = "profession")),
+                hiddenFieldIds = setOf("profession")
+            ),
+            "individual"
+        )
+
+        assertEquals("extra", playbook.fields.last().fieldId)
+    }
+
+    @Test
+    fun placingAQuestionChangesThePlaybookVersion() {
+        val atEnd = bankingIndividual(companyQuestion("extra", after = null))
+        val placed = bankingIndividual(companyQuestion("extra", after = "home_address"))
+
+        assertEquals(false, atEnd.version == placed.version)
+    }
 }

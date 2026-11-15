@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -266,13 +268,13 @@ fun AdminDashboardScreen(
                     errorMessage = errorMessage,
                     onSignOut = onSignOut,
                     bottomBar = bottomBar,
-                    onUpdateField = { fieldId, name, description, type, rules, choices, onComplete ->
-                        store.updateCustomField(fieldId, name, description, type, rules, choices) {
+                    onUpdateField = { fieldId, name, description, type, rules, choices, placeAfter, onComplete ->
+                        store.updateCustomField(fieldId, name, description, type, rules, choices, placeAfter) {
                             onComplete(it)
                             if (!isCurrentAdminScope()) return@updateCustomField
                             handle(it) {
                                 val updatedConfiguration = configuration.withCustomField(
-                                    customField(fieldId, name, description, type, rules, choices)
+                                    customField(fieldId, name, description, type, rules, choices, placeAfter)
                                 )
                                 configuration = updatedConfiguration
                                 onConfigurationChanged(updatedConfiguration)
@@ -290,8 +292,8 @@ fun AdminDashboardScreen(
                             }
                         }
                     },
-                    onAddField = { fieldId, name, description, type, rules, choices, onComplete ->
-                        store.addCustomField(fieldId, name, description, type, rules, choices) {
+                    onAddField = { fieldId, name, description, type, rules, choices, placeAfter, onComplete ->
+                        store.addCustomField(fieldId, name, description, type, rules, choices, placeAfter) {
                             if (!isCurrentAdminScope()) {
                                 onComplete(it)
                                 return@addCustomField
@@ -299,7 +301,7 @@ fun AdminDashboardScreen(
                             onComplete(it)
                             handle(it) {
                                 val updatedConfiguration = configuration.withCustomField(
-                                    customField(fieldId, name, description, type, rules, choices)
+                                    customField(fieldId, name, description, type, rules, choices, placeAfter)
                                 )
                                 configuration = updatedConfiguration
                                 if (isCurrentAdminScope()) {
@@ -755,8 +757,9 @@ private fun ProgressBar(share: Float) {
 
 // region Questions
 
+/** id, name, instructions, type, checks, choices, the standard question it follows (null: at the end). */
 private typealias QuestionSaver =
-    (String, String, String, String, Set<AdminRule>, Set<String>, (Result<Unit>) -> Unit) -> Unit
+    (String, String, String, String, Set<AdminRule>, Set<String>, String?, (Result<Unit>) -> Unit) -> Unit
 
 /** How one standard question appears in the form. */
 private enum class QuestionState(val label: String) {
@@ -993,7 +996,7 @@ private fun QuestionsPage(
             }
         } else {
             PrimaryButton("Add a question", onClick = { showAdd = true }, iconRes = R.drawable.ic_sm_plus)
-            SectionCard(subtitle = "Extra questions shown in a last \"Company questions\" section. The AI suggests them by their place in the form, though it was never trained on them.") {
+            SectionCard(subtitle = "Extra questions, asked after the standard question you choose, or in a last \"Company questions\" section. The AI suggests them by their place in the form, though it was never trained on them.") {
                 if (configuration.customFields.isEmpty()) {
                     EmptyState("None yet", "Questions you add appear here.", iconRes = R.drawable.ic_sm_questions)
                 }
@@ -1006,6 +1009,12 @@ private fun QuestionsPage(
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(field.fieldName, style = MaterialTheme.typography.titleSmall, color = Sm.colors.ink)
                         Text(field.description, style = MaterialTheme.typography.bodySmall, color = Sm.colors.ink)
+                        val placeName = placesFor(industry).firstOrNull { it.first == field.placeAfter }?.second
+                        Text(
+                            if (placeName != null) "Asked after: $placeName" else "Asked at the end, under Company questions",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Sm.colors.mutedStrong
+                        )
                         Text(
                             "ID ${field.fieldId} · ${field.fieldType} · rules: ${ruleLabels.joinToString().ifBlank { "none" }}",
                             style = MaterialTheme.typography.bodySmall,
@@ -1025,10 +1034,10 @@ private fun QuestionsPage(
     }
 
     if (showAdd) {
-        QuestionSheet(configuration, existing = null, onDismiss = { showAdd = false }, onSave = onAddField)
+        QuestionSheet(configuration, industry, existing = null, onDismiss = { showAdd = false }, onSave = onAddField)
     }
     editing?.let { field ->
-        QuestionSheet(configuration, existing = field, onDismiss = { editing = null }, onSave = onUpdateField)
+        QuestionSheet(configuration, industry, existing = field, onDismiss = { editing = null }, onSave = onUpdateField)
     }
     deleting?.let { field ->
         var isDeleting by remember(field) { mutableStateOf(false) }
@@ -1062,10 +1071,14 @@ private fun QuestionsPage(
 @OptIn(ExperimentalLayoutApi::class)
 private fun QuestionSheet(
     configuration: FieldRuleConfiguration,
+    industry: String?,
     existing: FormField?,
     onDismiss: () -> Unit,
     onSave: QuestionSaver
 ) {
+    val places = remember(industry) { placesFor(industry) }
+    var placeAfter by remember { mutableStateOf(existing?.placeAfter?.takeIf { id -> places.any { it.first == id } }) }
+    var placeMenuOpen by remember { mutableStateOf(false) }
     var fieldName by remember { mutableStateOf(existing?.fieldName.orEmpty()) }
     var description by remember { mutableStateOf(existing?.description.orEmpty()) }
     var fieldType by remember { mutableStateOf(existing?.fieldType ?: "text") }
@@ -1123,6 +1136,34 @@ private fun QuestionSheet(
                 supportingText = "Agents will pick one of these."
             )
         }
+        Text("WHERE IT GOES", style = smCapsStyle(), color = Sm.colors.muted)
+        Box {
+            SecondaryButton(
+                text = places.firstOrNull { it.first == placeAfter }?.let { "After: ${it.second}" }
+                    ?: "At the end, under Company questions",
+                onClick = { placeMenuOpen = true },
+                enabled = places.isNotEmpty()
+            )
+            DropdownMenu(expanded = placeMenuOpen, onDismissRequest = { placeMenuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("At the end, under Company questions") },
+                    onClick = { placeAfter = null; placeMenuOpen = false }
+                )
+                places.forEach { (id, name) ->
+                    DropdownMenuItem(
+                        text = { Text("After: $name") },
+                        onClick = { placeAfter = id; placeMenuOpen = false }
+                    )
+                }
+            }
+        }
+        Text(
+            if (places.isEmpty()) "Set the company's industry first to choose a place."
+            else "Agents are asked it right after that question, and the AI suggests it there. " +
+                "If that question is off, or not asked of a client type, it goes at the end.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Sm.colors.muted
+        )
         Text("CHECKS", style = smCapsStyle(), color = Sm.colors.muted)
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Space.s),
@@ -1150,7 +1191,8 @@ private fun QuestionSheet(
                     description.trim(),
                     fieldType.trim().lowercase(Locale.ROOT),
                     selectedRules,
-                    parsedChoices
+                    parsedChoices,
+                    placeAfter
                 ) { result ->
                     isSavingField = false
                     if (result.isSuccess) onDismiss()
@@ -1348,7 +1390,8 @@ private fun customField(
     description: String,
     fieldType: String,
     rules: Set<AdminRule>,
-    choices: Set<String>
+    choices: Set<String>,
+    placeAfter: String?
 ): FormField = FormField(
     fieldId = fieldId,
     fieldName = name,
@@ -1358,7 +1401,17 @@ private fun customField(
     },
     validationRules = rules.toValidationRules() +
         if (choices.isEmpty()) emptyList() else listOf(OneOf(choices)),
-    description = description
+    description = description,
+    placeAfter = placeAfter
 )
+
+/** The industry's standard questions in form order, as (id, name), for "Where it goes". */
+private fun placesFor(industry: String?): List<Pair<String, String>> {
+    if (industry == null) return emptyList()
+    val names = KnownFields.all.associate { it.fieldId to it.fieldName }
+    return OnboardingPlaybooks.fieldIdsFor(industry).map { id ->
+        id to (names[id] ?: if (id == "business_name") "Registered business name" else id)
+    }
+}
 
 // endregion

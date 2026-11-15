@@ -72,7 +72,12 @@ data class FormField(
     val fieldType: String,
     val isRequired: Boolean,
     val validationRules: List<ValidationRule>,
-    val description: String = ""
+    val description: String = "",
+    /**
+     * A company's own question only: the standard question it is asked right after, chosen by
+     * the administrator. Null puts it at the end, under "Company questions".
+     */
+    val placeAfter: String? = null
 ) {
     // Required is applied automatically when isRequired is true.
     private val effectiveRules: List<ValidationRule> =

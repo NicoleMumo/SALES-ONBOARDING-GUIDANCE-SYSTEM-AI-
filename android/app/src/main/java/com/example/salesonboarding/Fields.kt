@@ -420,7 +420,9 @@ data class OnboardingPlaybook(
                             field.fieldType,
                             field.isRequired.toString(),
                             field.description
-                        ) + field.validationRules.map { it.toString() }
+                        ) + field.validationRules.map { it.toString() } +
+                            // Only when set, so playbooks without placed questions keep their version.
+                            listOfNotNull(field.placeAfter?.let { "after:$it" })
                         output.writeInt(values.size)
                         values.forEach { value ->
                             val bytes = value.toByteArray(Charsets.UTF_8)
@@ -572,8 +574,7 @@ object OnboardingPlaybooks {
                 else -> configuredField
             }
         }
-        val fields = (industryFields + configuration.customFields)
-            .distinctBy(FormField::fieldId)
+        val fields = placeCompanyQuestions(industryFields, configuration.customFields)
         val industryTitle = when (industry) {
             "telecom" -> "Telecommunications onboarding"
             "banking" -> "Banking onboarding"
@@ -588,6 +589,21 @@ object OnboardingPlaybooks {
             industry = industry,
             fields = fields
         )
+    }
+
+    /**
+     * The standard questions in order, with each company question right after the standard
+     * question the administrator chose ([FormField.placeAfter]). Several placed after the same
+     * question keep the order they were added in. A company question with no place, or whose
+     * place is not in this form (switched off, or asked only of another client type), goes at
+     * the end. Standard ids win over a company question with the same id.
+     */
+    internal fun placeCompanyQuestions(standard: List<FormField>, company: List<FormField>): List<FormField> {
+        val standardIds = standard.map(FormField::fieldId).toSet()
+        val own = company.filterNot { it.fieldId in standardIds }.distinctBy(FormField::fieldId)
+        val placed = own.filter { it.placeAfter in standardIds }.groupBy { it.placeAfter }
+        val atEnd = own.filterNot { it.placeAfter in standardIds }
+        return standard.flatMap { listOf(it) + placed[it.fieldId].orEmpty() } + atEnd
     }
 
     private fun telecomFields(context: String): List<String> {
@@ -627,13 +643,18 @@ data class FormSection(val title: String, val fields: List<FormField>)
 /**
  * The playbook split into sections. Sections only group neighbouring questions, so the
  * questions keep the playbook's order, which the consistency measure compares sessions
- * against. Questions a company added come last, under [COMPANY_SECTION].
+ * against. A company question placed after a standard question joins that question's
+ * section; the others come last, under [COMPANY_SECTION].
  */
 fun OnboardingPlaybook.sections(): List<FormSection> {
     val sectionOf = SECTION_BY_FIELD[industry].orEmpty()
     val sections = mutableListOf<FormSection>()
+    val seen = mutableSetOf<String>()
     fields.forEach { field ->
-        val title = sectionOf[field.fieldId] ?: COMPANY_SECTION
+        val placed = field.placeAfter != null && field.placeAfter in seen && sectionOf[field.placeAfter] != null
+        val title = sectionOf[field.fieldId]
+            ?: if (placed) sectionOf.getValue(field.placeAfter!!) else COMPANY_SECTION
+        seen += field.fieldId
         val last = sections.lastOrNull()
         if (last?.title == title) {
             sections[sections.lastIndex] = last.copy(fields = last.fields + field)

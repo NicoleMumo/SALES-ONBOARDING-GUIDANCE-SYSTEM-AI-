@@ -11,7 +11,8 @@ Two ways to use it:
            --answered full_name,email_address,mobile_phone_number --last passed
 
    Add a company's own question with --company-question "Name: description" (repeatable). It
-   goes at the end of the form, as in the app; the model was never trained on it.
+   goes at the end of the form, or right after --place-after QUESTION, as the administrator
+   chooses in the app; the model was never trained on it.
 
 2. Watch it on a real test session (an unseen sales agent), step by step, next to the app's
    plain rule ("ask the first unanswered required question in the form's order"):
@@ -84,12 +85,20 @@ class ShippedModel:
 
 def ask(args, model):
     answered = [f.strip() for f in args.answered.split(",") if f.strip()]
-    # A company's own questions go at the end of the form, under "Company questions", as in the app.
+    # A company's own questions go right after the standard question chosen with --place-after,
+    # or at the end of the form, under "Company questions", as in the app.
     company = {}
     for text in args.company_question:
         name, _, description = text.partition(":")
         company["company_" + "_".join(name.lower().split())] = f"{name.strip()}. {description.strip()}"
-    playbook = standard_order(args.industry, args.context) + list(company)
+    standard = standard_order(args.industry, args.context)
+    if args.place_after and args.place_after not in standard:
+        raise SystemExit(f"--place-after {args.place_after} is not in the {args.industry} {args.context} form: {standard}")
+    if args.place_after:
+        at = standard.index(args.place_after) + 1
+        playbook = standard[:at] + list(company) + standard[at:]
+    else:
+        playbook = standard + list(company)
     unknown = [f for f in answered if f not in playbook]
     if unknown:
         raise SystemExit(f"Not in the {args.industry} {args.context} form: {unknown}. Its questions: {playbook}")
@@ -154,6 +163,8 @@ def main():
     a.add_argument("--last", default="passed", choices=["passed", "failed", "NONE"])
     a.add_argument("--company-question", action="append", default=[],
                    help='"Name: description" of a question the company added (repeatable)')
+    a.add_argument("--place-after", default=None,
+                   help="the standard question the company's questions follow, as the admin chooses in the app")
     w = sub.add_parser("walk")
     w.add_argument("csv")
     w.add_argument("--off-script", action="store_true")

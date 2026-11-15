@@ -119,9 +119,20 @@ time.
 Each held-out question: email 98.3%, profession 100%, US person 100%, payment
 method 97.5%. On the other steps that model scored 93.5%, and it picked a
 held-out question wrongly on 2.5% of them. The held-out questions came from the
-simulator, which places them in the form's usual order. A company question is
-placed at the end of the form, and the model will suggest it there until real
-sessions show agents asking it elsewhere.
+simulator, which places them in the form's usual order. In the app, the
+administrator chooses where a company question goes (after which standard
+question, or at the end), and the model suggests it at that place. With a
+made-up "Loyalty card number" placed after home address (banking, individual),
+the shipped model ranks it first once home address is answered (96.3%; 93.6%
+when the question is optional), and not before (0.2% while home address is still
+open); if it is skipped, it still ranks it first one step later (94.2%):
+
+```powershell
+python ml/try_next_question.py ask --industry banking --context individual `
+  --answered full_name,email_address,mobile_phone_number,date_of_birth,home_address `
+  --company-question "Loyalty card number: The customer's Acme rewards card number, if they have one" `
+  --place-after home_address
+```
 
 ```powershell
 python ml/next_question_v2.py holdout ml/data/onboarding_dataset_v3.csv   # the held-out test
