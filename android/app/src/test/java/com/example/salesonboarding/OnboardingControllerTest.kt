@@ -241,7 +241,7 @@ class OnboardingFormControllerTest {
         )
         runCurrent() // the form opens and asks for a first suggestion before anything is typed
 
-        controller.answer("loyalty_email", "customer@example.com")
+        controller.answer("loyalty_email", "client@example.com")
         runCurrent()
         controller.answer("full_name", "Jane Wanjiku")
         runCurrent()
@@ -564,7 +564,7 @@ class OnboardingFormControllerTest {
 
         assertEquals(CompletionRiskLevel.HIGH, controller.guidanceFlow.value.riskGuidance?.level)
         assertEquals(
-            "Pause and help the customer complete the remaining information.",
+            "Pause and help the client complete the remaining information.",
             controller.guidanceFlow.value.riskGuidance?.message
         )
     }

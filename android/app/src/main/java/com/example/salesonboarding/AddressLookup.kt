@@ -225,7 +225,7 @@ internal fun FormField.isStreetAddress(): Boolean =
 
 /**
  * "Use my location" and "Find address" under an address question. Both only suggest: the
- * agent taps Use to fill the question, after checking the suggestion with the customer.
+ * agent taps Use to fill the question, after checking the suggestion with the client.
  */
 @Composable
 internal fun AddressFinder(query: String, onUse: (String) -> Unit, modifier: Modifier = Modifier) {
@@ -323,7 +323,7 @@ internal fun AddressFinder(query: String, onUse: (String) -> Unit, modifier: Mod
                 border = BorderStroke(1.dp, c.line)
             ) {
                 Column(Modifier.padding(Space.m), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                    Text("Check with the customer, then tap Use.", style = MaterialTheme.typography.titleSmall)
+                    Text("Check with the client, then tap Use.", style = MaterialTheme.typography.titleSmall)
                     matches.forEach { match ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                             Text(match.label, style = MaterialTheme.typography.bodyMedium, color = c.ink, modifier = Modifier.weight(1f))

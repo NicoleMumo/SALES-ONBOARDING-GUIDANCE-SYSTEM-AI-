@@ -798,7 +798,7 @@ private fun SignInPreview() {
 // Firebase work. Every failed step after Firebase has signed the person in signs
 // them out again, so a half-finished sign-in never leaves a session behind.
 
-/** Must be true, with the matching database rule, before real customer data is used. */
+/** Must be true, with the matching database rule, before real client data is used. */
 private const val REQUIRE_AGENT_EMAIL_VERIFICATION = true
 
 /** Who signed in, once Firebase and the company records agree they may. */

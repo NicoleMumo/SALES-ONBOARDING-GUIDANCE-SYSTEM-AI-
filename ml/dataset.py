@@ -783,7 +783,7 @@ def split_exported_sessions(path, out, seed=2026):
                     for split in ("train", "validation", "test")})
 
 
-ABANDONED_AFTER_MS = 48 * 60 * 60 * 1000  # as the app: unfinished and untouched for 48 hours
+ABANDONED_AFTER_MS = 48 * 60 * 60 * 1000  # as the app: unfinished 48 hours after it started
 
 APP_TRAINING_COLUMNS = [
     "session_id", "sales_agent_id", "industry", "context_value", "onboarding_field",
@@ -799,8 +799,10 @@ def rows_from_firebase(data, now_ms):
 
     [data] is a Firebase JSON export, of the whole database or of `trainingData` alone.
     Rows match the app's Training CSV: a step's time runs from the previous check (or the
-    start), so `agent_response_time_minutes` is 0. Only sessions with a known outcome are
-    kept: completed, or unfinished with no step for 48 hours (abandoned).
+    start), so `agent_response_time_minutes` is 0. Every copy with a step is kept, with its
+    status at [now_ms]: completed or abandoned as saved; an unfinished copy started 48 hours
+    ago or more is abandoned; a younger one is in_progress. Training leaves in_progress
+    sessions out (consistency.rows_from_sessions), because their outcome is not known yet.
     """
     records = data.get("trainingData", data) if isinstance(data, dict) else {}
     rows = []
@@ -810,12 +812,13 @@ def rows_from_firebase(data, now_ms):
         steps = sorted((record.get("steps") or {}).values(), key=lambda step: step["t"])
         if not steps:
             continue
-        if record.get("status") == "completed":
-            outcome = "completed"
-        elif now_ms - record.get("updatedAt", steps[-1]["t"]) >= ABANDONED_AFTER_MS:
+        started = record.get("startedAt", steps[0]["t"])
+        if record.get("status") in ("completed", "abandoned"):
+            outcome = record["status"]
+        elif now_ms - started >= ABANDONED_AFTER_MS:
             outcome = "abandoned"
         else:
-            continue
+            outcome = "in_progress"
         field_count = record.get("fieldCount") or 0
         passed_so_far = {}
         previous_time = record.get("startedAt", steps[0]["t"])
@@ -853,7 +856,7 @@ def from_firebase(path, out, now_ms, seed=2026):
     with open(path, encoding="utf-8") as handle:
         rows = rows_from_firebase(json.load(handle), now_ms)
     if not rows:
-        raise ValueError(f"{path} has no anonymised sessions with a known outcome.")
+        raise ValueError(f"{path} has no anonymised sessions with any checked answer.")
     sessions_of_agent = defaultdict(set)
     for row in rows:
         sessions_of_agent[row["sales_agent_id"]].add(row["session_id"])

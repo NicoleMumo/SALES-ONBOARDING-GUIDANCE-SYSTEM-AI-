@@ -35,7 +35,7 @@ data class FieldEntry(
     val timestamp: Long = System.currentTimeMillis(),
     val isValid: Boolean? = null
 ) {
-    // The answer is customer data, so keep it out of logs and crash reports.
+    // The answer is client data, so keep it out of logs and crash reports.
     override fun toString() = "FieldEntry(entryId=$entryId, fieldId=$fieldId, value=<redacted>)"
 
     /** Copy with leading and trailing whitespace removed from the value. */
@@ -55,7 +55,7 @@ data class ValidationContext(
 ) {
     operator fun get(fieldId: String): String? = values[fieldId]
 
-    // Answers are customer data, so only the field ids are printed.
+    // Answers are client data, so only the field ids are printed.
     override fun toString() = "ValidationContext(fields=${values.keys})"
 
     /** Another field's answer, trimmed and lower-cased for case-insensitive comparison. */
@@ -314,7 +314,7 @@ data class DateFormatAndMinimumAge(
         if (birth.after(today)) return "The date cannot be in the future."
         val age = completedYears(birth, today)
         return when {
-            age < minimumAge -> "The customer must be at least $minimumAge years old."
+            age < minimumAge -> "The client must be at least $minimumAge years old."
             age > maximumAge -> "Enter a realistic date of birth."
             else -> null
         }

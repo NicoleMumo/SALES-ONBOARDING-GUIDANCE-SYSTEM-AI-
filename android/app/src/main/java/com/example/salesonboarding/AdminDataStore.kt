@@ -956,7 +956,10 @@ private fun DataSnapshot.toRecordedStep(): RecordedStep? {
     }
     val fieldId = child("fieldId").getValue(String::class.java) ?: return null
     val timestamp = child("timestamp").value.asLongTimestamp() ?: return null
-    return RecordedStep(fieldId, passed, timestamp)
+    return RecordedStep(
+        fieldId, passed, timestamp,
+        child("warningShown").getValue(String::class.java).orEmpty()
+    )
 }
 
 internal fun Set<AdminRule>.toValidationRules() = buildList {

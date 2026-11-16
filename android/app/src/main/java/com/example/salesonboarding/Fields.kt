@@ -111,7 +111,7 @@ object KnownFields {
 
     /**
      * Question for business accounts. Only the business playbooks include these fields,
-     * so no customer-type check is needed here. [isRequired] mirrors the model's playbooks.
+     * so no client-type check is needed here. [isRequired] mirrors the model's playbooks.
      */
     private fun businessField(id: String, description: String, isRequired: Boolean = true) =
         field(id, Type.TEXT, description, isRequired = isRequired)
@@ -157,38 +157,38 @@ object KnownFields {
             "Record why the business wants to open or use this account."
         ),
         businessField("commercial_address", "Enter the address where the business operates."),
-        phone("contact_phone_number", "Enter a phone number where the customer can be reached."),
+        phone("contact_phone_number", "Enter a phone number where the client can be reached."),
         choice(
-            "contract_type", "Choose the customer's prepaid or postpaid plan.",
+            "contract_type", "Choose the client's prepaid or postpaid plan.",
             "prepaid", "postpaid"
         ),
         field(
             "date_of_birth", Type.DATE,
-            "Enter the customer's date of birth. The customer must be at least $MINIMUM_CUSTOMER_AGE.",
+            "Enter the client's date of birth. The client must be at least $MINIMUM_CUSTOMER_AGE.",
             rules = listOf(DateFormatAndMinimumAge(MINIMUM_CUSTOMER_AGE))
         ),
         field(
             "email_address", Type.EMAIL,
-            "Enter an email address the customer can access.",
+            "Enter an email address the client can access.",
             rules = listOf(EmailFormat)
         ),
         field(
             "full_name", Type.TEXT,
-            "Enter the customer's name as shown on their identification document.",
+            "Enter the client's name as shown on their identification document.",
             rules = listOf(
                 RegexPattern(NAME_PATTERN, "Use letters, spaces, hyphens, or apostrophes only.")
             )
         ),
-        choice("gender", "Choose the gender stated by the customer.", "male", "female", "other"),
+        choice("gender", "Choose the gender stated by the client.", "male", "female", "other"),
         field(
             "home_address", Type.TEXT,
-            "Enter the customer's home address, including the area or street where available."
+            "Enter the client's home address, including the area or street where available."
         ),
         // Nothing is uploaded, so this is the agent's confirmation that they saw the original;
         // the document photo reader sits under it to fill the name, ID number and date of birth.
         field(
             "identification_document", Type.BOOLEAN,
-            "Confirm you have seen the customer's original ID document, not a photocopy. " +
+            "Confirm you have seen the client's original ID document, not a photocopy. " +
                 "You can take a photo of it below to fill in the name, ID number and date of birth.",
             listOf(MustBeTrue),
             name = "Original ID document seen"
@@ -210,49 +210,49 @@ object KnownFields {
         ),
         field(
             "income", Type.NUMBER,
-            "Enter the customer's verified income as a number greater than zero.",
+            "Enter the client's verified income as a number greater than zero.",
             rules = listOf(PositiveNumber)
         ),
         serviceChoice(
             "internet_service_selection",
-            "Choose the internet or TV service the customer wants.",
+            "Choose the internet or TV service the client wants.",
             "broadband", "tv"
         ),
-        phone("mobile_phone_number", "Enter the customer's mobile number in the format shown below."),
+        phone("mobile_phone_number", "Enter the client's mobile number in the format shown below."),
         businessField(
             "ownership_and_control_information",
             "Describe who owns or controls the business.",
             isRequired = false
         ),
-        yesNo("paperless_billing_preference", "Record whether the customer wants paperless bills."),
+        yesNo("paperless_billing_preference", "Record whether the client wants paperless bills."),
         choice(
-            "payment_method", "Choose how the customer plans to pay.",
+            "payment_method", "Choose how the client plans to pay.",
             "cash", "mobile_money", "card", "bank_transfer", "direct_debit"
         ),
         serviceChoice(
             "phone_service_selection",
-            "Choose the phone service the customer wants.",
+            "Choose the phone service the client wants.",
             "mobile", "landline"
         ),
         field(
             "physical_address", Type.TEXT,
-            "Enter the customer's current residential or business address."
+            "Enter the client's current residential or business address."
         ),
         yesNo(
             "politically_exposed_person_status",
-            "Ask whether the customer holds, or recently held, an important public office, such as a " +
+            "Ask whether the client holds, or recently held, an important public office, such as a " +
                 "minister, MP, judge or senior military officer, or is a close relative or associate of " +
                 "such a person. Banks must check this to prevent money laundering.",
             name = "Politically exposed person (PEP)"
         ),
-        field("profession", Type.TEXT, "Enter the customer's job, trade, or occupation."),
+        field("profession", Type.TEXT, "Enter the client's job, trade, or occupation."),
         choice(
-            Id.SERVICE_TYPE, "Choose the telecom service the customer is signing up for.",
+            Id.SERVICE_TYPE, "Choose the telecom service the client is signing up for.",
             "mobile", "broadband", "tv", "iot", "landline"
         ),
         field(
             "streaming_addons_selection", Type.TEXT,
-            "List any streaming add-ons the customer wants.",
+            "List any streaming add-ons the client wants.",
             isRequired = false, name = "Streaming add-ons selection"
         ),
         phone("subscriber_number", "Enter the phone number that will be linked to the service."),
@@ -262,11 +262,11 @@ object KnownFields {
         ),
         mustBeTrue(
             "terms_and_conditions_acceptance",
-            "Confirm the customer reviewed and accepted the terms presented."
+            "Confirm the client reviewed and accepted the terms presented."
         ),
         yesNo(
             "us_person_status",
-            "Ask whether the customer is a US citizen, a US resident or green-card holder, or was born " +
+            "Ask whether the client is a US citizen, a US resident or green-card holder, or was born " +
                 "in the US. Choose Yes if any applies. Banks must ask this for US tax reporting (FATCA).",
             name = "US person (FATCA)"
         )
@@ -516,7 +516,7 @@ object OnboardingPlaybooks {
         )
     )
 
-    /** Every standard question an [industry]'s forms can ask, across all its customer types. */
+    /** Every standard question an [industry]'s forms can ask, across all its client types. */
     fun fieldIdsFor(industry: String): Set<String> =
         fieldsByContext[industry].orEmpty().values.flatten().toSet()
 
@@ -671,7 +671,7 @@ private fun section(title: String, vararg fieldIds: String) = fieldIds.associate
 
 private val SECTION_BY_FIELD: Map<String, Map<String, String>> = mapOf(
     "banking" to section(
-        "Customer", "full_name", "business_name", "email_address", "mobile_phone_number",
+        "Client", "full_name", "business_name", "email_address", "mobile_phone_number",
         "date_of_birth", "home_address"
     ) + section(
         "Identity", "identification_document", "identification_document_type",
@@ -686,7 +686,7 @@ private val SECTION_BY_FIELD: Map<String, Map<String, String>> = mapOf(
         "business_relationship_nature", "ownership_and_control_information"
     ),
     "telecom" to section(
-        "Customer", "full_name", "email_address", "contact_phone_number", "date_of_birth",
+        "Client", "full_name", "email_address", "contact_phone_number", "date_of_birth",
         "gender", "physical_address"
     ) + section(
         "Identity", "identification_document", "subscriber_type"

@@ -32,11 +32,11 @@ class OnboardingPlaybookTest {
         val telecom = OnboardingPlaybooks.forIndustry("telecom", FieldRuleConfiguration(), "mobile")
 
         assertEquals(
-            listOf("Customer", "Identity", "Financial", "Declarations", "Account"),
+            listOf("Client", "Identity", "Financial", "Declarations", "Account"),
             banking.sections().map { it.title }
         )
         assertEquals(
-            listOf("Customer", "Identity", "Service", "Activation"),
+            listOf("Client", "Identity", "Service", "Activation"),
             telecom.sections().map { it.title }
         )
     }
@@ -235,7 +235,7 @@ class OnboardingPlaybookTest {
 
         assertEquals(ids.indexOf("home_address") + 1, ids.indexOf("loyalty_number"))
         val section = playbook.sections().first { s -> s.fields.any { it.fieldId == "loyalty_number" } }
-        assertEquals("Customer", section.title)
+        assertEquals("Client", section.title)
         assertEquals(false, playbook.sections().any { it.title == COMPANY_SECTION })
     }
 

@@ -372,7 +372,7 @@ class CompletionRiskGuidanceTest {
         )
 
         assertEquals(
-            "Offer extra help and review the information with the customer.",
+            "Offer extra help and review the information with the client.",
             CompletionRiskGuidanceMapper.from(result)?.message
         )
     }
@@ -384,7 +384,7 @@ class CompletionRiskGuidanceTest {
         )
 
         assertEquals(
-            "Pause and help the customer complete the remaining information.",
+            "Pause and help the client complete the remaining information.",
             CompletionRiskGuidanceMapper.from(result)?.message
         )
     }

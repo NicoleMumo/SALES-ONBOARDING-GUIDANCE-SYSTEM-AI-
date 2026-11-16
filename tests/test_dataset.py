@@ -244,22 +244,24 @@ class ExportedSessionsTests(unittest.TestCase):
 class FirebaseCopiesTests(unittest.TestCase):
     DAY = 24 * 60 * 60 * 1000
 
-    def record(self, status, updated_at, agent="AGENT-0123456789AB"):
+    def record(self, status, updated_at, agent="AGENT-0123456789AB", started_at=0):
         return {
             "industry": "banking", "context": "individual", "agentCode": agent, "fieldCount": 4,
-            "startedAt": 0, "status": status, "updatedAt": updated_at,
+            "startedAt": started_at, "status": status, "updatedAt": updated_at,
             "steps": {
-                "-b": {"fieldId": "contact_phone_number", "passed": False, "t": 120_000},
-                "-a": {"fieldId": "full_name", "passed": True, "t": 60_000},
-                "-c": {"fieldId": "contact_phone_number", "passed": True, "t": 240_000},
+                "-b": {"fieldId": "contact_phone_number", "passed": False, "t": started_at + 120_000},
+                "-a": {"fieldId": "full_name", "passed": True, "t": started_at + 60_000},
+                "-c": {"fieldId": "contact_phone_number", "passed": True, "t": started_at + 240_000},
             },
         }
+
+    def final_status(self, rows, record_id):
+        return [row for row in rows if row["session_id"] == record_id][-1]["session_status"]
 
     def test_copies_become_rows_like_the_apps_training_csv(self):
         export = {"trainingData": {
             "TDONE": self.record("completed", 240_000),
             "TOLD": self.record("in_progress", 240_000),
-            "TNEW": self.record("in_progress", 2 * self.DAY),  # one day old: not abandoned yet
         }}
 
         rows = dataset.rows_from_firebase(export, now_ms=3 * self.DAY)
@@ -274,6 +276,42 @@ class FirebaseCopiesTests(unittest.TestCase):
         self.assertEqual("completed", done[-1]["session_status"])
         self.assertEqual("abandoned", [row for row in rows if row["session_id"] == "TOLD"][-1]["session_status"])
         self.assertEqual(dataset.APP_TRAINING_COLUMNS, list(rows[0]))
+
+    def test_unfinished_copies_are_abandoned_48_hours_after_they_started(self):
+        export = {"trainingData": {
+            "TYOUNG": self.record("in_progress", 2 * self.DAY, started_at=2 * self.DAY),  # 1 day old
+            "TEDGE": self.record("in_progress", self.DAY, started_at=self.DAY),  # exactly 48 hours
+            "TTOUCHED": self.record("in_progress", int(2.9 * self.DAY)),  # saved recently, started 3 days ago
+            "TSAVED": self.record("abandoned", 240_000),
+        }}
+
+        rows = dataset.rows_from_firebase(export, now_ms=3 * self.DAY)
+
+        self.assertEqual("in_progress", self.final_status(rows, "TYOUNG"))  # kept, not dropped
+        self.assertEqual("abandoned", self.final_status(rows, "TEDGE"))
+        self.assertEqual("abandoned", self.final_status(rows, "TTOUCHED"))  # the clock runs from the start
+        self.assertEqual("abandoned", self.final_status(rows, "TSAVED"))
+
+    def test_training_leaves_out_sessions_still_in_progress(self):
+        import json
+        from consistency import load_split_rows
+
+        export = {"trainingData": {
+            f"T{agent}{n}": self.record(
+                "completed" if n == 0 else "in_progress", 0,
+                agent=f"AGENT-{agent:012X}", started_at=0 if n < 2 else 2 * self.DAY)
+            for agent in range(20) for n in range(3)
+        }}
+        with tempfile.TemporaryDirectory() as folder:
+            source, out = Path(folder) / "export.json", Path(folder) / "real.csv"
+            source.write_text(json.dumps(export), encoding="utf-8")
+            dataset.from_firebase(source, out, now_ms=3 * self.DAY)
+            by_split = load_split_rows(out)
+
+        used = {row["session_id"] for rows in by_split.values() for row in rows}
+        self.assertTrue(used)
+        self.assertFalse(any(session.endswith("2") for session in used))  # the 1-day-old ones
+        self.assertTrue(any(session.endswith("1") for session in used))  # abandoned ones are used
 
     def test_an_export_of_training_data_alone_is_also_read(self):
         rows = dataset.rows_from_firebase({"TDONE": self.record("completed", 0)}, now_ms=0)

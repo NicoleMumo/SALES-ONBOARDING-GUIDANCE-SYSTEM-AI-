@@ -309,6 +309,8 @@ def rows_from_sessions(sessions):
     """
     rows = []
     for session_id, agent_id, industry, context, events in sessions:
+        if events[-1]["session_status"] == "in_progress":
+            continue  # still open when exported (under 48 hours old): outcome not known yet
         steps = session_steps(events)
         if len(steps) < 2:
             continue

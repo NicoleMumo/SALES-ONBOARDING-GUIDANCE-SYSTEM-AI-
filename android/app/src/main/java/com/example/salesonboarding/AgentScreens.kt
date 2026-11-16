@@ -72,7 +72,7 @@ fun AgentHomeScreen(
     var confirmCancel by remember { mutableStateOf<StoredOnboardingSession?>(null) }
     val guideMoving = LocalContext.current
         .getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
-        .getBoolean("guide_moving", true)
+        .getBoolean(GUIDE_MOVING_KEY, true)
     AppScreen(
         title = companyName ?: "SalesMesh",
         subtitle = if (companyName != null) "SalesMesh" else null,
@@ -104,7 +104,7 @@ fun AgentHomeScreen(
                             .matchParentSize()
                             .background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to c.ink))
                     )
-                    // The guide waits on the photo, ready for the next customer.
+                    // The guide waits on the photo, ready for the next client.
                     Row(
                         Modifier
                             .align(Alignment.BottomStart)
@@ -183,7 +183,7 @@ fun AgentHomeScreen(
             AlertDialog(
                 onDismissRequest = { confirmCancel = null },
                 title = { Text("Cancel this session?") },
-                text = { Text("It will be marked abandoned and can no longer be continued. Unfinished sessions are also cancelled after 48 hours untouched.") },
+                text = { Text("It will be marked abandoned and can no longer be continued. Unfinished sessions are also cancelled 48 hours after they started.") },
                 confirmButton = {
                     TextButton(onClick = { confirmCancel = null; onCancelSession(session) }) { Text("Cancel session") }
                 },
@@ -212,7 +212,7 @@ fun AgentHomeScreen(
 
 // endregion
 
-// region New customer
+// region New client
 
 object IndustrySelectionValidator {
     val supportedIndustries: Set<String> = setOf("telecom", "banking")
@@ -234,7 +234,7 @@ object IndustrySelectionValidator {
 
     fun validateContext(industry: String?, context: String?): String? =
         if (context != null && context in contextsFor(industry)) null
-        else "Select a valid customer context."
+        else "Select a valid client context."
 }
 
 private const val LAST_CHOICE_PREFERENCES = "salesmesh_form"
@@ -260,7 +260,7 @@ fun IndustrySelectionScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedIndustry by remember(assignedIndustry) { mutableStateOf(assignedIndustry) }
-    // The customer type chosen last time for this industry is picked again, to save a tap.
+    // The client type chosen last time for this industry is picked again, to save a tap.
     val preferences = LocalContext.current.getSharedPreferences(LAST_CHOICE_PREFERENCES, Context.MODE_PRIVATE)
     fun lastContextFor(industry: String?): String? =
         industry?.let { preferences.getString("$LAST_CONTEXT_KEY_PREFIX$it", null) }
@@ -269,7 +269,7 @@ fun IndustrySelectionScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     AppScreen(
-        title = "New customer",
+        title = "New client",
         subtitle = selectedIndustry?.displayIndustryName() ?: "Choose an industry",
         onBack = onBack,
         modifier = modifier,
@@ -304,7 +304,7 @@ fun IndustrySelectionScreen(
             }
         }
         if (selectedIndustry != null) {
-            Text("CUSTOMER TYPE", style = smCapsStyle())
+            Text("CLIENT TYPE", style = smCapsStyle())
             IndustrySelectionValidator.contextsFor(selectedIndustry).forEach { context ->
                 val type = CUSTOMER_TYPES[context]
                     ?: CustomerType(context.replaceFirstChar { it.titlecase(Locale.ROOT) }, "", R.drawable.ic_sm_info)
@@ -375,7 +375,7 @@ private fun String.displayIndustryName(): String =
         else -> replaceFirstChar { it.titlecase(Locale.ROOT) }
     }
 
-@Preview(name = "New customer", showBackground = true, heightDp = 844)
+@Preview(name = "New client", showBackground = true, heightDp = 844)
 @Composable
 private fun IndustrySelectionPreview() {
     SalesOnboardingTheme {
@@ -385,7 +385,7 @@ private fun IndustrySelectionPreview() {
 
 // endregion
 
-// region Customer consent
+// region Client consent
 
 /** The four things the agent reads aloud: a title and one short line each. */
 private data class ConsentPoint(@DrawableRes val icon: Int, val title: String, val line: String)
@@ -393,29 +393,29 @@ private data class ConsentPoint(@DrawableRes val icon: Int, val title: String, v
 private val CONSENT_POINTS = listOf(
     ConsentPoint(R.drawable.ic_sm_info, "Why we collect it", "To set up the account."),
     ConsentPoint(R.drawable.ic_sm_id_card, "Document photos", "Read on this phone. Never uploaded."),
-    ConsentPoint(R.drawable.ic_sm_agents, "Customer rights", "They can ask to review their details."),
+    ConsentPoint(R.drawable.ic_sm_agents, "Client rights", "They can ask to review their details."),
     ConsentPoint(R.drawable.ic_sm_lock, "Access and retention", "Saved securely.")
 )
 
 /** The complete wording, available behind "Read the full terms". */
 private val FULL_CONSENT_TERMS = listOf(
-    "Purpose of Collection" to "Information is collected to set up the customer account and follow your company's onboarding process.",
+    "Purpose of Collection" to "Information is collected to set up the client account and follow your company's onboarding process.",
     "Document photos" to "If the agent takes a document photo, its text is read on this device to help with data entry. The agent may use the name, ID number or date of birth it found as answers, after checking them. The photo is deleted after reading, and neither the photo nor the rest of the text is uploaded or saved.",
     "Address search" to "If the agent taps Find address or Use my location, the address typed so far, or the phone's location, is sent to OpenStreetMap's address service to suggest the full address. Nothing else is sent, and the agent can type the address instead.",
-    "Customer rights" to "The customer may request review of their submitted details through authorized company channels.",
+    "Client rights" to "The client may request review of their submitted details through authorized company channels.",
     "Access and retention" to "Answers are saved to your company workspace as you go, so you can resume an unfinished session. Ask your administrator about access and retention."
 )
 
 /** Shown in the full terms only when the company allows it; agreeing is optional. */
 private val TRAINING_TERMS = "Improving the system" to
-    "With the customer's agreement, an anonymised copy of the session's steps is kept to improve the app: which questions were checked, whether each passed, and when. It never includes answers, names or contact details. Saying no does not change the onboarding."
+    "With the client's agreement, an anonymised copy of the session's steps is kept to improve the app: which questions were checked, whether each passed, and when. It never includes answers, names or contact details. Saying no does not change the onboarding."
 
 @Composable
 fun OnboardingConsentScreen(
     onConsent: (trainingAgreed: Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** The company allows anonymised steps to improve the system, so the customer is asked. */
+    /** The company allows anonymised steps to improve the system, so the client is asked. */
     askTrainingConsent: Boolean = false
 ) {
     val c = Sm.colors
@@ -424,8 +424,8 @@ fun OnboardingConsentScreen(
     var showTerms by remember { mutableStateOf(false) }
 
     AppScreen(
-        title = "Customer consent",
-        subtitle = "Read aloud to the customer",
+        title = "Client consent",
+        subtitle = "Read aloud to the client",
         onBack = onBack,
         modifier = modifier,
         bottomBar = {
@@ -433,13 +433,13 @@ fun OnboardingConsentScreen(
                 ConsentTick(
                     checked = trainingAgreed,
                     onCheckedChange = { trainingAgreed = it },
-                    text = "Optional: customer agrees that anonymised steps may be used to improve the system"
+                    text = "Optional: client agrees that anonymised steps may be used to improve the system"
                 )
             }
             ConsentTick(
                 checked = confirmed,
                 onCheckedChange = { confirmed = it },
-                text = "Customer has been informed and agrees to proceed"
+                text = "Client has been informed and agrees to proceed"
             )
             PrimaryButton(
                 "Start onboarding",

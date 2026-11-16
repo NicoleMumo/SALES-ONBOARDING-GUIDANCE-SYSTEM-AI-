@@ -143,6 +143,12 @@ class RowBuildingTests(unittest.TestCase):
         self.assertEqual([1, 2], [row["position"] for row in rows])
         self.assertTrue(all(row["abandoned"] for row in rows))
 
+    def test_a_session_still_in_progress_produces_no_rows(self):
+        """Exported under 48 hours after it started: its outcome is not known yet."""
+        events = [self.event(), self.event(), self.event(session_status="in_progress")]
+
+        self.assertEqual([], rows_from_sessions([("s1", "a1", "banking", "individual", events)]))
+
     def test_a_one_step_session_produces_no_rows(self):
         events = [self.event(session_status="abandoned")]
 
@@ -150,8 +156,8 @@ class RowBuildingTests(unittest.TestCase):
 
     def test_rows_never_see_a_later_step(self):
         """Row k must depend only on steps 1..k, so a later change cannot alter it."""
-        early = [self.event(duration="1.0"), self.event(duration="1.0")]
-        late = early + [self.event(duration="99.0", status="failed")]
+        early = [self.event(duration="1.0"), self.event(duration="1.0", session_status="completed")]
+        late = early[:1] + [self.event(duration="1.0"), self.event(duration="99.0", status="failed", session_status="completed")]
 
         first = rows_from_sessions([("s1", "a1", "telecom", "mobile", early)])
         second = rows_from_sessions([("s1", "a1", "telecom", "mobile", late)])

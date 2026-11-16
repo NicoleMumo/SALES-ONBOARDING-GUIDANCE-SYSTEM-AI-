@@ -13,13 +13,13 @@ class AdminDataStoreTest {
             fieldType = "number",
             isRequired = false,
             validationRules = emptyList(),
-            description = "Optional customer loyalty number."
+            description = "Optional client loyalty number."
         )
         val fields = FieldRuleConfiguration(customFields = listOf(customField))
             .allFields(listOf(KnownFields.get("full_name")))
 
         assertEquals(listOf("full_name", "loyalty_number"), fields.map { it.fieldId })
-        assertEquals("Optional customer loyalty number.", fields.last().description)
+        assertEquals("Optional client loyalty number.", fields.last().description)
     }
 
     @Test
@@ -35,7 +35,7 @@ class AdminDataStoreTest {
         val custom = FormField(
             fieldId = "business_type",
             fieldName = "Business type",
-            description = "Select the customer type.",
+            description = "Select the client type.",
             fieldType = "choice",
             isRequired = true,
             validationRules = listOf(
@@ -50,7 +50,7 @@ class AdminDataStoreTest {
 
         assertEquals(listOf("full_name", "business_type"), configuredFields.map { it.fieldId })
         assertTrue(configuredFields.first().validationRules.none { it == Required || it == NotBlank })
-        assertEquals("Select the customer type.", configuredFields.last().description)
+        assertEquals("Select the client type.", configuredFields.last().description)
         assertTrue(configuredFields.last().validationRules.contains(OneOf(setOf("Retail", "Wholesale"))))
     }
 

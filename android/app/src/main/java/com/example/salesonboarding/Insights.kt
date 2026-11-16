@@ -132,7 +132,7 @@ object CompletionRiskScorer {
 /**
  * The trained replacement for [CompletionRiskCalculator]'s hand-set weights.
  *
- * It answers the same question -- is this session heading for the customer giving
+ * It answers the same question -- is this session heading for the client giving
  * up? -- but its weights were learned from simulated sessions instead of chosen by
  * hand, and it was tested on agents it had never seen. On that test it scored 0.72
  * to 0.74 (ROC-AUC) against 0.55 to 0.59 for the hand-set rule, which is close to
@@ -142,7 +142,7 @@ object CompletionRiskScorer {
  * produced the weights; `TrainedCompletionRiskModelTest` checks it against scores
  * computed in Python.
  *
- * Only counts and times are used. No customer answer ever reaches this model.
+ * Only counts and times are used. No client answer ever reaches this model.
  */
 class TrainedCompletionRiskModel internal constructor(
     private val weights: DoubleArray,
@@ -346,18 +346,25 @@ class RiskWarningPacer(private val quietChecks: Int = 4, private val highStreak:
     }
 }
 
+/** The warning the sales agent saw at a check, as saved with the session: the pill, in snake case. */
+internal fun warningShownLabel(level: CompletionRiskLevel?): String = when (level) {
+    CompletionRiskLevel.HIGH -> "needs_help"
+    CompletionRiskLevel.MEDIUM -> "check_in"
+    else -> "on_track"
+}
+
 object CompletionRiskGuidanceMapper {
     fun from(result: CompletionRiskResult): CompletionRiskGuidance? =
         when (result.level) {
             CompletionRiskLevel.LOW -> null
             CompletionRiskLevel.MEDIUM -> CompletionRiskGuidance(
                 level = result.level,
-                message = "Offer extra help and review the information with the customer.",
+                message = "Offer extra help and review the information with the client.",
                 reasons = result.reasons.toList()
             )
             CompletionRiskLevel.HIGH -> CompletionRiskGuidance(
                 level = result.level,
-                message = "Pause and help the customer complete the remaining information.",
+                message = "Pause and help the client complete the remaining information.",
                 reasons = result.reasons.toList()
             )
         }
@@ -390,7 +397,9 @@ object CompletionRiskGuidanceMapper {
 data class RecordedStep(
     val fieldId: String,
     val passed: Boolean,
-    val timestampMillis: Long
+    val timestampMillis: Long,
+    /** "on_track", "check_in" or "needs_help"; blank for sessions saved before this was recorded. */
+    val warningShown: String = ""
 )
 
 data class SessionConsistency(
