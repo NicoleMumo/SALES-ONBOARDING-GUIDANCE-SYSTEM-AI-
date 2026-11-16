@@ -517,7 +517,7 @@ private fun ChoiceOption(choice: String, selected: Boolean, onPick: (String) -> 
     }
 }
 
-/** A statement the customer must confirm, such as accepting the terms. */
+/** A statement the client must confirm, such as accepting the terms. */
 @Composable
 private fun ConfirmInput(field: FormField, value: String, onChoose: (String) -> Unit) {
     val c = Sm.colors
@@ -793,7 +793,7 @@ internal fun errorFor(field: FormField, state: LiveValidationState): String? =
         touched = field.fieldId in state.touchedFieldIds
     )?.message
 
-/** The answer as the customer would say it: choice labels, "Confirmed" for a tick. */
+/** The answer as the client would say it: choice labels, "Confirmed" for a tick. */
 internal fun displayAnswer(field: FormField, value: String): String = when {
     field.validationRules.any { it is MustBeTrue } ->
         if (value.equals("true", ignoreCase = true) || value.equals("yes", ignoreCase = true)) "Confirmed"
@@ -807,7 +807,7 @@ private fun meaningfulDescription(field: FormField): String? = field.description
     val name = field.fieldName.lowercase(Locale.ROOT)
     it.isNotBlank() &&
         !it.equals("Enter the $name.", ignoreCase = true) &&
-        !it.equals("Enter or choose the $name for this customer.", ignoreCase = true)
+        !it.equals("Enter or choose the $name for this client.", ignoreCase = true)
 }
 
 private fun fieldPlaceholder(field: FormField): String = when {
@@ -897,7 +897,7 @@ private fun describePattern(pattern: String): String? = when (pattern) {
 }
 
 private fun fieldActionLabel(field: FormField): String = when (field.fieldId) {
-    "terms_and_conditions_acceptance" -> "Customer has read and accepted the terms"
+    "terms_and_conditions_acceptance" -> "Client has read and accepted the terms"
     else -> "Confirm ${field.fieldName.lowercase(Locale.ROOT)}"
 }
 

@@ -80,12 +80,17 @@ team follows the process.
    concerned when something needs fixing, worried when the client may need
    help, and celebrating when every required answer is in. The panel's ⋮ menu
    has **Auto-follow** (Enter goes straight to where the panel points) and
-   **Moving guide** (off for a still face that uses less battery; also still
-   when the phone's "Remove animations" is on). The first time the form opens
-   on a phone, the guide gives a five-step tour (replay it from ⋮). Each time
-   after that it greets the agent with a fun fact about onboarding, in a speech
-   bubble above the panel, then opens the first question it points at.
-   **The Enter key** never leaves the form. In a box, it checks the answer and
+   **Guide moves** (on by default: the guide floats, tilts and pulses its
+   antenna; off keeps the body still, but the eyes still blink and glance; all
+   of it stops when the phone's "Remove animations" is on), and **Fun fact when
+   a form opens**. The first time the form opens on a phone, the guide gives a
+   five-step tour (replay it from ⋮). After that, at most once a day, unless
+   fun facts are off, it greets the agent with a fun fact about onboarding, in
+   a speech bubble above the panel. The bubble stays until it is tapped, and has its own
+   **Turn off fun facts** button; then the guide opens the first question it
+   points at.
+   **The Enter key** never leaves the form. The header's back arrow never takes
+   keyboard focus, so an Enter cannot land on it after a box is left. In a box, it checks the answer and
    moves to the next question in the section (with Auto-follow, or at the last
    question, to where the panel points). Arriving at a date question opens its
    calendar. With no box selected, Enter goes to where the panel points. All of
@@ -101,9 +106,10 @@ last change). An unfinished session can be continued from **My sessions** on the
 agent's home screen, or, for the latest one, with one tap on **Continue last
 session** there. It opens on the section where the agent stopped. The card has a
 **Cancel session** link: after a confirm, the session is marked abandoned, can
-no longer be changed, and the card goes. A session with no saved change for 48
-hours is marked abandoned the next time the agent opens the home screen, so old
-sessions stop coming back. **My sessions** has an Abandoned filter. The phone's
+no longer be changed, and the card goes. A session still unfinished 48 hours
+after it started is marked abandoned the next time the agent opens the home
+screen, so old sessions stop coming back. The clock runs from the start, not the
+last save. **My sessions** has an Abandoned filter. The phone's
 Back button goes back one step wherever the screen has a back arrow.
 
 ## An admin's pages
@@ -127,11 +133,14 @@ Admins see five pages in a bottom navigation bar:
   - **Data to improve SalesMesh's suggestions** (only if the SalesMesh team
     asks for it): one row per checked answer, in the columns of the training
     data (`ml/dataset.py`), so real sessions can retrain the models. Agents are
-    replaced by codes (`AGENT-` plus 12 characters). Only sessions with a known
-    outcome are included: completed, abandoned (cancelled by the agent or
-    marked so after 48 hours), or unfinished with no check for 48 hours
-    (labelled abandoned). Run `python ml/dataset.py split <file>` to fill the
-    `split` column by agent before training.
+    replaced by codes (`AGENT-` plus 12 characters). Every session is included,
+    labelled by its status when the file is saved: completed; abandoned
+    (cancelled by the agent, or started 48 hours ago or more and still
+    unfinished); or in_progress (unfinished and under 48 hours old). Training
+    leaves the in_progress ones out until their outcome is known.
+    `python ml/dataset.py from-firebase` labels the anonymised copies the same
+    way. Run `python ml/dataset.py split <file>` to fill the `split` column by
+    agent before training.
 
   Neither file holds answers or customer names; sessions do not save which
   answer was given to a check, only the question, pass or fail, and the time.

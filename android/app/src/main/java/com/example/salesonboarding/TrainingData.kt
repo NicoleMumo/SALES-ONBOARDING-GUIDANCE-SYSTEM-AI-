@@ -5,10 +5,10 @@ import java.security.MessageDigest
 /**
  * Anonymised copies of sessions, kept to retrain the models on real onboarding.
  *
- * A copy is saved only when the company's admin allows it (Company page) and the customer
+ * A copy is saved only when the company's admin allows it (Company page) and the client
  * agrees on the consent screen. It is written to `trainingData/`, which no one can read
  * through the app; the project owner exports it from the Firebase console and converts it
- * with `python ml/dataset.py from-firebase`. It holds the industry, customer type, number of
+ * with `python ml/dataset.py from-firebase`. It holds the industry, client type, number of
  * questions, the agent as a code, and each check: question, passed or not, and time. It
  * never holds an answer, a name or the session ID.
  */

@@ -16,6 +16,14 @@ class RiskWarningPacerTest {
     }
 
     @Test
+    fun theSavedWarningNamesWhatTheAgentSaw() {
+        assertEquals("on_track", warningShownLabel(null))
+        assertEquals("on_track", warningShownLabel(low))
+        assertEquals("check_in", warningShownLabel(medium))
+        assertEquals("needs_help", warningShownLabel(high))
+    }
+
+    @Test
     fun theFirstFewAnswersNeverShowAWarning() {
         assertEquals(List(4) { low }, shown(high, high, high, high))
     }
@@ -51,14 +59,21 @@ class SessionExpiryTest {
         )
 
     @Test
-    fun anUnfinishedSessionUntouchedFor48HoursIsStale() {
-        assertFalse(SessionExpiry.isStale(session(updatedAt = 0L), 47 * hour))
-        assertTrue(SessionExpiry.isStale(session(updatedAt = 0L), 48 * hour))
+    fun anUnfinishedSessionStarted48HoursAgoIsStale() {
+        assertFalse(SessionExpiry.isStale(session(startedAt = 0L), 47 * hour))
+        assertTrue(SessionExpiry.isStale(session(startedAt = 0L), 48 * hour))
     }
 
     @Test
-    fun theLastSaveCountsNotTheStart() {
-        assertFalse(SessionExpiry.isStale(session(startedAt = 0L, updatedAt = 40 * hour), 60 * hour))
+    fun theStartCountsNotTheLastSave() {
+        assertTrue(SessionExpiry.isStale(session(startedAt = 0L, updatedAt = 40 * hour), 60 * hour))
+        assertFalse(SessionExpiry.isStale(session(startedAt = 20 * hour, updatedAt = 21 * hour), 60 * hour))
+    }
+
+    @Test
+    fun aSessionWithoutAStartTimeFallsBackToItsLastSave() {
+        assertFalse(SessionExpiry.isStale(session(startedAt = null, updatedAt = 20 * hour), 60 * hour))
+        assertTrue(SessionExpiry.isStale(session(startedAt = null, updatedAt = 0L), 60 * hour))
     }
 
     @Test

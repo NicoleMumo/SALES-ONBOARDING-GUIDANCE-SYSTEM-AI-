@@ -107,7 +107,7 @@ fun AdminOverviewPage(
             )
             analytics == null -> EmptyState(
                 title = "No results yet",
-                message = "Results appear here once agents start onboarding customers."
+                message = "Results appear here once agents start onboarding clients."
             )
             // While refreshing, keep the old numbers on screen, dimmed, instead of a jump.
             else -> Column(

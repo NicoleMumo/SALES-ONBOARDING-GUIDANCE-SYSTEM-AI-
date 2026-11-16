@@ -1347,8 +1347,8 @@ private fun CompanyPage(
         }
         SectionCard(
             title = "Improve the system",
-            subtitle = "When on, the consent screen asks each customer whether anonymised steps may be kept. " +
-                "Only steps of customers who agree are saved: which questions were checked, whether they passed, and when. " +
+            subtitle = "When on, the consent screen asks each client whether anonymised steps may be kept. " +
+                "Only steps of clients who agree are saved: which questions were checked, whether they passed, and when. " +
                 "No answers or names. Agents see the change at their next sign-in."
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.m)) {

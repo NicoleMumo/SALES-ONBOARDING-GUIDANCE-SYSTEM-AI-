@@ -290,7 +290,7 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(32.dp)
 )
 
-/** A small caps label such as "CUSTOMER TYPE". */
+/** A small caps label such as "CLIENT TYPE". */
 @Composable
 fun smCapsStyle(): TextStyle = TextStyle(
     fontFamily = LocalJost.current,
@@ -1075,7 +1075,7 @@ private fun UiGallery() {
                     SecondaryButton("Save for later", onClick = {})
                 }
             ) {
-                SectionCard(title = "Customer details", subtitle = "4 of 6 answered") {
+                SectionCard(title = "Client details", subtitle = "4 of 6 answered") {
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                         StatusPill("Required", Tone.Neutral)
                         StatusPill("Suggested next", Tone.Ai, showIcon = true)
@@ -1089,7 +1089,7 @@ private fun UiGallery() {
                     }
                 }
                 Banner("The AI suggests asking for the ID number next.", Tone.Ai, title = "Suggested next")
-                Banner("This customer may stop before finishing.", Tone.Caution)
+                Banner("This client may stop before finishing.", Tone.Caution)
                 Banner("Enter a valid Kenyan phone number.", Tone.Negative)
                 Banner("Session saved.", Tone.Positive)
                 PrimaryButton("Not ready yet", onClick = {}, enabled = false)

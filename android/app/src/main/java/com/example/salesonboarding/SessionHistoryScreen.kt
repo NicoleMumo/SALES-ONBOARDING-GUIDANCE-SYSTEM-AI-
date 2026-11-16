@@ -299,7 +299,7 @@ fun SessionDetailScreen(
             }
         }
         SectionCard(title = "Session") {
-            DetailRow("Customer type", listOf(session.industry.displayIndustry(), session.context.displayValue()).filter(String::isNotBlank).joinToString(" · "))
+            DetailRow("Client type", listOf(session.industry.displayIndustry(), session.context.displayValue()).filter(String::isNotBlank).joinToString(" · "))
             DetailRow("Started", session.startedAt.displayDateTime())
             session.completedAt?.let { DetailRow("Finished", it.displayDateTime()) }
             DetailRow("Agent", session.agentLabel(agentName))

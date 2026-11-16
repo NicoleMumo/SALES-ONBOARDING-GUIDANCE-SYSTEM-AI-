@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Calendar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -208,9 +209,19 @@ fun OnboardingForm(
     val preferences = LocalContext.current.getSharedPreferences(FORM_PREFERENCES, Context.MODE_PRIVATE)
     var autoFollow by remember { mutableStateOf(preferences.getBoolean(AUTO_FOLLOW_KEY, false)) }
     var guideMoving by remember { mutableStateOf(preferences.getBoolean(GUIDE_MOVING_KEY, true)) }
-    // First time: the guide's tour. Every later time: a greeting with a fun fact.
+    var funFacts by remember { mutableStateOf(preferences.getBoolean(FUN_FACTS_KEY, true)) }
+    // First time: the guide's tour. After that, a greeting with a fun fact at most once a day,
+    // unless the agent turned fun facts off. The day is saved when it is shown, so a rebuilt
+    // screen (camera, rotation, reopening a session) does not show it again. It stays until tapped.
     var showTour by rememberSaveable { mutableStateOf(!preferences.getBoolean(TOUR_SEEN_KEY, false)) }
-    var greeting by remember { mutableStateOf(if (showTour) null else GuideGreetings.forNow()) }
+    var greeting by remember {
+        val today = Calendar.getInstance().let { "${it.get(Calendar.YEAR)}-${it.get(Calendar.DAY_OF_YEAR)}" }
+        val shownToday = preferences.getString(FUN_FACT_DAY_KEY, null) == today
+        mutableStateOf(
+            if (showTour || !funFacts || shownToday) null
+            else GuideGreetings.forNow().also { preferences.edit().putString(FUN_FACT_DAY_KEY, today).apply() }
+        )
+    }
     // After the tour or greeting, the guide opens the first question it points at, once.
     var guidanceStarted by rememberSaveable { mutableStateOf(false) }
 
@@ -240,12 +251,6 @@ fun OnboardingForm(
         jumpTarget = fieldId
     }
 
-    LaunchedEffect(greeting) {
-        if (greeting != null) {
-            delay(GREETING_MS)
-            greeting = null
-        }
-    }
     val firstPointed = guidancePointer(guidance, playbook.fields, state)?.fieldId
     LaunchedEffect(showTour, greeting, firstPointed) {
         if (showTour || greeting != null || guidanceStarted || submitted || page == reviewPage) return@LaunchedEffect
@@ -320,6 +325,12 @@ fun OnboardingForm(
                     guideMoving = it
                     preferences.edit().putBoolean(GUIDE_MOVING_KEY, it).apply()
                 },
+                funFacts = funFacts,
+                onFunFactsChange = {
+                    funFacts = it
+                    preferences.edit().putBoolean(FUN_FACTS_KEY, it).apply()
+                    if (!it) greeting = null
+                },
                 greeting = greeting,
                 onGreetingDismiss = { greeting = null },
                 onReplayTour = { showTour = true },
@@ -341,11 +352,12 @@ fun OnboardingForm(
 
 private const val FORM_PREFERENCES = "salesmesh_form"
 private const val AUTO_FOLLOW_KEY = "auto_follow"
-private const val GUIDE_MOVING_KEY = "guide_moving"
+// A new key: the switch now stops only the body moving (the eyes always blink), and the
+// guide moves again for agents who had turned the old all-or-nothing switch off.
+internal const val GUIDE_MOVING_KEY = "guide_body_moving"
+private const val FUN_FACTS_KEY = "guide_fun_facts"
+private const val FUN_FACT_DAY_KEY = "guide_fun_fact_day"
 private const val TOUR_SEEN_KEY = "guide_tour_seen"
-
-/** How long the greeting stays before guidance starts by itself. */
-private const val GREETING_MS = 6000L
 
 /** How long the guidance gets to update after an answer is checked, before auto-follow reads it. */
 private const val FOLLOW_WAIT_MS = 1_000L
@@ -380,6 +392,8 @@ private fun SectionPage(
     onAutoFollowChange: (Boolean) -> Unit,
     guideMoving: Boolean,
     onGuideMovingChange: (Boolean) -> Unit,
+    funFacts: Boolean,
+    onFunFactsChange: (Boolean) -> Unit,
     greeting: GuideGreeting?,
     onGreetingDismiss: () -> Unit,
     onReplayTour: () -> Unit,
@@ -557,6 +571,8 @@ private fun SectionPage(
                 onAutoFollowChange = onAutoFollowChange,
                 guideMoving = guideMoving,
                 onGuideMovingChange = onGuideMovingChange,
+                funFacts = funFacts,
+                onFunFactsChange = onFunFactsChange,
                 greeting = greeting,
                 onGreetingDismiss = onGreetingDismiss,
                 onReplayTour = onReplayTour,
@@ -629,7 +645,7 @@ private fun ReviewPage(
     val ready = canSubmit && readiness.isReady
     AppScreen(
         title = "Review",
-        subtitle = "Check each answer with the customer",
+        subtitle = "Check each answer with the client",
         onBack = { onGoTo(sections.lastIndex) },
         modifier = modifier,
         bottomBar = {
@@ -728,10 +744,10 @@ private fun CompletionPage(
         }
     AppScreen(
         title = "Done",
-        subtitle = "The customer's details were saved",
+        subtitle = "The client's details were saved",
         modifier = modifier,
         bottomBar = {
-            PrimaryButton("Onboard another customer", onClick = onNewOnboarding, iconRes = R.drawable.ic_sm_plus)
+            PrimaryButton("Onboard another client", onClick = onNewOnboarding, iconRes = R.drawable.ic_sm_plus)
             SecondaryButton("Back to home", onClick = onReturnToDashboard)
         }
     ) {
@@ -741,9 +757,9 @@ private fun CompletionPage(
                 contentAlignment = Alignment.Center
             ) { SmIcon(R.drawable.ic_sm_check, c.ink, size = 44.dp) }
         }
-        SectionCard(title = "Customer", subtitle = "$answered of ${fields.size} questions answered") {
+        SectionCard(title = "Client", subtitle = "$answered of ${fields.size} questions answered") {
             if (summary.isEmpty()) {
-                Text("Customer record saved.", style = MaterialTheme.typography.bodyMedium)
+                Text("Client record saved.", style = MaterialTheme.typography.bodyMedium)
             }
             summary.forEach { (label, value) ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -854,7 +870,7 @@ private fun OnboardingFormPreview() {
                 nextFieldId = "mobile_phone_number",
                 riskGuidance = CompletionRiskGuidance(
                     CompletionRiskLevel.MEDIUM,
-                    "Offer extra help and review the information with the customer.",
+                    "Offer extra help and review the information with the client.",
                     emptyList()
                 )
             ),

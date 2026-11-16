@@ -20,21 +20,26 @@ data class StoredOnboardingSession(
     val fieldNames: Map<String, String> = emptyMap(),
     val validatedFieldIds: Set<String> = emptySet(),
     val resumeFieldId: String? = null,
-    /** The customer agreed that anonymised steps of this session may improve the system. */
+    /** The client agreed that anonymised steps of this session may improve the system. */
     val trainingConsent: Boolean = false,
     /** When the session was last saved, for telling a stale unfinished session. */
     val updatedAt: Long? = null
 )
 
-/** Unfinished sessions are abandoned when cancelled, or after [STALE_AFTER_MILLIS] untouched. */
+/**
+ * Unfinished sessions are abandoned when cancelled, or once [STALE_AFTER_MILLIS] have passed
+ * since they were started. The clock runs from the start, not the last save, so a session
+ * cannot stay open for days by being touched now and then.
+ */
 object SessionExpiry {
     const val STALE_AFTER_MILLIS = 48L * 60 * 60 * 1000
 
-    fun lastActivity(session: StoredOnboardingSession): Long? = session.updatedAt ?: session.startedAt
+    /** When the session started; the last save stands in for sessions saved without a start time. */
+    fun startTime(session: StoredOnboardingSession): Long? = session.startedAt ?: session.updatedAt
 
     fun isStale(session: StoredOnboardingSession, nowMillis: Long): Boolean =
         session.status == "in_progress" &&
-            lastActivity(session)?.let { nowMillis - it >= STALE_AFTER_MILLIS } == true
+            startTime(session)?.let { nowMillis - it >= STALE_AFTER_MILLIS } == true
 }
 
 interface SessionHistoryStore {
@@ -50,9 +55,9 @@ interface OnboardingSessionStore : FieldEntryStore {
         playbook: OnboardingPlaybook,
         agentEmail: String
     )
-    /** Saves that the customer agreed at [atMillis], and which agent recorded it. */
+    /** Saves that the client agreed at [atMillis], and which agent recorded it. */
     fun recordConsent(sessionId: String, agentId: String, atMillis: Long) {}
-    /** Saves whether the customer agreed that anonymised steps may improve the system. */
+    /** Saves whether the client agreed that anonymised steps may improve the system. */
     fun recordTrainingConsent(sessionId: String, agreed: Boolean) {}
     /** Starts the anonymised copy of a session (see [TrainingData]). */
     fun startTrainingRecord(
@@ -71,6 +76,12 @@ interface OnboardingSessionStore : FieldEntryStore {
     }
     fun recordValidation(sessionId: String, fieldId: String, isValid: Boolean, message: String?)
     fun appendEvent(sessionId: String, type: String, fieldId: String?)
+    /**
+     * Saves one answer check with the warning the sales agent saw then ("on_track", "check_in"
+     * or "needs_help"), so warnings can later be compared with how sessions ended.
+     */
+    fun appendCheck(sessionId: String, type: String, fieldId: String, warningShown: String) =
+        appendEvent(sessionId, type, fieldId)
     fun markCompleted(sessionId: String)
 
     /**
@@ -179,7 +190,7 @@ class FirebaseFieldEntryStore(
         sessions.child(sessionId).updateChildren(
             // The agent who recorded consent is the session's own agentId: no one else can write it.
             mapOf("consentAt" to atMillis)
-        ).reportFailure("Could not save the customer's consent for session '$sessionId'.")
+        ).reportFailure("Could not save the client's consent for session '$sessionId'.")
     }
 
     override fun recordTrainingConsent(sessionId: String, agreed: Boolean) {
@@ -275,6 +286,19 @@ class FirebaseFieldEntryStore(
                 "type" to type,
                 "fieldId" to fieldId,
                 "timestamp" to System.currentTimeMillis()
+            )
+        ).reportFailure("Could not save onboarding event '$type'.")
+    }
+
+    override fun appendCheck(sessionId: String, type: String, fieldId: String, warningShown: String) {
+        requireValidSessionId(sessionId)
+        requireValidFieldId(fieldId)
+        sessions.child(sessionId).child("events").push().setValue(
+            mapOf(
+                "type" to type,
+                "fieldId" to fieldId,
+                "timestamp" to System.currentTimeMillis(),
+                "warningShown" to warningShown
             )
         ).reportFailure("Could not save onboarding event '$type'.")
     }

@@ -17,7 +17,7 @@ data class LiveValidationState(
     val touchedFieldIds: Set<String> = emptySet(),
     val interactionHistory: List<FieldInteraction> = emptyList()
 ) {
-    // [values] holds customer answers, so keep them out of logs and crash reports.
+    // [values] holds client answers, so keep them out of logs and crash reports.
     override fun toString() =
         "LiveValidationState(fields=${values.keys}, touched=$touchedFieldIds, " +
                 "valid=${results.mapValues { it.value.isValid }})"
@@ -234,10 +234,10 @@ class OnboardingFormController(
      * the older hand-set rule in [CompletionRiskScorer] is used instead.
      */
     private val riskModel: TrainedCompletionRiskModel? = null,
-    /** When the customer agreed on the consent screen; saved with a new session. */
+    /** When the client agreed on the consent screen; saved with a new session. */
     private val consentAtMillis: Long? = null,
     /**
-     * The company allows it and the customer agreed: each check is also saved, anonymised,
+     * The company allows it and the client agreed: each check is also saved, anonymised,
      * to retrain the models (see [TrainingData]).
      */
     private val shareForTraining: Boolean = false,
@@ -339,10 +339,11 @@ class OnboardingFormController(
                                 progressPercent = answeredPercent(state)
                             )
                         )
-                        sessionStore?.appendEvent(
+                        sessionStore?.appendCheck(
                             sessionId,
                             if (passed) "field_validation_passed" else "field_validation_failed",
-                            interaction.fieldId
+                            interaction.fieldId,
+                            warningShownLabel(shownRisk?.level)
                         )
                         if (shareForTraining) {
                             sessionStore?.appendTrainingStep(trainingRecordId, interaction.fieldId, passed, validatedAt)

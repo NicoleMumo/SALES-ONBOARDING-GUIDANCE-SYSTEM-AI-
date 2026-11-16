@@ -16,7 +16,7 @@ import java.util.TimeZone
  * replaces each sales agent with a pseudonym.
  */
 object SessionCsvExport {
-    /** An unfinished session with no check for this long is labelled abandoned, as in the app. */
+    /** An unfinished session started this long ago is labelled abandoned, as in the app. */
     const val ABANDONED_AFTER_MILLIS = SessionExpiry.STALE_AFTER_MILLIS
 
     val SESSION_COLUMNS = listOf(
@@ -30,7 +30,7 @@ object SessionCsvExport {
         "event_name", "event_timestamp", "event_status", "event_duration_minutes",
         "agent_response_time_minutes", "is_revisit", "previous_onboarding_field",
         "next_onboarding_field", "validation_status", "failure_reason",
-        "onboarding_progress", "session_status", "split"
+        "onboarding_progress", "session_status", "split", "warning_shown"
     )
 
     fun sessionsCsv(sessions: List<OnboardingSessionMetrics>): String = buildString {
@@ -67,11 +67,13 @@ object SessionCsvExport {
     /**
      * One row per checked answer. Step times are measured as the app measures them for the
      * risk model: from the previous checked answer, or from consent for the first one, so the
-     * sales agent's response time is already inside `event_duration_minutes`. Only sessions
-     * with a known outcome are written: completed, or abandoned (unfinished with no check for
-     * [ABANDONED_AFTER_MILLIS]). Sessions saved before answers were checked on leaving the box
-     * are left out, because their checks include half-typed answers. The split column is left
-     * empty, to be filled by sales agent before training.
+     * sales agent's response time is already inside `event_duration_minutes`. Every session is
+     * written, with the status from [outcomeOf]: completed, abandoned, or in_progress for an
+     * unfinished session started less than [ABANDONED_AFTER_MILLIS] ago. Training leaves the
+     * in_progress ones out, because their outcome is not known yet. Sessions saved before
+     * answers were checked on leaving the box are left out, because their checks include
+     * half-typed answers. The split column is left empty, to be filled by sales agent before
+     * training.
      */
     fun trainingCsv(sessions: List<OnboardingSessionMetrics>, nowMillis: Long): String = buildString {
         appendLine(csvLine(TRAINING_COLUMNS))
@@ -86,15 +88,22 @@ object SessionCsvExport {
     ): List<Pair<OnboardingSessionMetrics, String>> = sessions
         .filter { it.checksEachAttempt && it.steps.isNotEmpty() }
         .sortedBy { it.startedAt ?: 0L }
-        .mapNotNull { session ->
-            val lastCheck = session.steps.maxOf { it.timestampMillis }
-            when {
-                session.status.equals("completed", ignoreCase = true) -> session to "completed"
-                session.status.equals("abandoned", ignoreCase = true) -> session to "abandoned"
-                nowMillis - lastCheck >= ABANDONED_AFTER_MILLIS -> session to "abandoned"
-                else -> null
-            }
+        .map { session -> session to outcomeOf(session, nowMillis) }
+
+    /**
+     * The status a session is given in the training file: completed or abandoned as saved, and
+     * an unfinished session abandoned once [ABANDONED_AFTER_MILLIS] have passed since it
+     * started, as the app itself abandons it. A younger unfinished session stays in_progress.
+     */
+    fun outcomeOf(session: OnboardingSessionMetrics, nowMillis: Long): String {
+        val started = session.startedAt ?: session.consentAt ?: session.steps.minOfOrNull { it.timestampMillis }
+        return when {
+            session.status.equals("completed", ignoreCase = true) -> "completed"
+            session.status.equals("abandoned", ignoreCase = true) -> "abandoned"
+            started != null && nowMillis - started >= ABANDONED_AFTER_MILLIS -> "abandoned"
+            else -> "in_progress"
         }
+    }
 
     private fun trainingRows(session: OnboardingSessionMetrics, finalStatus: String): List<List<String>> {
         val steps = session.steps.sortedBy { it.timestampMillis }
@@ -126,7 +135,8 @@ object SessionCsvExport {
                 "",
                 progress,
                 if (index == steps.lastIndex) finalStatus else "in_progress",
-                ""
+                "",
+                step.warningShown
             )
             previousTime = step.timestampMillis
             row

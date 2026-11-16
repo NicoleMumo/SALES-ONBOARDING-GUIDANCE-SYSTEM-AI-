@@ -72,17 +72,25 @@ class SessionExportTest {
     }
 
     @Test
-    fun unfinishedSessionIsLeftOutUntilItCountsAsAbandoned() {
+    fun unfinishedSessionIsInProgressUntil48HoursAfterItStarted() {
         val unfinished = session(status = "in_progress", steps = steps)
-        val lastCheck = steps.last().timestampMillis
+        val limit = SessionCsvExport.ABANDONED_AFTER_MILLIS
 
-        val recent = rows(SessionCsvExport.trainingCsv(listOf(unfinished), lastCheck + minute))
-        val old = rows(SessionCsvExport.trainingCsv(listOf(unfinished), lastCheck + SessionCsvExport.ABANDONED_AFTER_MILLIS))
+        val recent = rows(SessionCsvExport.trainingCsv(listOf(unfinished), start + limit - minute))
+        val old = rows(SessionCsvExport.trainingCsv(listOf(unfinished), start + limit))
         val column = old.first().indexOf("session_status")
 
-        assertEquals(1, recent.size) // header only: the outcome is not known yet
+        assertEquals(4, recent.size) // kept, labelled in_progress
+        assertEquals("in_progress", recent.last()[column])
         assertEquals(4, old.size)
         assertEquals("abandoned", old.last()[column])
+    }
+
+    @Test
+    fun savedOutcomesAreKeptWhateverTheTime() {
+        val abandoned = session(status = "abandoned", steps = steps)
+        assertEquals("abandoned", SessionCsvExport.outcomeOf(abandoned, start + minute))
+        assertEquals("completed", SessionCsvExport.outcomeOf(session(steps = steps), start + 100 * 60 * minute))
     }
 
     @Test
@@ -130,5 +138,18 @@ class SessionExportTest {
             "\"a,b\",\"say \"\"hi\"\"\",'=SUM(A1)",
             SessionCsvExport.csvLine(listOf("a,b", "say \"hi\"", "=SUM(A1)"))
         )
+    }
+
+    @Test
+    fun trainingFileCarriesTheWarningShownAtEachCheck() {
+        val warned = listOf(
+            RecordedStep("full_name", passed = true, timestampMillis = start + 2 * minute, warningShown = "on_track"),
+            RecordedStep("contact_phone_number", passed = false, timestampMillis = start + 3 * minute, warningShown = "needs_help"),
+            // Saved before warnings were recorded: the column stays blank.
+            RecordedStep("contact_phone_number", passed = true, timestampMillis = start + 5 * minute)
+        )
+        val table = rows(SessionCsvExport.trainingCsv(listOf(session(steps = warned)), nowMillis = start))
+        val column = table.first().indexOf("warning_shown")
+        assertEquals(listOf("on_track", "needs_help", ""), table.drop(1).map { it[column] })
     }
 }

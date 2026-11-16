@@ -52,8 +52,8 @@ fun interface NextFieldPredictor {
  * Runs the exported next-field model. The model file and its metadata file must come from
  * the same export; this class refuses to start if they do not match.
  *
- * The model sees field history, industry, customer type, validation status and the candidate
- * fields' descriptions. It never receives the customer's answer values.
+ * The model sees field history, industry, client type, validation status and the candidate
+ * fields' descriptions. It never receives the client's answer values.
  * History is left-padded by [historyTensors]. Calls are serialised because a TensorFlow Lite
  * interpreter is not thread-safe. After [close], predictions return null.
  */
@@ -130,7 +130,7 @@ class TfliteNextFieldPredictor(
         fieldCatalogue: List<FormField>
     ): FieldPrediction? {
         if (candidates.isEmpty()) return null
-        // An industry or customer type the model was not trained on cannot be scored.
+        // An industry or client type the model was not trained on cannot be scored.
         // Return null so the caller falls back to the rule-based order.
         if (industry !in industryToId || context !in contextToId) return null
         // Too many candidates for one model call: skip the suggestion rather than guess.
@@ -334,7 +334,7 @@ private object FieldTextSimilarity {
 
     private val STOP_WORDS = setOf(
         "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "is", "it",
-        "of", "on", "or", "the", "to", "with", "your", "customer", "customers", "enter",
+        "of", "on", "or", "the", "to", "with", "your", "customer", "customers", "client", "clients", "enter",
         "record", "choose", "select", "provided", "information", "field", "details"
     )
 

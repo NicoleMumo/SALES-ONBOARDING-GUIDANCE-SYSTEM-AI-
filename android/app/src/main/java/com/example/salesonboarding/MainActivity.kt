@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                 var companyIndustry by remember { mutableStateOf<String?>(null) }
                 // The admin allows anonymised steps to improve the system (Company page).
                 var companySharesForTraining by remember { mutableStateOf(false) }
-                // The customer of this run of the form agreed to that, on the consent screen.
+                // The client of this run of the form agreed to that, on the consent screen.
                 var trainingAgreed by remember { mutableStateOf(false) }
                 var showAgentHome by remember { mutableStateOf(false) }
                 // A sales agent's companies, the one open now, and its message (AgentCompanies.kt).
@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
                 var selectedIndustry by remember { mutableStateOf<String?>(null) }
                 var selectedContext by remember { mutableStateOf<String?>(null) }
                 var consentGiven by remember { mutableStateOf(false) }
-                // When the customer agreed in this run of the form; saved with the new session.
+                // When the client agreed in this run of the form; saved with the new session.
                 var consentAtMillis by remember { mutableStateOf<Long?>(null) }
                 var onboardingSessionId by remember { mutableStateOf<String?>(null) }
                 var resumedSession by remember { mutableStateOf<StoredOnboardingSession?>(null) }
@@ -183,7 +183,7 @@ class MainActivity : ComponentActivity() {
                 fun signOut() {
                     FirebaseAuth.getInstance().signOut()
                     // Clear everything from the signed-in session, so the next person
-                    // starts clean and no customer answers stay in memory.
+                    // starts clean and no client answers stay in memory.
                     signedIn = false
                     selectedRole = null
                     agentId = ""
@@ -274,7 +274,7 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (showAgentHome && selectedIndustry == null) {
                         // The latest unfinished session, offered on the home screen. Sessions
-                        // left untouched for 48 hours are marked abandoned instead (SessionExpiry).
+                        // started 48 hours ago or more are marked abandoned instead (SessionExpiry).
                         var unfinished by remember(agentId) { mutableStateOf<StoredOnboardingSession?>(null) }
                         var sessionsLoaded by remember(agentId) { mutableIntStateOf(0) }
                         val sessionWriter = remember(database, companyId) {
@@ -396,7 +396,7 @@ class MainActivity : ComponentActivity() {
                                     initialModelUnavailable = predictorAttempt.isFailure,
                                     riskModel = riskModel,
                                     consentAtMillis = consentAtMillis,
-                                    // A resumed session keeps the choice its customer made.
+                                    // A resumed session keeps the choice its client made.
                                     shareForTraining = companySharesForTraining && (
                                         resumedSession?.takeIf { it.sessionId == onboardingSessionId }
                                             ?.trainingConsent ?: trainingAgreed
