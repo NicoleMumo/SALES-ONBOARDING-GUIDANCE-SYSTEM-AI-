@@ -43,14 +43,15 @@ enum class GuideMood(val description: String) {
 }
 
 /**
- * The guide's mood. A finished form and a high risk matter most; an answer to fix or a
- * medium risk come next; a just-accepted answer ([justPassed]) makes it briefly happy.
+ * The guide's mood. A finished form matters most. A just-accepted answer ([justPassed]) makes
+ * it briefly happy, even while the risk is high, so fixing an answer is always acknowledged;
+ * the status pill keeps showing the risk. Then a high risk, then an answer to fix or a medium risk.
  */
 internal fun guideMood(guidance: NextFieldGuidance, justPassed: Boolean): GuideMood = when {
     guidance.isComplete -> GuideMood.CELEBRATING
+    justPassed -> GuideMood.HAPPY
     guidance.riskGuidance?.level == CompletionRiskLevel.HIGH -> GuideMood.WORRIED
     guidance.correction != null || guidance.riskGuidance?.level == CompletionRiskLevel.MEDIUM -> GuideMood.CONCERNED
-    justPassed -> GuideMood.HAPPY
     else -> GuideMood.CALM
 }
 

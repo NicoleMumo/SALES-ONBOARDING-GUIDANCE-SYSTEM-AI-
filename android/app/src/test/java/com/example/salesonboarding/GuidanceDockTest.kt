@@ -49,9 +49,10 @@ class GuidanceDockTest {
     }
 
     @Test
-    fun highRiskWorriesTheGuideEvenAfterAnAcceptedAnswer() {
+    fun highRiskWorriesTheGuideButAnAcceptedAnswerStillEarnsASmile() {
         val guidance = NextFieldGuidance(nextFieldId = "full_name", riskGuidance = risk(CompletionRiskLevel.HIGH))
-        assertEquals(GuideMood.WORRIED, guideMood(guidance, justPassed = true))
+        assertEquals(GuideMood.WORRIED, guideMood(guidance, justPassed = false))
+        assertEquals(GuideMood.HAPPY, guideMood(guidance, justPassed = true))
     }
 
     @Test
@@ -59,7 +60,8 @@ class GuidanceDockTest {
         val toFix = NextFieldGuidance(correction = ValidationErrorDisplay("full_name", "Enter the full name."))
         val medium = NextFieldGuidance(nextFieldId = "full_name", riskGuidance = risk(CompletionRiskLevel.MEDIUM))
         assertEquals(GuideMood.CONCERNED, guideMood(toFix, justPassed = false))
-        assertEquals(GuideMood.CONCERNED, guideMood(medium, justPassed = true))
+        assertEquals(GuideMood.CONCERNED, guideMood(medium, justPassed = false))
+        assertEquals(GuideMood.HAPPY, guideMood(medium, justPassed = true))
     }
 
     @Test
